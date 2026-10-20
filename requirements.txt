@@ -1,0 +1,26 @@
+# MediFlow - Dependências Principais do Projeto (Hackathon ONE G10)
+
+# LLMs e Frameworks de Agentes
+google-genai>=0.1.1
+google-generativeai>=0.8.0
+langchain>=0.3.0
+langgraph>=0.2.0
+langchain-google-genai>=2.0.0
+
+# Validação e Modelagem de Dados
+pydantic>=2.7.0
+
+# Processamento de Documentos e Visão Computacional
+pymupdf>=1.24.0
+pillow>=10.0.0
+
+# Oracle Cloud Infrastructure (OCI) - Always Free Object Storage
+oci>=2.120.0
+
+# Interface do Usuário e Auditoria Clínica
+streamlit>=1.39.0
+
+# Utilitários e Testes
+python-dotenv>=1.0.0
+pytest>=8.0.0
+requests>=2.31.0
