@@ -17,6 +17,7 @@
 
   <p>
     <a href="#-visão-geral-do-problema-e-solução">Visão Geral</a> •
+    <a href="ARQUITETURA.md"><b>Guia de Arquitetura</b></a> •
     <a href="#-arquitetura-e-fluxo-de-dados">Arquitetura</a> •
     <a href="#-cenários-de-demonstração">Cenários de Teste</a> •
     <a href="#-equipe-15---hackathon-one-g10">Time</a> •
