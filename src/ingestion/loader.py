@@ -1,8 +1,8 @@
 """
 Módulo de Ingestão de Documentos Clínicos (MediFlow).
-Responsável pelo carregamento, extração de texto e extração de metadados de arquivos PDF, imagens e texto.
+Responsável pelo carregamento seguro, extração de texto, tratamento de encoding,
+validação de limites e preparação multimodal para o pipeline de IA.
 """
-import os
 import uuid
 from pathlib import Path
 from typing import Optional, Dict, Any, Union, Tuple
@@ -14,27 +14,76 @@ except ImportError:
     import fitz
 
 
-class DocumentoIngerido(BaseModel):
-    """Representação padronizada de um documento clínico ingerido na esteira do MediFlow."""
-    documento_id: str = Field(..., description="Identificador único gerado para o documento (ex: DOC-8F31A92B)")
-    nome_arquivo: str = Field(..., description="Nome original do arquivo submetido")
-    formato: str = Field(..., description="Extensão/formato detectado: PDF, TXT, PNG, JPG")
-    tamanho_bytes: int = Field(..., ge=0, description="Tamanho do arquivo em bytes")
-    total_paginas: int = Field(default=1, ge=1, description="Número de páginas do documento")
-    conteudo_texto: str = Field(..., description="Texto bruto extraído do documento")
-    requer_ocr: bool = Field(default=False, description="Indica se o documento é puramente escaneado e precisa de OCR visual")
-    metadados: Dict[str, Any] = Field(default_factory=dict, description="Metadados adicionais do arquivo")
+# ==============================================================================
+# EXCEÇÕES DE DOMÍNIO (ALINHADAS AOS REQUISITOS DO EDITAL E DO CATÁLOGO)
+# ==============================================================================
 
+class IngestaoError(Exception):
+    """Exceção base para erros durante a etapa de ingestão de documentos."""
+    def __init__(self, codigo: str, mensagem: str):
+        super().__init__(mensagem)
+        self.codigo = codigo
+        self.mensagem = mensagem
+
+
+class TamanhoExcedidoError(IngestaoError):
+    """Disparado quando o arquivo excede o limite máximo permitido."""
+    def __init__(self, tamanho_bytes: int, limite_bytes: int):
+        super().__init__(
+            codigo="ARQUIVO_MAIOR_QUE_LIMITE",
+            mensagem=f"O arquivo possui {tamanho_bytes / (1024*1024):.2f}MB, excedendo o limite de {limite_bytes / (1024*1024):.2f}MB."
+        )
+
+
+class DocumentoProtegidoError(IngestaoError):
+    """Disparado quando o documento PDF possui proteção por senha."""
+    def __init__(self, mensagem: str = "O documento PDF está protegido por senha e não pode ser processado sem credenciais."):
+        super().__init__(codigo="PDF_PROTEGIDO", mensagem=mensagem)
+
+
+class DocumentoCorrompidoError(IngestaoError):
+    """Disparado quando o arquivo está incompleto, truncado ou com estrutura inválida."""
+    def __init__(self, mensagem: str = "O arquivo está corrompido ou truncado e não pôde ser aberto."):
+        super().__init__(codigo="PDF_CORROMPIDO", mensagem=mensagem)
+
+
+# ==============================================================================
+# MODELO PADRONIZADO DE SAÍDA DA INGESTÃO
+# ==============================================================================
+
+class DocumentoIngerido(BaseModel):
+    """Representação padronizada e segura de um documento clínico na esteira do MediFlow."""
+    documento_id: str = Field(..., description="Identificador único no formato DOC-XXXXXXXX")
+    nome_arquivo: str = Field(..., description="Nome original do arquivo submetido")
+    formato: str = Field(..., description="Extensão detectada: PDF, TXT, PNG, JPG, JPEG")
+    tamanho_bytes: int = Field(..., ge=0, description="Tamanho exato do arquivo em bytes")
+    total_paginas: int = Field(default=1, ge=1, description="Número de páginas do documento")
+    conteudo_texto: str = Field(default="", description="Texto bruto extraído do documento")
+    requer_ocr: bool = Field(default=False, description="Sinaliza se o documento é puramente imagem e exige visão computacional/OCR")
+    conteudo_bytes: Optional[bytes] = Field(default=None, repr=False, description="Bytes da mídia original (essencial para envio multimodal à LLM)")
+    metadados: Dict[str, Any] = Field(default_factory=dict, description="Metadados técnicos e de qualidade")
+
+
+# ==============================================================================
+# CARREGADOR ROBUSTO DE DOCUMENTOS
+# ==============================================================================
 
 class DocumentLoader:
-    """Carregador e extrator de texto para documentos clínicos."""
+    """Carregador robusto com proteções de segurança, encoding e integridade."""
 
     FORMATOS_SUPORTADOS = {".pdf", ".txt", ".png", ".jpg", ".jpeg"}
+    LIMITE_MAXIMO_BYTES = 20 * 1024 * 1024  # 20 MB
 
     @staticmethod
     def gerar_documento_id() -> str:
-        """Gera um ID padronizado no formato DOC-XXXXXXXX"""
+        """Gera um identificador único de documento no formato padrão DOC-XXXXXXXX"""
         return f"DOC-{uuid.uuid4().hex[:8].upper()}"
+
+    @classmethod
+    def validar_limite_tamanho(cls, tamanho_bytes: int) -> None:
+        """Valida se o tamanho do arquivo respeita a política de segurança de 20MB."""
+        if tamanho_bytes > cls.LIMITE_MAXIMO_BYTES:
+            raise TamanhoExcedidoError(tamanho_bytes=tamanho_bytes, limite_bytes=cls.LIMITE_MAXIMO_BYTES)
 
     @classmethod
     def carregar_arquivo(
@@ -43,14 +92,7 @@ class DocumentLoader:
         documento_id: Optional[str] = None
     ) -> DocumentoIngerido:
         """
-        Carrega um arquivo a partir de um caminho em disco e extrai seu conteúdo.
-        
-        Args:
-            caminho_arquivo: Caminho absoluto ou relativo para o documento.
-            documento_id: Identificador opcional. Se None, será gerado automaticamente.
-            
-        Returns:
-            DocumentoIngerido contendo o texto extraído e metadados.
+        Carrega um arquivo a partir de um caminho em disco com verificações de integridade.
         """
         path = Path(caminho_arquivo)
         if not path.exists():
@@ -61,25 +103,16 @@ class DocumentLoader:
             raise ValueError(f"Formato não suportado: {extensao}. Formatos válidos: {cls.FORMATOS_SUPORTADOS}")
 
         tamanho_bytes = path.stat().st_size
+        cls.validar_limite_tamanho(tamanho_bytes)
         doc_id = documento_id or cls.gerar_documento_id()
 
-        if extensao == ".pdf":
-            texto, total_paginas, requer_ocr, meta = cls._extrair_pdf(path)
-        elif extensao == ".txt":
-            texto, total_paginas, requer_ocr, meta = cls._extrair_txt(path)
-        else:
-            # Imagens (PNG/JPG): texto nativo é vazio, requer OCR multimodal
-            texto, total_paginas, requer_ocr, meta = "", 1, True, {"tipo": "imagem"}
+        with open(path, "rb") as f:
+            bytes_data = f.read()
 
-        return DocumentoIngerido(
-            documento_id=doc_id,
+        return cls.carregar_bytes(
+            conteudo_bytes=bytes_data,
             nome_arquivo=path.name,
-            formato=extensao.replace(".", "").upper(),
-            tamanho_bytes=tamanho_bytes,
-            total_paginas=total_paginas,
-            conteudo_texto=texto.strip(),
-            requer_ocr=requer_ocr,
-            metadados=meta
+            documento_id=doc_id
         )
 
     @classmethod
@@ -90,24 +123,23 @@ class DocumentLoader:
         documento_id: Optional[str] = None
     ) -> DocumentoIngerido:
         """
-        Carrega um documento diretamente a partir de bytes em memória (ex: upload via Streamlit ou FastAPI).
+        Carrega um documento a partir de bytes em memória (upload web/API) com blindagem completa.
         """
         extensao = Path(nome_arquivo).suffix.lower()
         if extensao not in cls.FORMATOS_SUPORTADOS:
-            raise ValueError(f"Formato não suportado: {extensao}")
+            raise ValueError(f"Formato não suportado: '{extensao}'. Suportados: {cls.FORMATOS_SUPORTADOS}")
 
-        doc_id = documento_id or cls.gerar_documento_id()
         tamanho_bytes = len(conteudo_bytes)
+        cls.validar_limite_tamanho(tamanho_bytes)
+        doc_id = documento_id or cls.gerar_documento_id()
 
         if extensao == ".pdf":
-            texto, total_paginas, requer_ocr, meta = cls._extrair_pdf_bytes(conteudo_bytes)
+            texto, total_paginas, requer_ocr, meta = cls._extrair_pdf_blindado(conteudo_bytes)
         elif extensao == ".txt":
-            texto = conteudo_bytes.decode("utf-8", errors="replace")
-            total_paginas = 1
-            requer_ocr = False
-            meta = {"encoding": "utf-8"}
+            texto, total_paginas, requer_ocr, meta = cls._extrair_txt_blindado(conteudo_bytes)
         else:
-            texto, total_paginas, requer_ocr, meta = "", 1, True, {"tipo": "imagem"}
+            # Imagens (PNG/JPG/JPEG): Texto vazio, requer visão multimodal, bytes preservados
+            texto, total_paginas, requer_ocr, meta = "", 1, True, {"tipo": "imagem", "mime": f"image/{extensao.replace('.', '')}"}
 
         return DocumentoIngerido(
             documento_id=doc_id,
@@ -117,50 +149,75 @@ class DocumentLoader:
             total_paginas=total_paginas,
             conteudo_texto=texto.strip(),
             requer_ocr=requer_ocr,
+            conteudo_bytes=conteudo_bytes,
             metadados=meta
         )
 
     @staticmethod
-    def _extrair_pdf(caminho: Path) -> Tuple[str, int, bool, Dict[str, Any]]:
-        """Extrai texto e metadados de um PDF via PyMuPDF a partir do caminho."""
-        with fitz.open(str(caminho)) as doc:
-            return DocumentLoader._processar_documento_fitz(doc)
+    def _extrair_pdf_blindado(conteudo_bytes: bytes) -> Tuple[str, int, bool, Dict[str, Any]]:
+        """Abre e extrai o PDF tratando senhas, corrupção e heurística de texto."""
+        try:
+            doc = fitz.open(stream=conteudo_bytes, filetype="pdf")
+        except Exception as e:
+            raise DocumentoCorrompidoError(f"PDF_CORROMPIDO: Estrutura inválida de arquivo PDF ({str(e)})")
+
+        with doc:
+            if doc.is_encrypted:
+                raise DocumentoProtegidoError("PDF_PROTEGIDO: O arquivo está criptografado/protegido por senha.")
+
+            total_paginas = len(doc)
+            if total_paginas == 0:
+                raise DocumentoCorrompidoError("PDF_CORROMPIDO: O arquivo PDF não possui páginas válidas.")
+
+            textos_paginas = []
+            paginas_vazias = 0
+
+            for pagina in doc:
+                try:
+                    txt = pagina.get_text("text") or ""
+                    textos_paginas.append(txt)
+                    if not txt.strip():
+                        paginas_vazias += 1
+                except Exception:
+                    paginas_vazias += 1
+
+            texto_completo = "\n\n--- Quebra de Página ---\n\n".join(textos_paginas) if total_paginas > 1 else "".join(textos_paginas)
+            
+            # Heurística precisa: só requer OCR se todas as páginas forem vazias ou se não há texto legível
+            texto_limpo = texto_completo.strip()
+            requer_ocr = (len(texto_limpo) == 0) or (paginas_vazias == total_paginas)
+
+            metadados = {
+                "autor": doc.metadata.get("author", "") if doc.metadata else "",
+                "titulo": doc.metadata.get("title", "") if doc.metadata else "",
+                "total_caracteres": len(texto_limpo),
+                "paginas_sem_texto": paginas_vazias,
+                "criptografado": False
+            }
+
+            return texto_completo, total_paginas, requer_ocr, metadados
 
     @staticmethod
-    def _extrair_pdf_bytes(conteudo_bytes: bytes) -> Tuple[str, int, bool, Dict[str, Any]]:
-        """Extrai texto e metadados de um PDF via PyMuPDF a partir de bytes."""
-        with fitz.open(stream=conteudo_bytes, filetype="pdf") as doc:
-            return DocumentLoader._processar_documento_fitz(doc)
+    def _extrair_txt_blindado(conteudo_bytes: bytes) -> Tuple[str, int, bool, Dict[str, Any]]:
+        """Decodifica texto com fallback inteligente: UTF-8 -> Latin-1 (ISO-8859-1) -> Windows-1252."""
+        encodings = ["utf-8", "iso-8859-1", "windows-1252"]
+        texto_decodificado = None
+        encoding_usado = None
 
-    @staticmethod
-    def _processar_documento_fitz(doc: fitz.Document) -> Tuple[str, int, bool, Dict[str, Any]]:
-        total_paginas = len(doc)
-        textos_paginas = []
-        paginas_sem_texto = 0
+        for enc in encodings:
+            try:
+                texto_decodificado = conteudo_bytes.decode(enc)
+                encoding_usado = enc
+                break
+            except UnicodeDecodeError:
+                continue
 
-        for pagina in doc:
-            texto_pag = pagina.get_text("text") or ""
-            textos_paginas.append(texto_pag)
-            if len(texto_pag.strip()) < 20:
-                paginas_sem_texto += 1
-
-        texto_completo = "\n\n--- Quebra de Página ---\n\n".join(textos_paginas) if total_paginas > 1 else "".join(textos_paginas)
-        
-        # Se a maioria das páginas não possui texto digital, trata-se de documento escaneado/imagem
-        requer_ocr = (len(texto_completo.strip()) < 50) or (paginas_sem_texto == total_paginas)
+        if texto_decodificado is None:
+            texto_decodificado = conteudo_bytes.decode("utf-8", errors="replace")
+            encoding_usado = "utf-8 (fallback replace)"
 
         metadados = {
-            "autor": doc.metadata.get("author", ""),
-            "titulo": doc.metadata.get("title", ""),
-            "criador": doc.metadata.get("creator", ""),
-            "paginas_sem_texto": paginas_sem_texto,
-            "total_caracteres": len(texto_completo)
+            "encoding_detectado": encoding_usado,
+            "total_caracteres": len(texto_decodificado)
         }
-
-        return texto_completo, total_paginas, requer_ocr, metadados
-
-    @staticmethod
-    def _extrair_txt(caminho: Path) -> Tuple[str, int, bool, Dict[str, Any]]:
-        with open(caminho, "r", encoding="utf-8", errors="replace") as f:
-            texto = f.read()
-        return texto, 1, False, {"encoding": "utf-8", "total_caracteres": len(texto)}
+        return texto_decodificado, 1, False, metadados
