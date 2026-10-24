@@ -1,0 +1,88 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Simultaneo_Urgencia_Score",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Simultaneo_Urgencia_Score/Simultaneo_Urgencia_Score.txt",
+      "pdf": "catalogo/Simultaneo_Urgencia_Score/Simultaneo_Urgencia_Score.pdf",
+      "jpg": "catalogo/Simultaneo_Urgencia_Score/Simultaneo_Urgencia_Score.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-7A4D9493",
+    "classificacao": {
+      "tipo_documento": "LAUDO_EXAME_IMAGEM",
+      "especialidade": [
+        "Radiologia",
+        "Neurocirurgia"
+      ],
+      "nivel_prioridade": "URGENTE",
+      "score_classificacao": 0.88
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Wilson Aparecido Rangel",
+        "idade": 64
+      },
+      "medico": {
+        "nome": "Dra. Renata Silveira",
+        "crm": {
+          "numero": "145892",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Hematoma subdural agudo",
+      "cid": null,
+      "exames": [
+        "Tomografia de crânio"
+      ],
+      "medicamentos": [],
+      "urgencia": "SIM"
+    },
+    "qualidade": {
+      "score_extracao": 0.7,
+      "score_combinado": 0.7,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_URGENCIA_MEDICA",
+      "destinos": [
+        "FILA_URGENCIA_MEDICA",
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Urgência com ambiguidade: mantém FILA_URGENCIA_MEDICA e acrescenta FILA_REVISAO_HUMANA. score combinado 0.70 < limiar 0.85.",
+      "notificacao": {
+        "gerada": true,
+        "canal": "SIMULADO_SLACK_PLANTAO",
+        "status": "REGISTRADA",
+        "mensagem": "ALERTA URGENTE [DOC-7A4D9493]: Hematoma subdural agudo"
+      }
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "modo_fixture": {
+    "score_forcado": {
+      "score_classificacao": 0.88,
+      "score_extracao": 0.7
+    }
+  },
+  "assercoes": [
+    "Urgência + score 0,70: dois destinos e alerta",
+    "Score baixo não rebaixa a urgência",
+    "Exige FIXTURE_MODE para forçar os scores"
+  ],
+  "observacoes": ""
+}

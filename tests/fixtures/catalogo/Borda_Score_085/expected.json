@@ -1,0 +1,86 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Borda_Score_085",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Borda_Score_085/Borda_Score_085.txt",
+      "pdf": "catalogo/Borda_Score_085/Borda_Score_085.pdf",
+      "jpg": "catalogo/Borda_Score_085/Borda_Score_085.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-E3738AB1",
+    "classificacao": {
+      "tipo_documento": "RECEITUARIO_MEDICO",
+      "especialidade": [
+        "Clínica Médica",
+        "Alergologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.94
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Ricardo Almeida Prado",
+        "idade": 45
+      },
+      "medico": {
+        "nome": "Dra. Helena Prado",
+        "crm": {
+          "numero": "187432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Rinite alérgica persistente",
+      "cid": "J30.4",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Loratadina",
+          "dosagem": "10 mg",
+          "frequencia": null
+        }
+      ],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.85,
+      "score_combinado": 0.85,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FARMACIA_HOSPITALAR",
+      "destinos": [
+        "FARMACIA_HOSPITALAR"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: RECEITUARIO_MEDICO encaminhado para FARMACIA_HOSPITALAR.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "modo_fixture": {
+    "score_forcado": {
+      "score_classificacao": 0.94,
+      "score_extracao": 0.85
+    }
+  },
+  "assercoes": [
+    "Score exatamente 0,85 NÃO revisa por esse critério isolado",
+    "Comparação usa < 0,85, não <= 0,85 (RF-18)",
+    "Exige FIXTURE_MODE para forçar os scores"
+  ],
+  "observacoes": "Documento de rotina legível. O score forçado em 0,85 é a única borda testada."
+}

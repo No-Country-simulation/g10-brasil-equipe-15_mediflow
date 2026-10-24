@@ -1,0 +1,37 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Qualidade_Pdf_Corrompido",
+  "documento_ficticio": true,
+  "tipo_de_teste": "erro_processamento",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Qualidade_Pdf_Corrompido/Qualidade_Pdf_Corrompido.txt",
+      "pdf": "catalogo/Qualidade_Pdf_Corrompido/Qualidade_Pdf_Corrompido.pdf",
+      "jpg": "catalogo/Qualidade_Pdf_Corrompido/Qualidade_Pdf_Corrompido.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "ERRO_PROCESSAMENTO",
+    "documento_id": "DOC-FA0EE849",
+    "classificacao": null,
+    "dados_extraidos": null,
+    "qualidade": null,
+    "decisao_roteamento": null,
+    "armazenamento_oci": null,
+    "erro": {
+      "codigo": "PDF_CORROMPIDO",
+      "mensagem": "PDF truncado em 40%: estrutura de objetos inválida, documento ilegível."
+    }
+  },
+  "assercoes": [
+    "Arquivo corrompido gera ERRO_PROCESSAMENTO",
+    "Mensagem segura, sem stack trace",
+    "Permitir reenvio"
+  ],
+  "observacoes": "Arquivo truncado em 40% do tamanho original."
+}

@@ -1,0 +1,77 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Matriz_LaudoLaboratorial_Imagem",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Matriz_LaudoLaboratorial_Imagem/Matriz_LaudoLaboratorial_Imagem.txt",
+      "pdf": "catalogo/Matriz_LaudoLaboratorial_Imagem/Matriz_LaudoLaboratorial_Imagem.pdf",
+      "jpg": "catalogo/Matriz_LaudoLaboratorial_Imagem/Matriz_LaudoLaboratorial_Imagem.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-82C22051",
+    "classificacao": {
+      "tipo_documento": "LAUDO_EXAME_LABORATORIAL",
+      "especialidade": [
+        "Hematologia",
+        "Clínica Médica"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Sônia Regina Duarte",
+        "idade": 55
+      },
+      "medico": {
+        "nome": "Dr. Marcos Vinícius Tavares",
+        "crm": {
+          "numero": "176543",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Dislipidemia mista",
+      "cid": "E78.2",
+      "exames": [
+        "Perfil lipídico",
+        "Glicemia de jejum"
+      ],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "PRONTUARIO_ELETRONICO",
+      "destinos": [
+        "PRONTUARIO_ELETRONICO"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: LAUDO_EXAME_LABORATORIAL encaminhado para PRONTUARIO_ELETRONICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Foto de laudo laboratorial aceita",
+    "Cinco analitos extraídos com unidade e referência",
+    "Destino PRONTUARIO_ELETRONICO sem revisão"
+  ],
+  "observacoes": ""
+}

@@ -1,0 +1,21 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Validacao_EnvelopeVazio",
+  "documento_ficticio": true,
+  "tipo_de_teste": "negativo_tecnico",
+  "entrada": {
+    "requisicao": "POST /api/v1/triagens",
+    "arquivo": "Validacao_EnvelopeVazio.json"
+  },
+  "resposta_esperada": {
+    "http": 422,
+    "codigo_funcional": "CAMPOS_INVALIDOS",
+    "mensagem": "Envelope JSON vazio, sem campos obrigatórios."
+  },
+  "assercoes": [
+    "Faltam tipo_arquivo e conteúdo.",
+    "Nenhuma inferência é executada para entrada inválida",
+    "Mensagem de erro é segura, sem stack trace ou segredo"
+  ],
+  "observacoes": "O expected deste fixture é um envelope de erro, não um JSON de triagem."
+}

@@ -1,0 +1,83 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Limite_Formato_Webp",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG",
+      "WEBP"
+    ],
+    "renditions": {
+      "txt": "catalogo/Limite_Formato_Webp/Limite_Formato_Webp.txt",
+      "pdf": "catalogo/Limite_Formato_Webp/Limite_Formato_Webp.pdf",
+      "jpg": "catalogo/Limite_Formato_Webp/Limite_Formato_Webp.jpg",
+      "webp": "catalogo/Limite_Formato_Webp/Limite_Formato_Webp.webp"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-C13A27B1",
+    "classificacao": {
+      "tipo_documento": "LAUDO_EXAME_IMAGEM",
+      "especialidade": [
+        "Radiologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Rafael Coutinho Bessa",
+        "idade": 41
+      },
+      "medico": {
+        "nome": "Dra. Renata Silveira",
+        "crm": {
+          "numero": "145892",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Radiografia de tórax sem alterações relevantes",
+      "cid": null,
+      "exames": [
+        "Radiografia de tórax"
+      ],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "PRONTUARIO_ELETRONICO",
+      "destinos": [
+        "PRONTUARIO_ELETRONICO"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: LAUDO_EXAME_IMAGEM encaminhado para PRONTUARIO_ELETRONICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "modo_fixture": {
+    "score_forcado": {
+      "score_classificacao": 0.93,
+      "score_extracao": 0.91
+    }
+  },
+  "assercoes": [
+    "WEBP está na lista de formatos aceitos (A6: PDF, JPG, PNG, WEBP, TXT)",
+    "Imagem é lida pelo caminho multimodal",
+    "Destino PRONTUARIO_ELETRONICO"
+  ],
+  "observacoes": "Caso criado em 21/10/2026. A pasta tem os três arquivos padrão mais o WEBP sob teste, declarado em entrada.renditions."
+}

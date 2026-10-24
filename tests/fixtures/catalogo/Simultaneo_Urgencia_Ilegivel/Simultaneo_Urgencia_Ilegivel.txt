@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RECEITUÁRIO MÉDICO
+Prescrição urgente parcialmente ilegível
+
+Fixture: Simultaneo_Urgencia_Ilegivel
+Paciente: Joana Batista Ferraz
+Idade: 58 anos
+Documento: DOC-REC-2026-0040
+Data: 18/10/2026
+Origem: Pronto-Socorro
+
+HIPÓTESE DIAGNÓSTICA
+Crise hipertensiva com risco de lesão de órgão-alvo — CID-10 I16.9.
+
+PRESCRIÇÃO
+Nitroprussiato de sódio — infusão contínua conforme protocolo. Dose inicial ilegível no documento.
+
+SINAL DE URGÊNCIA
+ATENDIMENTO IMEDIATO — PA 210/120 mmHg. Iniciar tratamento agora.
+
+------------------------------------------------------------------------------
+Dra. Camila Ferreira Lopes
+CRM 198765-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Simultaneo_Urgencia_Ilegivel · dados sintéticos · página 1 de 1

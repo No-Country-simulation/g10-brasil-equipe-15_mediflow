@@ -1,0 +1,73 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Matriz_Atestado_Imagem",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Matriz_Atestado_Imagem/Matriz_Atestado_Imagem.txt",
+      "pdf": "catalogo/Matriz_Atestado_Imagem/Matriz_Atestado_Imagem.pdf",
+      "jpg": "catalogo/Matriz_Atestado_Imagem/Matriz_Atestado_Imagem.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-C7A69889",
+    "classificacao": {
+      "tipo_documento": "ATESTADO_MEDICO",
+      "especialidade": [
+        "Clínica Médica"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Larissa Fontes Amaral",
+        "idade": 31
+      },
+      "medico": {
+        "nome": "Dra. Helena Prado",
+        "crm": {
+          "numero": "187432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Infecção viral de vias aéreas superiores",
+      "cid": "J06.9",
+      "exames": [],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "PRONTUARIO_ELETRONICO",
+      "destinos": [
+        "PRONTUARIO_ELETRONICO"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: ATESTADO_MEDICO encaminhado para PRONTUARIO_ELETRONICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Foto de atestado com carimbo",
+    "Carimbo não interfere na extração",
+    "Destino PRONTUARIO_ELETRONICO"
+  ],
+  "observacoes": ""
+}

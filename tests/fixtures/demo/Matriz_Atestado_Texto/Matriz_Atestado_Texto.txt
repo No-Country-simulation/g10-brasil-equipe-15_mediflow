@@ -1,0 +1,33 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+ATESTADO MÉDICO
+Atestado de comparecimento
+
+Fixture: Matriz_Atestado_Texto
+Paciente: Thiago Almeida Santos
+Idade: 29 anos
+Documento: DOC-ATE-2026-0008
+Data: 17/10/2026
+Origem: Ambulatório de Clínica Médica
+
+FINALIDADE
+Atestado de comparecimento para fins administrativos.
+
+TEXTO DO ATESTADO
+Atesto, para os devidos fins, que o paciente compareceu a consulta médica nesta unidade no dia 17/10/2026, no período das 09h00 às 10h15.
+
+DIAGNÓSTICO / JUSTIFICATIVA
+Infecção viral de vias aéreas superiores — CID-10 J06.9.
+
+PERÍODO
+Comparecimento no dia 17/10/2026.
+
+------------------------------------------------------------------------------
+Dr. Paulo Mendes Rocha
+CRM 203114-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_Atestado_Texto · dados sintéticos · página 1 de 1

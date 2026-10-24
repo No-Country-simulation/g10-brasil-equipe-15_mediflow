@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+LAUDO DE EXAME DE IMAGEM
+Laudo escaneado com carimbo sobreposto ao texto
+
+Fixture: Diferencial_CarimboSobreposto
+Paciente: Hugo Leonardo Peixoto
+Idade: 46 anos
+Documento: DOC-D-2026-0057
+Data: 18/10/2026
+Origem: Digitalização externa
+
+EXAME REALIZADO
+Ultrassonografia de vias urinárias.
+
+ACHADOS
+Rins de dimensões normais, sem dilatação pielocalicinal. Bexiga com parede regular, sem cálculos.
+
+CONCLUSÃO
+Exame ultrassonográfico sem alterações significativas.
+
+------------------------------------------------------------------------------
+Dr. André Luiz Barbosa
+CRM 165432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Diferencial_CarimboSobreposto · dados sintéticos · página 1 de 1

@@ -1,0 +1,74 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Matriz_NaoIdentificado_Imagem",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "demo/Matriz_NaoIdentificado_Imagem/Matriz_NaoIdentificado_Imagem.txt",
+      "pdf": "demo/Matriz_NaoIdentificado_Imagem/Matriz_NaoIdentificado_Imagem.pdf",
+      "jpg": "demo/Matriz_NaoIdentificado_Imagem/Matriz_NaoIdentificado_Imagem.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-DAD1253D",
+    "classificacao": {
+      "tipo_documento": "NAO_IDENTIFICADO",
+      "especialidade": [],
+      "nivel_prioridade": "NAO_IDENTIFICADA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": null,
+        "idade": null
+      },
+      "medico": {
+        "nome": null,
+        "crm": null
+      },
+      "diagnostico": null,
+      "cid": null,
+      "exames": [],
+      "medicamentos": [],
+      "urgencia": "INDETERMINADO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [
+        "paciente.nome",
+        "paciente.idade",
+        "medico.nome",
+        "medico.crm",
+        "diagnostico"
+      ],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: campos obrigatórios ausentes: diagnostico, medico.crm, medico.nome, paciente.idade, paciente.nome; tipo fora da taxonomia: NAO_IDENTIFICADO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Documento ilegível não pode ser classificado",
+    "Nenhum dado clínico é inventado",
+    "Destino FILA_REVISAO_HUMANA e status EM_REVISAO"
+  ],
+  "observacoes": "O PDF e o JPG são intencionalmente degradados (somente imagem, sem camada de texto). O TXT simula uma transcrição OCR truncada."
+}

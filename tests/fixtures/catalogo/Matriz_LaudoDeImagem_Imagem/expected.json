@@ -1,0 +1,81 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Matriz_LaudoDeImagem_Imagem",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Matriz_LaudoDeImagem_Imagem/Matriz_LaudoDeImagem_Imagem.txt",
+      "pdf": "catalogo/Matriz_LaudoDeImagem_Imagem/Matriz_LaudoDeImagem_Imagem.pdf",
+      "jpg": "catalogo/Matriz_LaudoDeImagem_Imagem/Matriz_LaudoDeImagem_Imagem.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-3ACD51ED",
+    "classificacao": {
+      "tipo_documento": "LAUDO_EXAME_IMAGEM",
+      "especialidade": [
+        "Radiologia",
+        "Pneumologia"
+      ],
+      "nivel_prioridade": "URGENTE",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Antônio Carlos Vieira",
+        "idade": 71
+      },
+      "medico": {
+        "nome": "Dra. Renata Silveira",
+        "crm": {
+          "numero": "145892",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Pneumotórax espontâneo à direita",
+      "cid": null,
+      "exames": [
+        "Radiografia de tórax"
+      ],
+      "medicamentos": [],
+      "urgencia": "SIM"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_URGENCIA_MEDICA",
+      "destinos": [
+        "FILA_URGENCIA_MEDICA"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Urgência clínica: FILA_URGENCIA_MEDICA com alerta registrado. Sem ambiguidade, segue sem revisão humana.",
+      "notificacao": {
+        "gerada": true,
+        "canal": "SIMULADO_SLACK_PLANTAO",
+        "status": "REGISTRADA",
+        "mensagem": "ALERTA URGENTE [DOC-3ACD51ED]: Pneumotórax espontâneo à direita"
+      }
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Foto de laudo com achado crítico",
+    "Prioridade URGENTE detectada",
+    "Destino FILA_URGENCIA_MEDICA com alerta simulado"
+  ],
+  "observacoes": ""
+}

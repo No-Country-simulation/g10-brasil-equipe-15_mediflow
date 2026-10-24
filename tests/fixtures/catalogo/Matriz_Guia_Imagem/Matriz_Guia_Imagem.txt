@@ -1,0 +1,33 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+GUIA DE SOLICITAÇÃO DE PROCEDIMENTO
+Endoscopia digestiva alta — urgência
+
+Fixture: Matriz_Guia_Imagem
+Paciente: Márcia Helena dos Santos
+Idade: 49 anos
+Documento: DOC-GUI-2026-0017
+Data: 17/10/2026
+Origem: Pronto-Socorro
+
+DIAGNÓSTICO / CID
+Hemorragia digestiva alta — CID-10 K92.2.
+
+PROCEDIMENTO SOLICITADO
+Endoscopia digestiva alta diagnóstica e terapêutica.
+
+JUSTIFICATIVA CLÍNICA
+Paciente com hematêmese e melena, instabilidade hemodinâmica. Procedimento com caráter de urgência nas próximas 6 horas.
+
+AUTORIZAÇÃO
+Solicitação URGENTE. Autorização em análise pela auditoria.
+
+------------------------------------------------------------------------------
+Dr. Paulo Mendes Rocha
+CRM 203114-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_Guia_Imagem · dados sintéticos · página 1 de 1

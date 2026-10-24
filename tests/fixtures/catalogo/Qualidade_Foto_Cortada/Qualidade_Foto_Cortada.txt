@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+GUIA DE SOLICITAÇÃO DE PROCEDIMENTO
+Guia com metade da página fora do enquadramento
+
+Fixture: Qualidade_Foto_Cortada
+Paciente: Elaine Souza Barreto
+Idade: 36 anos
+Documento: DOC-Q-2026-0044
+Data: 18/10/2026
+Origem: Foto enviada por celular
+
+DIAGNÓSTICO / CID
+Nódulo tireoidiano a esclarecer — CID-10 E04.1.
+
+PROCEDIMENTO SOLICITADO
+Punção aspirativa por agulha fina de tireoide.
+
+JUSTIFICATIVA CLÍNICA
+Nódulo de 1,8 cm em lobo direito, hipoecoico, com microcalcificações.
+
+------------------------------------------------------------------------------
+Dra. Helena Prado
+CRM não visível — recorte da imagem
+------------------------------------------------------------------------------
+MediFlow · fixture Qualidade_Foto_Cortada · dados sintéticos · página 1 de 1

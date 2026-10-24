@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+GUIA DE SOLICITAÇÃO DE PROCEDIMENTO
+Guia de procedimento escaneada em PDF
+
+Fixture: Escaneado_Guia_PdfDigitalizado
+Paciente: Adriana Lopes Siqueira
+Idade: 42 anos
+Documento: DOC-E-2026-0052
+Data: 18/10/2026
+Origem: Digitalização externa
+
+DIAGNÓSTICO / CID
+Hérnia de disco lombar — CID-10 M51.2.
+
+PROCEDIMENTO SOLICITADO
+Ressonância magnética de coluna lombar.
+
+JUSTIFICATIVA CLÍNICA
+Dor irradiada para membro inferior esquerdo refratária a tratamento conservador por 8 semanas.
+
+------------------------------------------------------------------------------
+Dr. André Luiz Barbosa
+CRM 165432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Escaneado_Guia_PdfDigitalizado · dados sintéticos · página 1 de 1

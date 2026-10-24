@@ -1,0 +1,91 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Conflito_Gravidade_Media",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Conflito_Gravidade_Media/Conflito_Gravidade_Media.txt",
+      "pdf": "catalogo/Conflito_Gravidade_Media/Conflito_Gravidade_Media.pdf",
+      "jpg": "catalogo/Conflito_Gravidade_Media/Conflito_Gravidade_Media.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-A55A96DF",
+    "classificacao": {
+      "tipo_documento": "GUIA_PROCEDIMENTO",
+      "especialidade": [
+        "Ortopedia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.95
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Otávio Lemos Prado",
+        "idade": 45
+      },
+      "medico": {
+        "nome": "Dr. André Luiz Barbosa",
+        "crm": {
+          "numero": "165432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Gonartrose unilateral de joelho direito",
+      "cid": "M17.1",
+      "exames": [
+        "Ressonância magnética de joelho direito"
+      ],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.95,
+      "score_combinado": 0.95,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": [
+        {
+          "tipo": "PRIORIDADE_TEXTO",
+          "campos": [
+            "nivel_prioridade",
+            "texto"
+          ],
+          "gravidade": "MEDIA",
+          "descricao": "Texto pede atendimento preferencial, mas a guia é eletiva e não há sinal clínico de urgência"
+        }
+      ]
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: conflitos impeditivos: PRIORIDADE_TEXTO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "modo_fixture": {
+    "score_forcado": {
+      "score_classificacao": 0.95,
+      "score_extracao": 0.95
+    }
+  },
+  "assercoes": [
+    "Conflito de gravidade MÉDIA é impeditivo e leva à revisão humana (decisão A1)",
+    "Não há urgência: a revisão substitui o destino, sem gerar alerta",
+    "Scores em 0,95: o gatilho é a gravidade, não o score"
+  ],
+  "observacoes": "Caso criado em 21/10/2026 para isolar a regra A1. Os dois scores são forçados em 0,95 (modo fixture) para que o único gatilho de revisão seja o conflito MÉDIA."
+}

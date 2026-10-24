@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+LAUDO DE EXAME DE IMAGEM
+Laudo com diagnóstico explícito e sem CID
+
+Fixture: Ausencia_SomenteCid
+Paciente: Celso Ribeiro Nunes
+Idade: 57 anos
+Documento: DOC-IMG-2026-0031
+Data: 18/10/2026
+Origem: Ambulatório de Ortopedia
+
+EXAME REALIZADO
+Radiografia de joelho direito, incidências AP e perfil.
+
+ACHADOS
+Redução do espaço articular medial, osteófitos marginais e esclerose subcondral.
+
+CONCLUSÃO
+Gonartrose à direita, grau moderado.
+
+------------------------------------------------------------------------------
+Dr. André Luiz Barbosa
+CRM 165432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Ausencia_SomenteCid · dados sintéticos · página 1 de 1

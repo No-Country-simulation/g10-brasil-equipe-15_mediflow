@@ -1,0 +1,21 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Limite_Texto_Acima10MB",
+  "documento_ficticio": true,
+  "tipo_de_teste": "negativo_tecnico",
+  "entrada": {
+    "requisicao": "POST /api/v1/triagens",
+    "arquivo": "Limite_Texto_Acima10MB.txt"
+  },
+  "resposta_esperada": {
+    "http": 413,
+    "codigo_funcional": "ARQUIVO_MAIOR_QUE_LIMITE",
+    "mensagem": "Texto de 10,5 MB no envelope JSON: o limite de 10 MB (A6) vale para documento_texto, não só para upload de arquivo."
+  },
+  "assercoes": [
+    "Rejeitar pelo tamanho antes de qualquer inferência.",
+    "Nenhuma inferência é executada para entrada inválida",
+    "Mensagem de erro é segura, sem stack trace ou segredo"
+  ],
+  "observacoes": "O expected deste fixture é um envelope de erro, não um JSON de triagem."
+}

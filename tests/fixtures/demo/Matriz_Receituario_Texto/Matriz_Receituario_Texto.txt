@@ -1,0 +1,31 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RECEITUÁRIO MÉDICO
+Prescrição ambulatorial — rotina
+
+Fixture: Matriz_Receituario_Texto
+Paciente: Marina Alves Ferreira
+Idade: 34 anos
+Documento: DOC-REC-2026-0001
+Data: 12/10/2026
+Origem: Ambulatório de Clínica Médica
+
+HIPÓTESE DIAGNÓSTICA
+Cefaleia tensional — CID-10 G44.2.
+
+PRESCRIÇÃO
+1. Dipirona sódica 500 mg — 1 comprimido por via oral a cada 8 horas, por 3 dias.
+2. Hidratação oral e repouso por 24 horas.
+
+ORIENTAÇÕES
+Retornar ao ambulatório se a dor persistir por mais de 72 horas ou se surgirem sinais neurológicos.
+
+------------------------------------------------------------------------------
+Dra. Helena Prado
+CRM 187432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_Receituario_Texto · dados sintéticos · página 1 de 1

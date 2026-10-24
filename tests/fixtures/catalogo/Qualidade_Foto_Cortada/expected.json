@@ -1,0 +1,74 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Qualidade_Foto_Cortada",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Qualidade_Foto_Cortada/Qualidade_Foto_Cortada.txt",
+      "pdf": "catalogo/Qualidade_Foto_Cortada/Qualidade_Foto_Cortada.pdf",
+      "jpg": "catalogo/Qualidade_Foto_Cortada/Qualidade_Foto_Cortada.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-7ACEB7B3",
+    "classificacao": {
+      "tipo_documento": "GUIA_PROCEDIMENTO",
+      "especialidade": [
+        "Endocrinologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Elaine Souza Barreto",
+        "idade": 36
+      },
+      "medico": {
+        "nome": "Dra. Helena Prado",
+        "crm": null
+      },
+      "diagnostico": "Nódulo tireoidiano a esclarecer",
+      "cid": "E04.1",
+      "exames": [
+        "Punção aspirativa por agulha fina de tireoide"
+      ],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [
+        "medico.crm"
+      ],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: campos obrigatórios ausentes: medico.crm.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Recorte remove o CRM da assinatura",
+    "Ausência de CRM força revisão",
+    "Demais campos permanecem extraíveis"
+  ],
+  "observacoes": "A imagem e o PDF mostram apenas a metade superior da página."
+}

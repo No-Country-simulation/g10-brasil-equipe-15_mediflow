@@ -1,0 +1,73 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Escaneado_Atestado_PdfDigitalizado",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Escaneado_Atestado_PdfDigitalizado/Escaneado_Atestado_PdfDigitalizado.txt",
+      "pdf": "catalogo/Escaneado_Atestado_PdfDigitalizado/Escaneado_Atestado_PdfDigitalizado.pdf",
+      "jpg": "catalogo/Escaneado_Atestado_PdfDigitalizado/Escaneado_Atestado_PdfDigitalizado.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-9FB745B2",
+    "classificacao": {
+      "tipo_documento": "ATESTADO_MEDICO",
+      "especialidade": [
+        "Neurologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Tânia Regina Oliveira",
+        "idade": 35
+      },
+      "medico": {
+        "nome": "Dra. Camila Ferreira Lopes",
+        "crm": {
+          "numero": "198765",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Enxaqueca sem aura",
+      "cid": "G43.0",
+      "exames": [],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "PRONTUARIO_ELETRONICO",
+      "destinos": [
+        "PRONTUARIO_ELETRONICO"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: ATESTADO_MEDICO encaminhado para PRONTUARIO_ELETRONICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Atestado escaneado é classificado",
+    "Afastamento e CID extraídos",
+    "Destino PRONTUARIO_ELETRONICO"
+  ],
+  "observacoes": ""
+}

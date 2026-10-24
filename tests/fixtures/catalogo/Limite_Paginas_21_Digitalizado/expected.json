@@ -1,0 +1,21 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Limite_Paginas_21_Digitalizado",
+  "documento_ficticio": true,
+  "tipo_de_teste": "negativo_tecnico",
+  "entrada": {
+    "requisicao": "POST /api/v1/triagens",
+    "arquivo": "Limite_Paginas_21_Digitalizado.pdf"
+  },
+  "resposta_esperada": {
+    "http": 413,
+    "codigo_funcional": "ARQUIVO_MAIOR_QUE_LIMITE",
+    "mensagem": "PDF digitalizado (só imagem) de 21 páginas: a contagem de páginas não pode depender da camada de texto, senão o arquivo passaria por 1 página e iria para OCR."
+  },
+  "assercoes": [
+    "Rejeitar pela contagem de páginas antes de rasterizar ou chamar o modelo.",
+    "Nenhuma inferência é executada para entrada inválida",
+    "Mensagem de erro é segura, sem stack trace ou segredo"
+  ],
+  "observacoes": "O expected deste fixture é um envelope de erro, não um JSON de triagem."
+}

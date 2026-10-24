@@ -1,0 +1,85 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Borda_Prioridade_NaoIdentificada",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Borda_Prioridade_NaoIdentificada/Borda_Prioridade_NaoIdentificada.txt",
+      "pdf": "catalogo/Borda_Prioridade_NaoIdentificada/Borda_Prioridade_NaoIdentificada.pdf",
+      "jpg": "catalogo/Borda_Prioridade_NaoIdentificada/Borda_Prioridade_NaoIdentificada.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-1C93EF41",
+    "classificacao": {
+      "tipo_documento": "RECEITUARIO_MEDICO",
+      "especialidade": [
+        "Endocrinologia"
+      ],
+      "nivel_prioridade": "NAO_IDENTIFICADA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Luzia Ferraz Bonfim",
+        "idade": 62
+      },
+      "medico": {
+        "nome": "Dr. Paulo Mendes Rocha",
+        "crm": {
+          "numero": "203114",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Hipotireoidismo primário",
+      "cid": "E03.9",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Levotiroxina sódica",
+          "dosagem": "75 mcg",
+          "frequencia": null
+        }
+      ],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: prioridade não identificada.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "modo_fixture": {
+    "score_forcado": {
+      "score_classificacao": 0.93,
+      "score_extracao": 0.91
+    }
+  },
+  "assercoes": [
+    "Prioridade NAO_IDENTIFICADA é ambiguidade e gera revisão (decisão A4)",
+    "Documento está completo e legível: nenhum outro gatilho está presente",
+    "Não é urgência: um destino só, sem alerta"
+  ],
+  "observacoes": "Caso criado em 21/10/2026 para isolar a regra A4. Todos os campos obrigatórios estão presentes, sem campos incertos, sem conflitos e com score acima do limiar — o único gatilho de revisão é a prioridade não identificada."
+}

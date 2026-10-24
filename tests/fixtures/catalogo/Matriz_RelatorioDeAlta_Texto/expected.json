@@ -1,0 +1,75 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Matriz_RelatorioDeAlta_Texto",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Matriz_RelatorioDeAlta_Texto/Matriz_RelatorioDeAlta_Texto.txt",
+      "pdf": "catalogo/Matriz_RelatorioDeAlta_Texto/Matriz_RelatorioDeAlta_Texto.pdf",
+      "jpg": "catalogo/Matriz_RelatorioDeAlta_Texto/Matriz_RelatorioDeAlta_Texto.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-7DA1F488",
+    "classificacao": {
+      "tipo_documento": "RELATORIO_ALTA_INTERNACAO",
+      "especialidade": [
+        "Cirurgia Geral"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Vanessa Cristina Lopes",
+        "idade": 33
+      },
+      "medico": {
+        "nome": "Dr. André Luiz Barbosa",
+        "crm": {
+          "numero": "165432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": null,
+      "cid": null,
+      "exames": [],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [
+        "diagnostico"
+      ],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: campos obrigatórios ausentes: diagnostico.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Documento truncado sem diagnóstico/hipótese",
+    "Ausência de diagnóstico força revisão (RF-21)",
+    "Nenhum diagnóstico é inventado"
+  ],
+  "observacoes": ""
+}

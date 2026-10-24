@@ -1,0 +1,91 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Conflito_Prioridade",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Conflito_Prioridade/Conflito_Prioridade.txt",
+      "pdf": "catalogo/Conflito_Prioridade/Conflito_Prioridade.pdf",
+      "jpg": "catalogo/Conflito_Prioridade/Conflito_Prioridade.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-620FFAE6",
+    "classificacao": {
+      "tipo_documento": "GUIA_PROCEDIMENTO",
+      "especialidade": [
+        "Cirurgia Vascular"
+      ],
+      "nivel_prioridade": "URGENTE",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Rogério Pinto Machado",
+        "idade": 61
+      },
+      "medico": {
+        "nome": "Dra. Camila Ferreira Lopes",
+        "crm": {
+          "numero": "198765",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Trombose venosa profunda de membro inferior",
+      "cid": "I80.2",
+      "exames": [
+        "Ultrassonografia Doppler venoso"
+      ],
+      "medicamentos": [],
+      "urgencia": "SIM"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": [
+        {
+          "tipo": "PRIORIDADE_TEXTO",
+          "campos": [
+            "nivel_prioridade",
+            "texto"
+          ],
+          "gravidade": "ALTA",
+          "descricao": "Cabeçalho ROTINA conflita com texto de urgência"
+        }
+      ]
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_URGENCIA_MEDICA",
+      "destinos": [
+        "FILA_URGENCIA_MEDICA",
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Urgência com ambiguidade: mantém FILA_URGENCIA_MEDICA e acrescenta FILA_REVISAO_HUMANA. conflitos impeditivos: PRIORIDADE_TEXTO.",
+      "notificacao": {
+        "gerada": true,
+        "canal": "SIMULADO_SLACK_PLANTAO",
+        "status": "REGISTRADA",
+        "mensagem": "ALERTA URGENTE [DOC-620FFAE6]: Trombose venosa profunda de membro inferior"
+      }
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Discrepância entre prioridade declarada e sinais textuais",
+    "Sinal crítico prevalece sobre o cabeçalho (RN-03)",
+    "Dois destinos: urgência e revisão"
+  ],
+  "observacoes": ""
+}

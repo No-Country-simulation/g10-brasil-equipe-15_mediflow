@@ -1,0 +1,75 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Matriz_Guia_Texto",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Matriz_Guia_Texto/Matriz_Guia_Texto.txt",
+      "pdf": "catalogo/Matriz_Guia_Texto/Matriz_Guia_Texto.pdf",
+      "jpg": "catalogo/Matriz_Guia_Texto/Matriz_Guia_Texto.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-89E1082B",
+    "classificacao": {
+      "tipo_documento": "GUIA_PROCEDIMENTO",
+      "especialidade": [
+        "Gastroenterologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Roberto Yukio Tanaka",
+        "idade": 60
+      },
+      "medico": {
+        "nome": "Dra. Camila Ferreira Lopes",
+        "crm": {
+          "numero": "198765",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Rastreamento de neoplasia colorretal",
+      "cid": "Z12.1",
+      "exames": [
+        "Colonoscopia"
+      ],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "AUDITORIA_AUTORIZACOES",
+      "destinos": [
+        "AUDITORIA_AUTORIZACOES"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: GUIA_PROCEDIMENTO encaminhado para AUDITORIA_AUTORIZACOES.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Texto de guia eletiva",
+    "Destino AUDITORIA_AUTORIZACOES",
+    "Nenhum sinal de urgência"
+  ],
+  "observacoes": ""
+}

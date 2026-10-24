@@ -1,0 +1,33 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RECEITUÁRIO MÉDICO
+Receita completa e legível, sem campo que permita definir a prioridade
+
+Fixture: Borda_Prioridade_NaoIdentificada
+Paciente: Luzia Ferraz Bonfim
+Idade: 62 anos
+Documento: DOC-REC-2026-0053
+Data: 18/10/2026
+Origem: Unidade Básica de Saúde
+
+HIPÓTESE DIAGNÓSTICA
+Hipotireoidismo primário — CID-10 E03.9.
+
+PRESCRIÇÃO
+Levotiroxina sódica 75 mcg — 1 comprimido por via oral em jejum, uso contínuo.
+
+CARÁTER DO ATENDIMENTO
+Campo de caráter do atendimento em branco no formulário: não há marcação de eletivo nem de urgente em nenhuma parte do documento.
+
+ORIENTAÇÕES
+Retorno em 90 dias com dosagem de TSH.
+
+------------------------------------------------------------------------------
+Dr. Paulo Mendes Rocha
+CRM 203114-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Borda_Prioridade_NaoIdentificada · dados sintéticos · página 1 de 1

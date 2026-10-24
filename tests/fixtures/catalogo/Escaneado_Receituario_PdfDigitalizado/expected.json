@@ -1,0 +1,79 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Escaneado_Receituario_PdfDigitalizado",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Escaneado_Receituario_PdfDigitalizado/Escaneado_Receituario_PdfDigitalizado.txt",
+      "pdf": "catalogo/Escaneado_Receituario_PdfDigitalizado/Escaneado_Receituario_PdfDigitalizado.pdf",
+      "jpg": "catalogo/Escaneado_Receituario_PdfDigitalizado/Escaneado_Receituario_PdfDigitalizado.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-177238CD",
+    "classificacao": {
+      "tipo_documento": "RECEITUARIO_MEDICO",
+      "especialidade": [
+        "Cardiologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Marli Aparecida Fonseca",
+        "idade": 50
+      },
+      "medico": {
+        "nome": "Dr. Marcos Vinícius Tavares",
+        "crm": {
+          "numero": "176543",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Hipertensão arterial sistêmica",
+      "cid": "I10",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Anlodipino",
+          "dosagem": "5 mg",
+          "frequencia": null
+        }
+      ],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FARMACIA_HOSPITALAR",
+      "destinos": [
+        "FARMACIA_HOSPITALAR"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: RECEITUARIO_MEDICO encaminhado para FARMACIA_HOSPITALAR.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "PDF escaneado com camada de imagem",
+    "Extração correta pelo caminho multimodal",
+    "Destino FARMACIA_HOSPITALAR"
+  ],
+  "observacoes": ""
+}
