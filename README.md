@@ -204,7 +204,7 @@ pip install fastapi uvicorn pydantic oci google-generativeai httpx
 
 ### 2️⃣ Executar a Bateria de Testes Automatizada
 ```bash
-python cenarios_teste_mediflow_v2.py
+python -m pytest
 ```
 
 ### 3️⃣ Subir o Servidor FastAPI
@@ -222,3 +222,9 @@ uvicorn app_mediflow_fastapi_v2:app --reload --port 8000
   <p><i>Desenvolvido com ❤️ pela <b>Equipe 15</b> no Hackathon ONE G10 - BRASIL</i></p>
 </div>
 
+
+---
+
+## 📜 Licença
+
+Este projeto foi desenvolvido para fins educacionais e de avaliação no âmbito do **Hackathon ONE G10 (Oracle Next Education & Alura)** sob a licença [MIT](LICENSE).
