@@ -1,7 +1,7 @@
 """
 Testes unitários para validação dos schemas Pydantic do MediFlow.
 Garante que o contrato de dados atende às exigências do Hackathon ONE G10,
-ao CONTRATO_DE_DADOS_v2.md e aos 79 fixtures de validação (William / Luciana).
+ao CONTRATO_DE_DADOS.md e aos 79 fixtures de validação (William / Luciana).
 """
 import pytest
 from src.schemas import (
@@ -254,8 +254,8 @@ def test_contrato_v2_analitos_laboratoriais_rf12():
     assert triagem.decisao_roteamento.destino_principal == Destino.PRONTUARIO_ELETRONICO
 
 
-def test_contrato_v2_erros_leitura_e_requisicao():
-    """Valida os dois níveis de erro definidos no CONTRATO_DE_DADOS_v2.md"""
+def test_contrato_erros_leitura_e_requisicao():
+    """Valida os dois níveis de erro definidos no CONTRATO_DE_DADOS.md"""
     # 1. Erro de requisição (HTTP 413)
     erro_req = ErroResposta(
         http=413,

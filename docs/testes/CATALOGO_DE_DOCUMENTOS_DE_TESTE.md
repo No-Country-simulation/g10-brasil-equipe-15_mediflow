@@ -5,7 +5,7 @@
 **Versão:** 2.0 — 24/10/2026 (Homologado e Integrado ao Pytest)  
 **Atualização desta versão:** 79 fixtures oficiais cobrindo integralmente as 8 categorias, limites de tamanho e páginas (10MB / 20 páginas), múltiplos encodings (Latin-1/UTF-8), regras de conflito (A1) e casos de borda (A4/A5).  
 **Execução Automatizada:** `python -m pytest tests/test_contrato_fixtures.py` (79 testes) ou `python -m pytest` (149 testes)  
-**Contrato Canônico:** [`CONTRATO_DE_DADOS_v2.md`](CONTRATO_DE_DADOS_v2.md) e [`src/schemas/clinical.py`](../../src/schemas/clinical.py)  
+**Contrato Canônico:** [`CONTRATO_DE_DADOS.md`](CONTRATO_DE_DADOS.md) e [`src/schemas/clinical.py`](../../src/schemas/clinical.py)  
 **Base documental:** `Projeto_oracle.pdf`, `MediFlow_-_Análise_de_Requisitos_v1.1.pdf` e `MediFlow_Especificacao_Funcional_v1.0.pdf`  
 **Manifesto executável:** [`tests/fixtures/manifest.csv`](../../tests/fixtures/manifest.csv)
 
@@ -285,7 +285,7 @@ O `expected.json` segue o schema `mediflow.fixture/2`:
 | `erro_processamento` | 2 | `TriagemMediFlow` com `status=ERRO_PROCESSAMENTO` e `erro.codigo` |
 | `negativo_tecnico` | 12 | `ErroResposta` (HTTP + código funcional) |
 
-O contrato executável canônico é [`src/schemas/clinical.py`](../../src/schemas/clinical.py); a especificação oficial em português é [`CONTRATO_DE_DADOS_v2.md`](CONTRATO_DE_DADOS_v2.md) (com suporte mantido à especificação original [`CONTRATO_DE_DADOS.md`](CONTRATO_DE_DADOS.md)).
+O contrato executável canônico é [`src/schemas/clinical.py`](../../src/schemas/clinical.py); a especificação oficial em português é o [`CONTRATO_DE_DADOS.md`](CONTRATO_DE_DADOS.md) (versão canônica oficial unificada).
 
 **Não compare scores exatos.** O score autorrelatado pelo LLM não é probabilidade calibrada (RF-17). Compare faixas (`< 0,85`, `>= 0,85`, `== 0,85`) e, para os casos de borda Borda_Score_084/Borda_Score_085/Simultaneo_Urgencia_Score, use **stub de score** — sem isso o teste é intermitente e não serve como evidência.
 

@@ -1,57 +1,55 @@
-# Contrato de dados da triagem — MediFlow v1.0
+# Contrato de Dados da Triagem — MediFlow (Versão Oficial Canônica)
 
-> **Nota de Integração no Repositório Oficial (24/10/2026):**  
-> Este documento representa a especificação canônica original criada pelo colega William para governar os 79 fixtures de teste.  
-> No repositório oficial (`g10-brasil-equipe-15_mediflow`), sua implementação ativa reside em [`src/schemas/clinical.py`](../../src/schemas/clinical.py) e sua versão harmonizada e resiliente está documentada em [`CONTRATO_DE_DADOS_v2.md`](CONTRATO_DE_DADOS_v2.md).  
-> Os testes automatizados são executados diretamente via Pytest: `python -m pytest tests/test_contrato_fixtures.py`.
-
-**Projeto:** MediFlow — Equipe 15 (Hackathon ONE G10 - Oracle & Alura)  
-**Código Original:** `app/models.py` | **Código Oficial:** [`src/schemas/clinical.py`](../../src/schemas/clinical.py)  
-**Data Original:** 20/10/2026 | **Integração:** 24/10/2026  
-**Escopo:** o contrato que os 79 `expected.json` documentam e validam.
+> **Projeto:** MediFlow — Equipe 15 (Hackathon ONE G10 - Oracle & Alura)  
+> **Status:** Contrato Canônico Oficial Unificado (Governança Central de Dados)  
+> **Implementação Ativa:** [`src/schemas/clinical.py`](../../src/schemas/clinical.py)  
+> **Escopo:** Rege o Agente Gemini, o Workflow LangGraph, o Ingestor de Documentos, a API FastAPI, as Interfaces (Streamlit/React) e os 79 fixtures de teste automatizados.  
+> **Validação Automatizada:** 100% coberto pela suíte Pytest (`python -m pytest`).
 
 ---
 
 ## 1. O que é este documento
 
-O contrato responde a três perguntas, e só a estas:
+Este documento é a **especificação canônica oficial** do contrato de dados do MediFlow. Ele unifica e harmoniza as regras clínicas e fixtures desenvolvidos por William com a expansão de schemas e interoperabilidade estruturada por Luciana, consolidando uma fonte única da verdade para todo o repositório.
 
-1. **Qual é o formato da resposta** que o agente devolve para um documento aceito (`TriagemMediFlow`) e para uma requisição recusada (`ErroResposta`).
-2. **Quais valores são válidos** em cada campo controlado — sem texto livre, sem acento, sem espaço.
-3. **Como a decisão é tomada** a partir dos fatos extraídos (score, campos ausentes, incertos, conflitos, prioridade).
+O contrato responde a quatro perguntas fundamentais:
 
-Ele é executável: `src/schemas/clinical.py` roda as regras e recusa payload incoerente. Os 79 fixtures são instâncias válidas desse modelo, e o teste `tests/test_contrato_fixtures.py` prova isso a cada execução.
+1. **Qual é o formato da resposta** que o agente devolve para um documento aceito ([`TriagemMediFlow`](../../src/schemas/clinical.py)) e para requisições recusadas ou ilegíveis ([`ErroResposta`](../../src/schemas/clinical.py) e `ErroProcessamento`).
+2. **Quais valores e tokens são válidos** em cada campo controlado — garantindo formato uniforme (caixa alta, sem acentos, sem espaços) com resiliência automática para variações legadas.
+3. **Como a decisão de triagem é calculada** a partir dos fatos clínicos extraídos (scores de confiança, campos obrigatórios, incerteza, conflitos e prioridade).
+4. **Como o sistema assegura retrocompatibilidade e interoperabilidade**, permitindo que o Ingestion Loader, a LLM Gemini, a esteira LangGraph, a API e as interfaces interajam sem falhas de desserialização.
 
-```bash
-python -m pytest tests/test_contrato_fixtures.py        # 79/79 fixtures validados via Pytest
-python -m pytest                                       # Suíte completa (143 testes)
-```
+O contrato é **executável e determinístico**: implementado via Pydantic v2 em [`src/schemas/clinical.py`](../../src/schemas/clinical.py), ele aplica as regras no `@model_validator` e valida os 79 fixtures oficiais como instâncias estritas.
 
 ---
 
-## 2. Enums (fonte única)
+## 2. Enums Controlados (Fonte Única com Resiliência Automática)
 
-| Enum | Valores | Onde aparece |
-| --- | --- | --- |
-| `TipoDocumento` | `RECEITUARIO_MEDICO`, `LAUDO_EXAME_LABORATORIAL`, `LAUDO_EXAME_IMAGEM`, `GUIA_PROCEDIMENTO`, `RELATORIO_ALTA_INTERNACAO`, `ATESTADO_MEDICO`, `OUTRO`, `NAO_IDENTIFICADO` | `classificacao.tipo_documento` |
-| `NivelPrioridade` | `URGENTE`, `ROTINA`, `NAO_IDENTIFICADA` | `classificacao.nivel_prioridade` |
-| `StatusTriagem` | `RECEBIDO`, `PROCESSANDO`, `PROCESSADO`, `EM_REVISAO`, `ERRO_PROCESSAMENTO`, `ERRO_PERSISTENCIA` | `status` |
-| `Destino` | `FILA_URGENCIA_MEDICA`, `FARMACIA_HOSPITALAR`, `AUDITORIA_AUTORIZACOES`, `PRONTUARIO_ELETRONICO`, `FILA_REVISAO_HUMANA` | `decisao_roteamento.destinos` |
-| `Urgencia` | `SIM`, `NAO`, `INDETERMINADO` | `dados_extraidos.urgencia` |
-| `Gravidade` | `ALTA`, `MEDIA`, `BAIXA` | `qualidade.conflitos[].gravidade` |
-| `CodigoErro` | `FORMATO_NAO_SUPORTADO`, `CAMPOS_INVALIDOS`, `REQUISICAO_INVALIDA`, `ARQUIVO_MAIOR_QUE_LIMITE`, `MIME_INVALIDO`, `PDF_PROTEGIDO`, `PDF_CORROMPIDO` | erros |
+Todos os enums utilizam **tokens puros em caixa alta (sem acentos e sem espaços)** como padrão estrito de serialização. Para evitar falhas em integrações externas ou legadas, os enums implementam resiliência via método `_missing_`, normalizando automaticamente formatos alternativos para o token canônico correspondente.
 
-Decisões que fecham divergências antigas:
+| Enum | Tokens Canônicos Oficiais | Aliases e Compatibilidade Aceitos via `_missing_` | Onde aparece |
+| :--- | :--- | :--- | :--- |
+| `TipoDocumento` | `RECEITUARIO_MEDICO`, `LAUDO_EXAME_LABORATORIAL`, `LAUDO_EXAME_IMAGEM`, `GUIA_PROCEDIMENTO`, `RELATORIO_ALTA_INTERNACAO`, `ATESTADO_MEDICO`, `OUTRO`, `NAO_IDENTIFICADO` | `"Laudo de Exame de Imagem"`, `"Receituario Medico"`, `"Guia de Solicitação de Procedimento"`, `"LAUDO_IMAGEM"` | `classificacao.tipo_documento` |
+| `NivelPrioridade` | `URGENTE`, `ROTINA`, `NAO_IDENTIFICADA` | `"Urgente"`, `"Rotina"`, `"Pouco_Urgente"` (normalizado para `ROTINA`) | `classificacao.nivel_prioridade` |
+| `StatusTriagem` | `RECEBIDO`, `PROCESSANDO`, `PROCESSADO`, `EM_REVISAO`, `ERRO_PROCESSAMENTO`, `ERRO_PERSISTENCIA` | `"processado"`, `"pendente_auditoria"` (normalizado para `EM_REVISAO`) | `status` |
+| `Destino` | `FILA_URGENCIA_MEDICA`, `FARMACIA_HOSPITALAR`, `AUDITORIA_AUTORIZACOES`, `PRONTUARIO_ELETRONICO`, `FILA_REVISAO_HUMANA` | `"Fila_Emergencia_Medica"`, `"Farmacia_Hospitalar"`, `"Auditoria_Autorizacoes"`, `"Prontuario_Eletronico"`, `"Fila_Revisao_Humana"` | `decisao_roteamento.destinos` |
+| `Urgencia` | `SIM`, `NAO`, `INDETERMINADO` | Case-insensitive (`"sim"`, `"nao"`, `"indeterminado"`) | `dados_extraidos.urgencia` |
+| `Gravidade` | `ALTA`, `MEDIA`, `BAIXA` | Case-insensitive | `qualidade.conflitos[].gravidade` |
+| `CodigoErro` | `FORMATO_NAO_SUPORTADO`, `CAMPOS_INVALIDOS`, `REQUISICAO_INVALIDA`, `ARQUIVO_MAIOR_QUE_LIMITE`, `MIME_INVALIDO`, `PDF_PROTEGIDO`, `PDF_CORROMPIDO` | Alinhado com as exceções de `src/ingestion/loader.py` | `erro.codigo` / `codigo_funcional` |
 
-- **Tokens, não rótulos.** `LAUDO_EXAME_IMAGEM` (não `"Laudo de Exame de Imagem"`), `FILA_URGENCIA_MEDICA` (não `"Fila_Emergencia_Medica"`). Nada de acento, espaço ou barra em valor de enum.
-- **`POUCO_URGENTE` não existe.** A especificação define três níveis; o valor foi removido em vez de ficar sem fixture.
-- **`OUTRO` e `NAO_IDENTIFICADO` são resultados**, não erros: continuam sendo `TipoDocumento`, com revisão obrigatória.
-- **`NAO_IDENTIFICADA` é prioridade**; `N/A` deixou de existir em qualquer campo.
-- **Urgência isolada não gera revisão humana** (`PROCESSADO` + `requer_auditoria_humana=False`). Decisão tomada a partir do `Projeto_oracle.pdf`, cujo exemplo devolve `"status": "processado"` e `"requer_auditoria_humana": false` para um caso urgente, e guarda o objeto em `processados/urgentes/`. Revisão é consequência de **ambiguidade**, nunca de urgência sozinha.
+### Decisões de Design Clínico e Arquitetural:
+
+- **Tokens, não rótulos:** `LAUDO_EXAME_IMAGEM` (não `"Laudo de Exame de Imagem"`), `FILA_URGENCIA_MEDICA` (não `"Fila_Emergencia_Medica"`). A camada de apresentação (Streamlit/React) formata para o usuário final; o contrato trafega tokens puros.
+- **`POUCO_URGENTE` não existe como nível separado:** O edital e a especificação médica definem três níveis (`URGENTE`, `ROTINA`, `NAO_IDENTIFICADA`). Variantes legadas são convertidas com segurança para `ROTINA`.
+- **`OUTRO` e `NAO_IDENTIFICADO` são resultados válidos de classificação**, e não erros de sistema: pertencem a `TipoDocumento` e acionam obrigatoriamente a revisão humana.
+- **`NAO_IDENTIFICADA` é valor de prioridade**; `N/A` foi abolido de todos os campos.
+- **Urgência isolada não gera revisão humana (`PROCESSADO` + `requer_auditoria_humana = False`):** Decisão fundamentada no edital oficial (`Projeto_oracle.pdf`), onde o documento urgente bem estruturado é processado com notificação imediata para `processados/urgentes/`. Revisão humana é consequência de **ambiguidade ou incerteza**, nunca de urgência isolada.
 
 ---
 
-## 3. Payload de triagem
+## 3. Payload Canônico de Triagem (`TriagemMediFlow`)
+
+Abaixo está a estrutura canônica completa retornada pelo motor de triagem:
 
 ```jsonc
 {
@@ -64,12 +62,29 @@ Decisões que fecham divergências antigas:
     "score_classificacao": 0.93
   },
   "dados_extraidos": {
-    "paciente": {"nome": "Neusa Ferreira Lima", "idade": 73},
-    "medico": {"nome": "Dr. Paulo Mendes Rocha", "crm": {"numero": "203114", "uf": "SP"}},
+    "paciente": {
+      "nome": "Neusa Ferreira Lima",
+      "idade": 73,
+      "cpf": null
+    },
+    "medico": {
+      "nome": "Dr. Paulo Mendes Rocha",
+      "crm": {
+        "numero": "203114",
+        "uf": "SP"
+      }
+    },
     "diagnostico": "Hipertensão arterial sistêmica",
     "cid": "I10",
     "exames": [],
-    "medicamentos": [{"nome": "Losartana potássica", "dosagem": "500 mg", "frequencia": null}],
+    "exames_laboratoriais": [],
+    "medicamentos": [
+      {
+        "nome": "Losartana potássica",
+        "dosagem": "50 mg",
+        "frequencia": "1 vez ao dia"
+      }
+    ],
     "urgencia": "NAO"
   },
   "qualidade": {
@@ -78,114 +93,175 @@ Decisões que fecham divergências antigas:
     "limiar_aplicado": 0.85,
     "campos_ausentes": [],
     "campos_incertos": [],
-    "conflitos": [{"tipo": "DOSE_SUSPEITA", "campos": ["medicamentos[0].dosagem"],
-                   "gravidade": "ALTA", "descricao": "Losartana 500 mg excede a dose usual"}]
+    "conflitos": [
+      {
+        "tipo": "DOSE_SUSPEITA",
+        "campos": ["medicamentos[0].dosagem"],
+        "gravidade": "ALTA",
+        "descricao": "Dosagem informada excede os padrões terapêuticos habituais"
+      }
+    ]
   },
   "decisao_roteamento": {
     "destino_principal": "FILA_REVISAO_HUMANA",
     "destinos": ["FILA_REVISAO_HUMANA"],
     "requer_auditoria_humana": true,
-    "justificativa_roteamento": "Revisão humana obrigatória: conflitos: DOSE_SUSPEITA.",
+    "justificativa_roteamento": "Revisão humana obrigatória: conflitos impeditivos: DOSE_SUSPEITA.",
     "notificacao": null
   },
-  "armazenamento_oci": null,
+  "armazenamento_oci": {
+    "bucket": "mediflow-documentos-clinicos",
+    "caminho_objeto": "processados/revisao/DOC-A757DAD2.json",
+    "status_backup": "sucesso"
+  },
   "erro": null
 }
 ```
 
-Notas de modelagem:
+### 3.1 Notas de Modelagem Clínica
 
-| Campo | Regra |
-| --- | --- |
-| `especialidade`, `exames` | listas — um documento pode ter mais de uma especialidade e vários exames |
-| `medicamentos` | objeto `{nome, dosagem?, frequencia?}`; `dosagem` é opcional porque há prescrição sem dose |
-| `medico.crm` | **um** objeto `{numero, uf}`; não existe mais `crm` texto + `crm_detalhado` duplicado |
-| `medico.crm.uf` | sempre `SP`: todas as fixtures acontecem no Hospital Aurora, em São Paulo, e o CRM acompanha a UF de atuação |
-| `dados_extraidos.urgencia` | declara o que o documento diz (`SIM`/`NAO`/`INDETERMINADO`), em vez de inferir do texto |
-| `qualidade.campos_ausentes` / `campos_incertos` | vêm do extrator; o validador **não recalcula** (ver §5) |
-| `qualidade.score_extracao` | produzido pelo extrator com a fórmula do §5 (`calcular_score_extracao`); o validador não o recalcula, porque os 79 casos aprovados trazem scores ilustrativos |
-| `qualidade.score_combinado` | sempre `min(score_classificacao, score_extracao)` — recalculado pelo validador |
-| `decisao_roteamento.destino_principal` | derivado: é sempre `destinos[0]` |
-| `armazenamento_oci` | opcional: persistência é etapa posterior e pode falhar (`ERRO_PERSISTENCIA`) |
+| Campo | Regra Canônica |
+| :--- | :--- |
+| `especialidade`, `exames` | Listas (`list[str]`) — um documento clínico pode envolver múltiplas especialidades e solicitar múltiplos exames. |
+| `medicamentos` | Lista de objetos `{nome, dosagem?, frequencia?}` — `dosagem` e `frequencia` são opcionais para suportar prescrições simplificadas. |
+| `medico.crm` | Objeto tipado `{numero, uf}` — elimina a duplicidade histórica de ter CRM texto e CRM detalhado separados. |
+| `medico.crm.uf` | Padrão `SP` nas fixtures de teste (Hospital Aurora de São Paulo), mas o schema aceita qualquer UF brasileira válida. |
+| `dados_extraidos.urgencia` | Declara o que o documento explicita clinicamente (`SIM`, `NAO`, `INDETERMINADO`), em vez de inferência probabilística. |
+| `qualidade.campos_ausentes` / `campos_incertos` | Gerados pelo extrator e auditados pelas regras; o validador não os deduz arbitrariamente (ver §5). |
+| `qualidade.score_combinado` | Sempre `min(score_classificacao, score_extracao)` — calculado deterministicamente. |
+| `decisao_roteamento.destino_principal` | Derivado: corresponde sempre ao primeiro item da lista de `destinos` (`destinos[0]`). |
+| `armazenamento_oci` | Opcional (`None` ou objeto tipado): a persistência na nuvem OCI ocorre após o pipeline e pode registrar auditoria sem invalidar a triagem. |
 
----
+### 3.2 Adaptações e Aliases de Retrocompatibilidade (Pydantic v2)
 
-## 4. Erro: dois formatos, cada um no seu nível
+Para garantir interoperabilidade entre módulos e testes legados sem acoplamento rígido:
 
-| Situação | Formato | Exemplo nos fixtures |
-| --- | --- | --- |
-| Requisição inválida (formato, tamanho, MIME, envelope, sintaxe) — **não chega a virar triagem** | `ErroResposta {http, codigo_funcional, mensagem}` | os 8 `Validacao_*` |
-| Documento aceito, mas ilegível na leitura (PDF protegido/corrompido) | `TriagemMediFlow` com `status=ERRO_PROCESSAMENTO`, `erro={codigo, mensagem}` e sem classificação/dados | `Qualidade_Pdf_ComSenha` (`PDF_PROTEGIDO`), `Qualidade_Pdf_Corrompido` (`PDF_CORROMPIDO`) |
-
-Os dois casos de leitura antes usavam o schema de triagem preenchido com `"N/A"` — um valor que não é enum nenhum. Agora são payloads válidos, com erro tipado.
-
----
-
-## 5. Regras de decisão
-
-| # | Regra | Efeito |
-| --- | --- | --- |
-| R1 | `nivel_prioridade == URGENTE` | `FILA_URGENCIA_MEDICA` + `notificacao` + `PROCESSADO`. **Urgência isolada não gera revisão humana** (`requer_auditoria_humana=False`) — é o comportamento do exemplo do `Projeto_oracle.pdf` |
-| R2 | Ambiguidade: campo obrigatório ausente **ou** campo incerto **ou** conflito **impeditivo** (`ALTA`/`MEDIA`) **ou** `score_combinado < limiar` **ou** `OUTRO`/`NAO_IDENTIFICADO` **ou** prioridade `NAO_IDENTIFICADA` **ou** `urgencia == INDETERMINADO` | revisão humana |
-| R3 | Ambiguidade **sem** urgência | destino **substituído** por `FILA_REVISAO_HUMANA` |
-| R4 | Ambiguidade **com** urgência | `FILA_URGENCIA_MEDICA` **+** `FILA_REVISAO_HUMANA` + `requer_auditoria_humana=True` + `EM_REVISAO` |
-| R5 | `score_combinado = min(...)`, limiar **estrito** | 0,85 passa; 0,84 revisa |
-| R8 | Conflito de gravidade `BAIXA` | é registrado em `qualidade.conflitos` e na justificativa, mas **não** vira conflito impeditivo e **não** gera revisão |
-| R6 | `campos_ausentes` é do extrator | só os 5 obrigatórios disparam revisão; CID/medicamentos/exames ausentes são registrados e não bloqueiam |
-| R7 | Erro de leitura | `ERRO_PROCESSAMENTO` + `erro.codigo`, sem dados |
-
-**Campos obrigatórios (RF-21):** `paciente.nome`, `paciente.idade`, `medico.nome`, `medico.crm`, `diagnostico`.
-
-### A urgência, explicada
-
-**Urgência isolada não é ambiguidade, e por isso não gera revisão humana.** Um documento urgente sem nenhuma ambiguidade termina em `PROCESSADO`, com `requer_auditoria_humana = false`, um único destino (`FILA_URGENCIA_MEDICA`) e o alerta registrado. É o comportamento do exemplo do `Projeto_oracle.pdf`, que devolve `"status": "processado"`, `"requer_auditoria_humana": false` e guarda o objeto em `processados/urgentes/`.
-
-A `FILA_REVISAO_HUMANA` só entra quando existe, além da urgência, uma ambiguidade (R4) — campo obrigatório ausente, campo incerto, conflito impeditivo, score abaixo do limiar, tipo fora da taxonomia, prioridade `NAO_IDENTIFICADA` ou urgência `INDETERMINADO`. Nesse caso a urgência **acrescenta** o destino em vez de substituí-lo, e o status passa a `EM_REVISAO`.
-
-É o que acontece em `Matriz_Guia_Imagem`, `Matriz_LaudoDeImagem_Pdf`, `Matriz_LaudoDeImagem_Imagem`, `Matriz_Receituario_Imagem` e `Conflito_AltoRisco` — cinco casos, um destino, status `PROCESSADO`, com alerta. Os três casos de duas filas (`Conflito_Prioridade`, `Simultaneo_Urgencia_Ilegivel`, `Simultaneo_Urgencia_Score`) mantêm `EM_REVISAO` porque há ambiguidade junto.
-
-### Por que o validador não deduz "campo ausente"
-
-`Matriz_LaudoLaboratorial_Texto` tem `diagnostico: null` e termina em `PROCESSADO` — um laudo laboratorial legitimamente não tem diagnóstico. `Ausencia_Diagnostico` também tem `diagnostico: null` e termina em `EM_REVISAO`. O dado é o mesmo; a diferença está na intenção registrada em `qualidade.campos_ausentes`, que é saída do extrator. Recalcular essa lista olhando para `null` erraria um dos dois lados.
-
-### Decisões de 21/10/2026 incorporadas ao contrato
-
-| Decisão | Regra | Onde |
-| --- | --- | --- |
-| A1 | Só conflito de gravidade `ALTA` ou `MEDIA` é **impeditivo** e leva à revisão. `BAIXA` é registrado e não bloqueia. | `GRAVIDADES_IMPEDITIVAS`, R2, R8 |
-| A3 | `score_extracao` é determinístico: `1 − 0,2×campo obrigatório ausente − 0,1×campo incerto − 0,3/0,2/0,1 por conflito ALTA/MEDIA/BAIXA`, com piso 0. | `calcular_score_extracao`, `PESO_CONFLITO` |
-| A4 | `nivel_prioridade == NAO_IDENTIFICADA` é ambiguidade e gera revisão. | R2 |
-| A5 | `urgencia == INDETERMINADO` entra como campo incerto e gera revisão. | R2 |
-
-A `GRAVIDADES_IMPEDITIVAS` e o `calcular_score_extracao` ficam em `app/models.py`; a regra também está registrada no Anexo A da Especificação Funcional v1.0 (A.1 a A.7).
-
-**As duas primeiras eram invisíveis nos 67 casos originais** — e é por isso que o catálogo ganhou 3 fixtures:
-
-| Regra | Situação nos 67 casos | Caso criado para prová-la |
-| --- | --- | --- |
-| A1 (gravidade) | todos os conflitos existentes eram `ALTA`; nada distinguia `MEDIA` de `BAIXA` | `Conflito_Gravidade_Media` (revisa) e `Conflito_Gravidade_Baixa` (não revisa) |
-| A4 (`NAO_IDENTIFICADA`) | os 8 casos `NAO_IDENTIFICADA` já revisavam por outros gatilhos | `Borda_Prioridade_NaoIdentificada` — prioridade indefinida como único gatilho |
-| A5 (`INDETERMINADO`) | os 8 casos `INDETERMINADO` já revisavam por outros gatilhos | `Borda_Urgencia_Indeterminada` — urgência indeterminada como único gatilho |
-
-Medição: com `GRAVIDADES_IMPEDITIVAS = {ALTA, MEDIA, BAIXA}` o caso `Conflito_Gravidade_Baixa` passaria a `EM_REVISAO`; com `{ALTA}` o caso `Conflito_Gravidade_Media` passaria a `PROCESSADO`; sem A4 e A5 os dois casos de borda passariam a `PROCESSADO`. Os três novos casos pegam a mudança — antes deles, a suíte não detectaria nenhuma regressão em A1, A4 ou A5.
+| Campo Canônico | Alias / Propriedade de Compatibilidade | Comportamento do Validador |
+| :--- | :--- | :--- |
+| `dados_extraidos.medico` | `dados_extraidos.medico_solicitante` | Validador aceita ambos os nomes na entrada e expõe acesso unificado. |
+| `medico.crm` | `medico.crm: str` (ex: `"203114-SP"`) | Validador converte automaticamente string para o objeto tipado `Crm(numero="203114", uf="SP")`. |
+| `dados_extraidos.diagnostico` | `dados_extraidos.diagnostico_principal` | Acesso transparente via properties e aliases. |
+| `dados_extraidos.cid` | `dados_extraidos.cid_extraido` / `cid_sugerido` | Sincronizados bidirecionalmente no modelo. |
+| `dados_extraidos.exames` | `dados_extraidos.exame_ou_procedimento: str` | Se uma string única for fornecida, é automaticamente convertida em lista `[str]`. |
+| `dados_extraidos.exames_laboratoriais` | Sub-modelo [`ItemExameLaboratorial`](../../src/schemas/clinical.py) | Suporte a exames laboratoriais detalhados (`analito`, `valor_medido`, `unidade`, `referencia_impressa`, `alterado`) conforme RF-12. |
+| `classificacao.score_classificacao` | `score_confianca_classificacao` | Aceita ambos na carga JSON e sincroniza propriedades. |
+| `decisao_roteamento.notificacao` | `notificacao_gerada` | Aceita ambos os campos. |
 
 ---
 
-## 5.1 Coerência clínica dos fixtures
+## 4. Contrato de Erro em Dois Níveis
 
-Toda fixture conta **uma** história nos três formatos. O texto (`{ID}.txt`) é a
-referência do que se espera extrair:
+O MediFlow separa formalmente os erros em dois níveis de ciclo de vida:
 
-- campo preenchido no `expected.json` aparece no texto (`paciente.nome`, `medico.nome`, `medico.crm`, `diagnostico`, `cid`, idade);
-- campo ausente aparece como ausente (`—`, `não informado`, `CRM não visível`);
-- campo ilegível aparece ilegível (`4?_ anos — mancha sobre o campo`), e a mancha na imagem cobre exatamente esse campo;
-- **todo CRM é `SP`**, porque o hospital é paulista.
+```text
+Entrada de Documento
+       │
+       ├─► [Nível 1] Falha Pré-Processamento (MIME, Tamanho, Envelope)
+       │             └─► Retorna ErroResposta (HTTP 4xx / Erro Técnico)
+       │
+       └─► [Nível 2] Falha de Leitura / Parsing (PDF Protegido / Corrompido)
+                     └─► Retorna TriagemMediFlow (status=ERRO_PROCESSAMENTO)
+```
 
-O verificador checa os quatro pontos caso a caso (`== 5. Coerência clínica` em
-`tools/verificar_consistencia.py`), então uma edição futura que quebre a
-coerência falha o build em vez de virar um teste enganoso.
+| Nível de Erro | Formato Retornado | Quando Ocorre | Exemplos nos Fixtures |
+| :--- | :--- | :--- | :--- |
+| **Nível 1: Requisição Inválida (HTTP)** | `ErroResposta {http, codigo_funcional, mensagem}` | O documento é rejeitado no portão de entrada antes de entrar na esteira clínica. | Os 8 fixtures `Validacao_*` (arquivo corrompido, tamanho > 20MB, mime não suportado). |
+| **Nível 2: Erro de Leitura/Processamento** | `TriagemMediFlow {status=ERRO_PROCESSAMENTO, erro={codigo, mensagem}}` | O arquivo foi aceito pelo gateway, mas sua leitura técnica falhou internamente. | `Qualidade_Pdf_ComSenha` (`PDF_PROTEGIDO`), `Qualidade_Pdf_Corrompido` (`PDF_CORROMPIDO`). |
 
-## 6. Formato de um `expected.json`
+### Exemplo JSON de Nível 1 (`ErroResposta`):
+```jsonc
+{
+  "http": 413,
+  "codigo_funcional": "ARQUIVO_MAIOR_QUE_LIMITE",
+  "mensagem": "O arquivo possui 22.40MB, excedendo o limite seguro de 20.00MB."
+}
+```
+
+### Exemplo JSON de Nível 2 (`TriagemMediFlow` com `status=ERRO_PROCESSAMENTO`):
+```jsonc
+{
+  "status": "ERRO_PROCESSAMENTO",
+  "documento_id": "DOC-9B8A7C6D",
+  "classificacao": null,
+  "dados_extraidos": null,
+  "qualidade": null,
+  "decisao_roteamento": null,
+  "armazenamento_oci": null,
+  "erro": {
+    "codigo": "PDF_PROTEGIDO",
+    "mensagem": "O documento PDF está protegido por senha e não pôde ser aberto."
+  }
+}
+```
+
+---
+
+## 5. Regras Oficiais de Decisão Clínica (R1 a R8)
+
+As regras são aplicadas deterministicamente no modelo de validação:
+
+| Regra | Condição Clínica | Ação e Efeito no Payload |
+| :--- | :--- | :--- |
+| **R1** | `nivel_prioridade == URGENTE` | Adiciona `FILA_URGENCIA_MEDICA` + gera `notificacao` + status `PROCESSADO`. **Urgência isolada NÃO gera revisão humana** (`requer_auditoria_humana = False`). |
+| **R2** | **Ambiguidade ou Incerteza Detectada**: campo obrigatório ausente **ou** campo incerto **ou** conflito impeditivo (`ALTA`/`MEDIA`) **ou** `score_combinado < limiar` (0.85) **ou** tipo `OUTRO`/`NAO_IDENTIFICADO` **ou** prioridade `NAO_IDENTIFICADA` **ou** urgência `INDETERMINADO` | Aciona **Revisão Humana Obrigatória** (`requer_auditoria_humana = True`). |
+| **R3** | Ambiguidade **SEM** urgência | Destino é **substituído** por `FILA_REVISAO_HUMANA` e status passa a `EM_REVISAO`. |
+| **R4** | Ambiguidade **COM** urgência (Caso Misto) | Mantém `FILA_URGENCIA_MEDICA` e **acrescenta** `FILA_REVISAO_HUMANA`. Status é `EM_REVISAO` e `requer_auditoria_humana = True`. |
+| **R5** | Cálculo do Score Combinado | `score_combinado = min(score_classificacao, score_extracao)`. Se `< 0.85`, aciona R2. |
+| **R6** | Escopo dos Campos Obrigatórios (RF-21) | Apenas os 5 obrigatórios (`paciente.nome`, `paciente.idade`, `medico.nome`, `medico.crm`, `diagnostico`) forçam revisão. CID, medicamentos ou exames ausentes são registrados em qualidade, mas não bloqueiam. |
+| **R7** | Falha de Leitura Técnica | Status `ERRO_PROCESSAMENTO`, preenche bloco `erro` e anula blocos clínicos. |
+| **R8** | Conflitos de Gravidade Baixa | Conflitos com `gravidade == BAIXA` são registrados para auditoria, mas **não** são impeditivos e não geram revisão humana isoladamente. |
+
+**Campos Obrigatórios Auditados (RF-21):**
+`paciente.nome`, `paciente.idade`, `medico.nome`, `medico.crm`, `diagnostico`.
+
+---
+
+### 5.1 A Urgência Clínica Explicada
+
+**Urgência isolada não é ambiguidade, e por isso não gera revisão humana.**  
+Um documento urgente perfeitamente legível e estruturado termina em `PROCESSADO`, com `requer_auditoria_humana = False`, um único destino (`FILA_URGENCIA_MEDICA`) e o alerta registrado no canal de urgência médica.
+
+Essa decisão segue estritamente o exemplo do edital oficial (`Projeto_oracle.pdf`), no qual uma prescrição de emergência é gravada diretamente na pasta `processados/urgentes/` com `"status": "processado"` e `"requer_auditoria_humana": false`.
+
+A `FILA_REVISAO_HUMANA` só é acionada em documentos urgentes quando há **ambiguidade concomitante** (Regra R4):
+- Exemplo: Guia de emergência ilegível, com CRM ausente ou dose suspeita. Nesse cenário misto, o destino é duplo (`["FILA_URGENCIA_MEDICA", "FILA_REVISAO_HUMANA"]`) para permitir atendimento médico rápido com auditoria paralela.
+
+---
+
+### 5.2 Por que o Validador não deduz arbitrariamente "campo ausente"
+
+No ecossistema clínico, a ausência de um campo pode ser legítima ou não, dependendo da tipologia:
+- Um `LAUDO_EXAME_LABORATORIAL` frequentemente possui `diagnostico: null` de forma válida, terminando em `PROCESSADO`.
+- Uma receita ou guia sem diagnóstico (`Ausencia_Diagnostico`) configura incompletude e termina em `EM_REVISAO`.
+
+O validador respeita a lista `qualidade.campos_ausentes` produzida pelo pipeline de extração. O sistema audita se os campos ausentes informados pertencem aos obrigatórios do RF-21, evitando falsos positivos.
+
+---
+
+### 5.3 Decisões Clínicas Incorporadas ao Contrato (A1 a A5)
+
+| Identificador | Regra Clínica | Implementação no Código |
+| :--- | :--- | :--- |
+| **A1** | Gravidades impeditivas: apenas conflitos de gravidade `ALTA` ou `MEDIA` bloqueiam a triagem para revisão humana. Conflitos `BAIXA` são não-impeditivos. | Constante `GRAVIDADES_IMPEDITIVAS = {Gravidade.ALTA, Gravidade.MEDIA}` em `src/schemas/clinical.py`. |
+| **A3** | Cálculo determinístico do `score_extracao`: `score = 1.0 − (0.2 × campos_obrigatórios_ausentes) − (0.1 × campos_incertos) − (0.3 × conflitos_ALTA) − (0.2 × conflitos_MEDIA) − (0.1 × conflitos_BAIXA)`, com piso em `0.0`. | Função `calcular_score_extracao` e pesos `PESO_CONFLITO`. |
+| **A4** | `nivel_prioridade == NAO_IDENTIFICADA` constitui ambiguidade clínica e força revisão humana (R2). | Testado no fixture de borda `Borda_Prioridade_NaoIdentificada`. |
+| **A5** | `urgencia == INDETERMINADO` é tratado como incerteza crítica e força revisão humana (R2). | Testado no fixture de borda `Borda_Urgencia_Indeterminada`. |
+
+---
+
+### 5.4 Coerência Clínica dos Fixtures
+
+Toda fixture oficial mantém **estrita coerência** entre seus formatos:
+- O texto (`.txt`) é a fonte clínica da verdade: o que consta no texto deve refletir no `.json` esperado.
+- Dados ausentes no texto são registrados como ausentes (`—`, `não informado`, `não visível`).
+- Dados ilegíveis na imagem (`.jpg`) correspondem rigorosamente aos `campos_incertos` daquele caso.
+- Todo CRM gerado possui UF válida (`SP`), compatível com o hospital cenário da demonstração.
+
+---
+
+## 6. Formato Canônico de um `expected.json`
+
+Os 79 fixtures de validação do repositório (`tests/fixtures/catalogo_completo/` e `tests/fixtures/demo/`) seguem a estrutura abaixo:
 
 ```jsonc
 {
@@ -195,61 +271,61 @@ coerência falha o build em vez de virar um teste enganoso.
   "tipo_de_teste": "funcional",              // funcional | erro_processamento | negativo_tecnico
   "entrada": {
     "formatos_disponiveis": ["TXT", "PDF", "JPG"],
-    "renditions": {"txt": "...", "pdf": "...", "jpg": "..."}
+    "renditions": {
+      "txt": "tests/fixtures/catalogo_completo/Conflito_Dose/Conflito_Dose.txt",
+      "pdf": "tests/fixtures/catalogo_completo/Conflito_Dose/Conflito_Dose.pdf",
+      "jpg": "tests/fixtures/catalogo_completo/Conflito_Dose/Conflito_Dose.jpg"
+    }
   },
-  "resposta_esperada": { /* TriagemMediFlow ou ErroResposta */ },
-  "modo_fixture": {"score_forcado": {"score_classificacao": 0.92, "score_extracao": 0.84}},
-  "assercoes": ["..."],
-  "observacoes": ""
+  "resposta_esperada": {
+    /* Instância de TriagemMediFlow ou ErroResposta */
+  },
+  "modo_fixture": {
+    "score_forcado": {
+      "score_classificacao": 0.92,
+      "score_extracao": 0.84
+    }
+  },
+  "assercoes": [
+    "status == EM_REVISAO",
+    "decisao_roteamento.destino_principal == FILA_REVISAO_HUMANA"
+  ],
+  "observacoes": "Caso de teste com dosagem acima do limite terapêutico padrão."
 }
 ```
 
-- `resposta_esperada` é o payload **completo**: quem consome o fixture compara o JSON da API com este bloco, sem tradução de nomes.
-- `modo_fixture` só existe nos três casos que exigem score forçado (`Borda_Score_084`, `Borda_Score_085`, `Simultaneo_Urgencia_Score`).
-- `tipo_de_teste` elimina a ambiguidade que existia entre "triagem normal", "triagem com erro" e "requisição recusada".
-
-### Como os arquivos são gerados
-
-Os geradores descrevem os **fatos clínicos** do caso; quem decide status, destinos, revisão e notificação é o contrato. Se o contrato e a intenção escrita no caso divergirem, a geração **aborta** — é assim que uma mudança de regra aparece imediatamente.
-
-```bash
-python3 tools/gerar_fixtures_demo.py                  # 12 casos (TXT+PDF+JPG+expected.json)
-python3 tools/gerar_fixtures_catalogo.py              # 55 casos
-python3 tools/gerar_fixtures_demo.py --somente-expected    # reescreve só os JSON
-python3 tools/gerar_fixtures_catalogo.py --somente-expected
-```
+- `resposta_esperada`: Payload completo validado diretamente contra o modelo Pydantic v2.
+- `modo_fixture`: Presente exclusivamente nos casos de teste de fronteira com score forçado (`Borda_Score_084`, `Borda_Score_085`, `Simultaneo_Urgencia_Score`).
+- `tipo_de_teste`: Distingue formalmente testes funcionais, erros de processamento e negativos técnicos.
 
 ---
 
-## 7. Verificação
+## 7. Verificação e Testes Automatizados (Suíte Pytest)
 
-| Comando | O que garante |
-| --- | --- |
-| `python3 tests/testar_contrato.py` | cada `expected.json` valida no modelo certo e é **ponto fixo**: rodar as regras de novo devolve o mesmo JSON |
-| `python3 tools/verificar_consistencia.py` | estrutura (arquivos esperados lidos de `entrada.renditions`), `manifest.csv` × expected, legibilidade de PDF/JPG/PNG/WEBP/TXT, duplicidade |
-| `python3 tools/gerar_mapa_documentos.py` | regera o mapa em PDF a partir do manifesto |
+A conformidade do sistema com este contrato é garantida pela suíte oficial de testes:
 
-Resultado atual:
+```powershell
+# Execução completa de todos os testes
+python -m pytest
 
-```text
-tests/testar_contrato.py        → 79 fixtures: 65 funcionais + 2 erros de leitura + 12 negativos, 0 falhas
-tools/verificar_consistencia.py → 79 pastas (65 com 4 arquivos + 12 com 2), 0 erros, 0 avisos
+# Execução exclusiva da validação dos 79 fixtures de contrato
+python -m pytest tests/test_contrato_fixtures.py
+
+# Execução dos testes de ingestão física e sanitização
+python -m pytest tests/test_ingestion.py tests/test_sanitization.py
 ```
+
+### Status Atual da Suíte (149 testes passando):
+- **79 testes de contrato (`test_contrato_fixtures.py`):** 65 funcionais + 2 erros de leitura + 12 negativos técnicos, todos validados e com consistência de ponto fixo.
+- **22 testes de ingestão (`test_ingestion.py`):** Validação de envelopes, MIME, arquivos corrompidos, PDFs protegidos e fixtures físicos reais (`.pdf`, `.jpg`, `.docx`).
+- **48 testes de schemas, regras clínicas, sanitização e pipelines:** Cobertura de Pydantic v2, OCR fallback, detecção de doses anômalas e roteamento determinístico.
 
 ---
 
-## 8. O que mudou em relação ao modelo v2.0
+## 8. Histórico de Harmonização do Contrato
 
-O modelo anterior (v2.0) foi descartado. Resumo do que ele não cobria e que agora está no contrato:
-
-| Antes (v2.0) | Agora (v1.0) |
-| --- | --- |
-| enums com texto livre (`"Urgente"`, `"Fila_Emergencia_Medica"`) | tokens do domínio + `OUTRO`, `NAO_IDENTIFICADO`, `NAO_IDENTIFICADA` |
-| `status: str` com default `PROCESSADO` | `StatusTriagem` com os 6 estados, sem default |
-| sem contrato de erro; `dados_extraidos` obrigatório | `ErroResposta` (HTTP) e `TriagemMediFlow.erro` (leitura) |
-| validador apagava `campos_incertos`/`conflitos` recebidos | evidência preservada e cobrada nas regras |
-| urgência não gerava `EM_REVISAO`; diagnóstico "ou exame" | urgência isolada volta a terminar em `PROCESSADO`, agora **por decisão** (R1: exemplo do `Projeto_oracle.pdf`), e não por omissão de regra; diagnóstico obrigatório segue R6 |
-| `especialidade: str`, `exame_ou_procedimento: str`, `crm` duplicado | listas e objeto CRM único |
-| limiar 0,85 fixo no corpo do validador | `qualidade.limiar_aplicado` (default 0,85, por payload) |
-
-O histórico completo dessa comparação está no commit `cacdfba` (relatório removido depois de resolvido).
+| Fase | Origem | Contribuição Principal para o Contrato |
+| :--- | :--- | :--- |
+| **Fase 1: Rigor Clínico e Fixtures** | William (`CONTRATO_DE_DADOS.md` original) | Criação dos 79 fixtures canônicos, taxonomia estrita dos enums, definição das regras R1 a R8 e alinhamento da urgência com o edital da Oracle. |
+| **Fase 2: Expansão de Negócio** | Luciana (`schema_mediflow_v3.py`) | Expansão para suporte a `ItemExameLaboratorial` (RF-12), propriedades de conveniência para API e integração com armazenamento OCI. |
+| **Fase 3: Contrato Canônico Unificado** | Repositório Oficial (`src/schemas/clinical.py`) | Fusão completa em Pydantic v2, normalização resiliente via `_missing_`, tratamento de erros em dois níveis, 149 testes Pytest automatizados e consolidação em um único contrato oficial. |
