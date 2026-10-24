@@ -18,6 +18,7 @@ except ImportError:
     import fitz
 
 SAMPLES_DIR = Path(__file__).resolve().parent.parent / "data" / "samples"
+FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
 
 def test_carregar_pdf_rotina():
@@ -166,3 +167,63 @@ def test_arquivo_inexistente():
     """Valida que caminho inexistente dispara FileNotFoundError"""
     with pytest.raises(FileNotFoundError):
         DocumentLoader.carregar_arquivo("caminho/fantasma/inexistente.pdf")
+
+
+# ==============================================================================
+# TESTES DE INTEGRAÇÃO COM OS FIXTURES FÍSICOS REAIS DO WILLIAM
+# ==============================================================================
+
+def test_ingestao_fixture_william_com_senha():
+    """Valida leitura direta do arquivo físico com senha dos fixtures do William."""
+    pdf_senha = FIXTURES_DIR / "catalogo" / "Qualidade_Pdf_ComSenha" / "Qualidade_Pdf_ComSenha.pdf"
+    assert pdf_senha.exists(), "Fixture com senha deve existir em tests/fixtures/catalogo/"
+
+    with pytest.raises(DocumentoProtegidoError) as exc_info:
+        DocumentLoader.carregar_arquivo(pdf_senha)
+
+    assert exc_info.value.codigo == "PDF_PROTEGIDO"
+
+
+def test_ingestao_fixture_william_corrompido():
+    """Valida leitura direta do arquivo físico corrompido dos fixtures do William."""
+    pdf_corrompido = FIXTURES_DIR / "catalogo" / "Qualidade_Pdf_Corrompido" / "Qualidade_Pdf_Corrompido.pdf"
+    assert pdf_corrompido.exists(), "Fixture corrompido deve existir em tests/fixtures/catalogo/"
+
+    with pytest.raises(DocumentoCorrompidoError) as exc_info:
+        DocumentLoader.carregar_arquivo(pdf_corrompido)
+
+    assert exc_info.value.codigo == "PDF_CORROMPIDO"
+
+
+def test_ingestao_fixture_william_docx_nao_suportado():
+    """Valida rejeição de formato .docx usando o arquivo real dos fixtures do William."""
+    docx_file = FIXTURES_DIR / "catalogo" / "Validacao_ArquivoDocx" / "Validacao_ArquivoDocx.docx"
+    assert docx_file.exists(), "Fixture DOCX deve existir em tests/fixtures/catalogo/"
+
+    with pytest.raises(ValueError):
+        DocumentLoader.carregar_arquivo(docx_file)
+
+
+def test_ingestao_fixture_william_pdf_digital():
+    """Valida carregamento de PDF digital da matriz demo dos fixtures do William."""
+    pdf_demo = FIXTURES_DIR / "demo" / "Matriz_Receituario_Pdf" / "Matriz_Receituario_Pdf.pdf"
+    assert pdf_demo.exists(), "Fixture demo deve existir em tests/fixtures/demo/"
+
+    doc = DocumentLoader.carregar_arquivo(pdf_demo)
+    assert doc.formato == "PDF"
+    assert doc.total_paginas == 1
+    assert doc.requer_ocr is False
+    assert len(doc.conteudo_texto) > 100
+    assert "RECEITUÁRIO MÉDICO" in doc.conteudo_texto or "HOSPITAL AURORA" in doc.conteudo_texto
+
+
+def test_ingestao_fixture_william_imagem_multimodal():
+    """Valida carregamento de imagem física JPG da matriz demo dos fixtures do William."""
+    jpg_demo = FIXTURES_DIR / "demo" / "Matriz_Receituario_Imagem" / "Matriz_Receituario_Imagem.jpg"
+    assert jpg_demo.exists(), "Fixture imagem deve existir em tests/fixtures/demo/"
+
+    doc = DocumentLoader.carregar_arquivo(jpg_demo)
+    assert doc.formato == "JPG"
+    assert doc.requer_ocr is True
+    assert doc.conteudo_bytes is not None
+    assert len(doc.conteudo_bytes) > 0

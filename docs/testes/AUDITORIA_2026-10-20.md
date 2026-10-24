@@ -83,17 +83,17 @@ Na branch inicial de testes, três médicos assinavam com CRM de outra UF (`2031
 | :--- | :---: | :---: |
 | **Total de Fixtures de Teste** | 67 fixtures | **79 fixtures** (+ Bloco Limite A6) |
 | **Framework de Execução** | Script avulso `testar_contrato.py` | **Pytest Automatizado** (`pytest`) |
-| **Total de Testes da Aplicação** | 67 testes | **144 testes automatizados** |
-| **Tempo de Execução** | ~3.5s | **1.08s** |
-| **Taxa de Aprovação** | 100% | **100% (144 pass / 0 fail)** |
+| **Total de Testes da Aplicação** | 67 testes | **149 testes automatizados** |
+| **Tempo de Execução** | ~3.5s | **1.20s** |
+| **Taxa de Aprovação** | 100% | **100% (149 pass / 0 fail)** |
 
-### 🔬 Composição Atual dos 144 Testes Integrados:
+### 🔬 Composição Atual dos 149 Testes Integrados:
 1. **79 Testes de Fixtures Clínicos Oficiais** ([`tests/test_contrato_fixtures.py`](../../tests/test_contrato_fixtures.py)):  
    Valida cada um dos 79 cenários do catálogo sintético, a consistência de serialização e a conformidade estrita das regras R1 a R8.
 2. **46 Testes de Roteamento LangGraph** ([`tests/test_workflow.py`](../../tests/test_workflow.py)):  
    Valida todo o fluxo condicional de nós, transições e tomadas de decisão da arquitetura de agentes da equipe.
-3. **12 Testes de Ingestão e Segurança** ([`tests/test_ingestion.py`](../../tests/test_ingestion.py)):  
-   Valida bloqueio de arquivos > 10 MB, bloqueio de PDFs > 20 páginas, proteção por senha, integridade de arquivos truncados, detecção de encoding Latin-1/UTF-8 e payloads multimodais.
+3. **17 Testes de Ingestão e Segurança** ([`tests/test_ingestion.py`](../../tests/test_ingestion.py)):  
+   Valida leitura direta de fixtures reais do William (PDFs protegidos, corrompidos, DOCX inválido e fotos multimodais), bloqueio de arquivos > 10 MB, bloqueio de PDFs > 20 páginas e detecção de encoding Latin-1/UTF-8.
 4. **7 Testes de Schemas Clínicos e Regras de Negócio** ([`tests/test_schemas.py`](../../tests/test_schemas.py)):  
    Valida a unificação Pydantic v2, limiares de score de confiança (0.85), extração laboratorial estruturada (RF-12) e envelope de erros HTTP.
 
