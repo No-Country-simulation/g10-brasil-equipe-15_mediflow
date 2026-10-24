@@ -27,11 +27,17 @@ class IngestaoError(Exception):
 
 
 class TamanhoExcedidoError(IngestaoError):
-    """Disparado quando o arquivo excede o limite máximo permitido."""
-    def __init__(self, tamanho_bytes: int, limite_bytes: int):
+    """Disparado quando o arquivo excede o limite máximo de bytes ou páginas permitidos."""
+    def __init__(self, tamanho_bytes: Optional[int] = None, limite_bytes: Optional[int] = None, mensagem: Optional[str] = None):
+        if mensagem:
+            msg = mensagem
+        elif tamanho_bytes is not None and limite_bytes is not None:
+            msg = f"O arquivo possui {tamanho_bytes / (1024*1024):.2f}MB, excedendo o limite de {limite_bytes / (1024*1024):.2f}MB."
+        else:
+            msg = "Arquivo excede o limite máximo permitido."
         super().__init__(
             codigo="ARQUIVO_MAIOR_QUE_LIMITE",
-            mensagem=f"O arquivo possui {tamanho_bytes / (1024*1024):.2f}MB, excedendo o limite de {limite_bytes / (1024*1024):.2f}MB."
+            mensagem=msg
         )
 
 
@@ -72,7 +78,8 @@ class DocumentLoader:
     """Carregador robusto com proteções de segurança, encoding e integridade."""
 
     FORMATOS_SUPORTADOS = {".pdf", ".txt", ".png", ".jpg", ".jpeg"}
-    LIMITE_MAXIMO_BYTES = 20 * 1024 * 1024  # 20 MB
+    LIMITE_MAXIMO_BYTES = 10 * 1024 * 1024  # 10 MB (alinhado aos testes de limites do MVP)
+    LIMITE_MAXIMO_PAGINAS = 20              # Máximo 20 páginas por documento
 
     @staticmethod
     def gerar_documento_id() -> str:
@@ -81,7 +88,7 @@ class DocumentLoader:
 
     @classmethod
     def validar_limite_tamanho(cls, tamanho_bytes: int) -> None:
-        """Valida se o tamanho do arquivo respeita a política de segurança de 20MB."""
+        """Valida se o tamanho do arquivo respeita a política de segurança de 10MB."""
         if tamanho_bytes > cls.LIMITE_MAXIMO_BYTES:
             raise TamanhoExcedidoError(tamanho_bytes=tamanho_bytes, limite_bytes=cls.LIMITE_MAXIMO_BYTES)
 
@@ -168,6 +175,10 @@ class DocumentLoader:
             total_paginas = len(doc)
             if total_paginas == 0:
                 raise DocumentoCorrompidoError("PDF_CORROMPIDO: O arquivo PDF não possui páginas válidas.")
+            if total_paginas > DocumentLoader.LIMITE_MAXIMO_PAGINAS:
+                raise TamanhoExcedidoError(
+                    mensagem=f"PDF válido de {total_paginas} páginas: excede o limite de {DocumentLoader.LIMITE_MAXIMO_PAGINAS} páginas fixado para o MVP (A6)."
+                )
 
             textos_paginas = []
             paginas_vazias = 0

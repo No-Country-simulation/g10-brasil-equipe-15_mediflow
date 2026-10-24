@@ -42,3 +42,10 @@ uploads/
 temp/
 tmp/
 *.log
+
+# Fixtures pesadas (> 10MB para testes de limite de tamanho)
+tests/fixtures/catalogo/Validacao_ArquivoGrande/Validacao_ArquivoGrande.pdf
+tests/fixtures/catalogo/Limite_Tamanho_10MB/Limite_Tamanho_10MB.pdf
+tests/fixtures/catalogo/Limite_Tamanho_Acima10MB/Limite_Tamanho_Acima10MB.pdf
+tests/fixtures/catalogo/Limite_Texto_Acima10MB/Limite_Texto_Acima10MB.txt
+

@@ -1,15 +1,18 @@
 """
-MediFlow - Schemas e Modelos Pydantic para Documentos Clínicos (v2.0)
+MediFlow — Contrato de Dados Canônico e Harmonizado (v2.0)
 Define o contrato de dados oficial para toda a aplicação.
-Alinhado às especificações do edital Hackathon ONE G10 e ao schema oficial (Luciana/William).
+Alinhado à Especificação Funcional v1.0, Análise de Requisitos v1.1 (William)
+e aos schemas clínicos (Luciana).
 """
+from __future__ import annotations
+
 from enum import Enum
 from typing import Optional, List, Dict, Any, Union
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # ==============================================================================
-# ENUMS - PADRONIZAÇÃO DE VALORES (v2.0)
+# ENUMS OFICIAIS CANÔNICOS (COM RESILIÊNCIA E MAPEAMENTO AUTOMÁTICO)
 # ==============================================================================
 
 class TipoArquivoEnum(str, Enum):
@@ -20,42 +23,200 @@ class TipoArquivoEnum(str, Enum):
     TXT = "TXT"
 
 
-class NivelPrioridadeEnum(str, Enum):
-    URGENTE = "Urgente"
-    POUCO_URGENTE = "Pouco_Urgente"
-    ROTINA = "Rotina"
-    AMBIGUO = "Ambiguidade/Revisão Humana"
+class TipoDocumento(str, Enum):
+    """8 Categorias Oficiais do MediFlow (Seção 5.1 da Especificação Funcional v1.0)."""
+    RECEITUARIO_MEDICO = "RECEITUARIO_MEDICO"
+    LAUDO_EXAME_LABORATORIAL = "LAUDO_EXAME_LABORATORIAL"
+    LAUDO_EXAME_IMAGEM = "LAUDO_EXAME_IMAGEM"
+    GUIA_PROCEDIMENTO = "GUIA_PROCEDIMENTO"
+    RELATORIO_ALTA_INTERNACAO = "RELATORIO_ALTA_INTERNACAO"
+    ATESTADO_MEDICO = "ATESTADO_MEDICO"
+    OUTRO = "OUTRO"
+    NAO_IDENTIFICADO = "NAO_IDENTIFICADO"
+
+    # Aliases de compatibilidade para código legado (v2.0)
+    LAUDO_IMAGEM = "LAUDO_EXAME_IMAGEM"
+    LAUDO_LABORATORIAL = "LAUDO_EXAME_LABORATORIAL"
+    GUIA_SOLICITACAO = "GUIA_PROCEDIMENTO"
+    RELATORIO_ALTA = "RELATORIO_ALTA_INTERNACAO"
+
+    @classmethod
+    def _missing_(cls, value: object):
+        if isinstance(value, str):
+            val_clean = value.strip().upper().replace(" ", "_").replace("/", "_").replace("-", "_")
+            label_map = {
+                "LAUDO_DE_EXAME_DE_IMAGEM": cls.LAUDO_EXAME_IMAGEM,
+                "LAUDO_IMAGEM": cls.LAUDO_EXAME_IMAGEM,
+                "LAUDO_LABORATORIAL": cls.LAUDO_EXAME_LABORATORIAL,
+                "LAUDO_DE_EXAME_LABORATORIAL": cls.LAUDO_EXAME_LABORATORIAL,
+                "RECEITUARIO_MEDICO": cls.RECEITUARIO_MEDICO,
+                "RECEITA_MEDICA": cls.RECEITUARIO_MEDICO,
+                "GUIA_DE_SOLICITACAO_DE_PROCEDIMENTO": cls.GUIA_PROCEDIMENTO,
+                "GUIA_DE_SOLICITAÇÃO_DE_PROCEDIMENTO": cls.GUIA_PROCEDIMENTO,
+                "GUIA_SOLICITACAO": cls.GUIA_PROCEDIMENTO,
+                "GUIA_PROCEDIMENTO": cls.GUIA_PROCEDIMENTO,
+                "ATESTADO_MEDICO": cls.ATESTADO_MEDICO,
+                "RELATORIO_DE_ALTA_INTERNACAO": cls.RELATORIO_ALTA_INTERNACAO,
+                "RELATORIO_DE_ALTA_INTERNAÇÃO": cls.RELATORIO_ALTA_INTERNACAO,
+                "RELATORIO_ALTA": cls.RELATORIO_ALTA_INTERNACAO,
+                "OUTRO": cls.OUTRO,
+                "NAO_IDENTIFICADO": cls.NAO_IDENTIFICADO,
+                "NÃO_IDENTIFICADO": cls.NAO_IDENTIFICADO,
+            }
+            if val_clean in label_map:
+                return label_map[val_clean]
+            for member in cls:
+                if member.value == val_clean or member.name == val_clean:
+                    return member
+        return None
 
 
-# Compatibilidade reversa com nomes anteriores
-NivelPrioridade = NivelPrioridadeEnum
+# Alias de compatibilidade
+TipoDocumentoEnum = TipoDocumento
 
 
-class TipoDocumentoEnum(str, Enum):
-    LAUDO_IMAGEM = "Laudo de Exame de Imagem"
-    LAUDO_LABORATORIAL = "Laudo Laboratorial"
-    RECEITUARIO_MEDICO = "Receituario Medico"
-    GUIA_SOLICITACAO = "Guia de Solicitação de Procedimento"
-    ATESTADO_MEDICO = "Atestado Medico"
-    RELATORIO_ALTA = "Relatorio de Alta/Internação"
+class NivelPrioridade(str, Enum):
+    """Níveis de prioridade clínica oficiais (Seção 5.2 da Especificação Funcional)."""
+    URGENTE = "URGENTE"
+    ROTINA = "ROTINA"
+    NAO_IDENTIFICADA = "NAO_IDENTIFICADA"
+
+    # Aliases de compatibilidade legada
+    POUCO_URGENTE = "ROTINA"
+    AMBIGUO = "NAO_IDENTIFICADA"
+
+    @classmethod
+    def _missing_(cls, value: object):
+        if isinstance(value, str):
+            val_clean = value.strip().upper().replace(" ", "_").replace("/", "_")
+            if val_clean in ("URGENTE", "EMERGENCIA"):
+                return cls.URGENTE
+            if val_clean in ("ROTINA", "POUCO_URGENTE", "ELETIVO"):
+                return cls.ROTINA
+            if val_clean in ("NAO_IDENTIFICADA", "AMBIGUIDADE/REVISAO_HUMANA", "AMBIGUO", "N/A"):
+                return cls.NAO_IDENTIFICADA
+            for member in cls:
+                if member.value == val_clean or member.name == val_clean:
+                    return member
+        return None
 
 
-class DestinoRoteamentoEnum(str, Enum):
-    EMERGENCIA_MEDICA = "Fila_Emergencia_Medica"
-    AUDITORIA_AUTORIZACOES = "Auditoria_Autorizacoes"
-    FARMACIA_HOSPITALAR = "Farmacia_Hospitalar"
-    PRONTUARIO_ELETRONICO = "Prontuario_Eletronico_Paciente"
-    REVISAO_HUMANA = "Fila_Revisao_Humana"
-
-    # Aliases de compatibilidade para código anterior
-    EMERGENCIA = "Fila_Emergencia_Medica"
-    AUDITORIA = "Auditoria_Autorizacoes"
-    FARMACIA = "Farmacia_Hospitalar"
-    PRONTUARIO = "Prontuario_Eletronico_Paciente"
+# Alias de compatibilidade
+NivelPrioridadeEnum = NivelPrioridade
 
 
-# Compatibilidade reversa
-DestinoRoteamento = DestinoRoteamentoEnum
+class StatusTriagem(str, Enum):
+    """Status de processamento da triagem (Seção 5.3 da Especificação Funcional)."""
+    RECEBIDO = "RECEBIDO"
+    PROCESSANDO = "PROCESSANDO"
+    PROCESSADO = "PROCESSADO"
+    EM_REVISAO = "EM_REVISAO"
+    ERRO_PROCESSAMENTO = "ERRO_PROCESSAMENTO"
+    ERRO_PERSISTENCIA = "ERRO_PERSISTENCIA"
+
+    @classmethod
+    def _missing_(cls, value: object):
+        if isinstance(value, str):
+            val_clean = value.strip().upper().replace(" ", "_")
+            mapping = {
+                "PROCESSADO": cls.PROCESSADO,
+                "EM_REVISAO": cls.EM_REVISAO,
+                "PENDENTE_AUDITORIA": cls.EM_REVISAO,
+                "RECEBIDO": cls.RECEBIDO,
+                "PROCESSANDO": cls.PROCESSANDO,
+                "ERRO": cls.ERRO_PROCESSAMENTO,
+                "ERRO_PROCESSAMENTO": cls.ERRO_PROCESSAMENTO,
+                "ERRO_PERSISTENCIA": cls.ERRO_PERSISTENCIA,
+            }
+            if val_clean in mapping:
+                return mapping[val_clean]
+        return None
+
+
+class Destino(str, Enum):
+    """Filas e destinos lógicos oficiais (Seção 5.4 da Especificação Funcional)."""
+    FILA_URGENCIA_MEDICA = "FILA_URGENCIA_MEDICA"
+    FARMACIA_HOSPITALAR = "FARMACIA_HOSPITALAR"
+    AUDITORIA_AUTORIZACOES = "AUDITORIA_AUTORIZACOES"
+    PRONTUARIO_ELETRONICO = "PRONTUARIO_ELETRONICO"
+    FILA_REVISAO_HUMANA = "FILA_REVISAO_HUMANA"
+
+    # Aliases de compatibilidade apontando diretamente para os tokens oficiais
+    EMERGENCIA = "FILA_URGENCIA_MEDICA"
+    EMERGENCIA_MEDICA = "FILA_URGENCIA_MEDICA"
+    AUDITORIA = "AUDITORIA_AUTORIZACOES"
+    FARMACIA = "FARMACIA_HOSPITALAR"
+    PRONTUARIO = "PRONTUARIO_ELETRONICO"
+    REVISAO_HUMANA = "FILA_REVISAO_HUMANA"
+
+    @classmethod
+    def _missing_(cls, value: object):
+        if isinstance(value, str):
+            val_clean = value.strip().upper().replace(" ", "_").replace("/", "_")
+            mapping = {
+                "FILA_EMERGENCIA_MEDICA": cls.FILA_URGENCIA_MEDICA,
+                "EMERGENCIA_MEDICA": cls.FILA_URGENCIA_MEDICA,
+                "EMERGENCIA": cls.FILA_URGENCIA_MEDICA,
+                "PRONTUARIO_ELETRONICO": cls.PRONTUARIO_ELETRONICO,
+                "PRONTUARIO": cls.PRONTUARIO_ELETRONICO,
+                "PRONTUARIO_ELETRONICO_PACIENTE": cls.PRONTUARIO_ELETRONICO,
+                "FILA_REVISAO_HUMANA": cls.FILA_REVISAO_HUMANA,
+                "REVISAO_HUMANA": cls.FILA_REVISAO_HUMANA,
+                "FARMACIA": cls.FARMACIA_HOSPITALAR,
+                "FARMACIA_HOSPITALAR": cls.FARMACIA_HOSPITALAR,
+                "AUDITORIA": cls.AUDITORIA_AUTORIZACOES,
+                "AUDITORIA_AUTORIZACOES": cls.AUDITORIA_AUTORIZACOES,
+            }
+            if val_clean in mapping:
+                return mapping[val_clean]
+        return None
+
+
+# Aliases de compatibilidade
+DestinoRoteamento = Destino
+DestinoRoteamentoEnum = Destino
+
+
+class Urgencia(str, Enum):
+    SIM = "SIM"
+    NAO = "NAO"
+    INDETERMINADO = "INDETERMINADO"
+
+
+class Gravidade(str, Enum):
+    ALTA = "ALTA"
+    MEDIA = "MEDIA"
+    BAIXA = "BAIXA"
+
+
+class CodigoErro(str, Enum):
+    FORMATO_NAO_SUPORTADO = "FORMATO_NAO_SUPORTADO"
+    CAMPOS_INVALIDOS = "CAMPOS_INVALIDOS"
+    REQUISICAO_INVALIDA = "REQUISICAO_INVALIDA"
+    ARQUIVO_MAIOR_QUE_LIMITE = "ARQUIVO_MAIOR_QUE_LIMITE"
+    MIME_INVALIDO = "MIME_INVALIDO"
+    PDF_PROTEGIDO = "PDF_PROTEGIDO"
+    PDF_CORROMPIDO = "PDF_CORROMPIDO"
+
+
+DESTINO_POR_TIPO: Dict[TipoDocumento, Destino] = {
+    TipoDocumento.RECEITUARIO_MEDICO: Destino.FARMACIA_HOSPITALAR,
+    TipoDocumento.LAUDO_EXAME_LABORATORIAL: Destino.PRONTUARIO_ELETRONICO,
+    TipoDocumento.LAUDO_EXAME_IMAGEM: Destino.PRONTUARIO_ELETRONICO,
+    TipoDocumento.GUIA_PROCEDIMENTO: Destino.AUDITORIA_AUTORIZACOES,
+    TipoDocumento.RELATORIO_ALTA_INTERNACAO: Destino.PRONTUARIO_ELETRONICO,
+    TipoDocumento.ATESTADO_MEDICO: Destino.PRONTUARIO_ELETRONICO,
+}
+
+CAMPOS_OBRIGATORIOS = frozenset({
+    "paciente.nome",
+    "paciente.idade",
+    "medico.nome",
+    "medico.crm",
+    "diagnostico",
+})
+
+GRAVIDADES_IMPEDITIVAS = frozenset({"ALTA", "MEDIA"})
 
 
 # ==============================================================================
@@ -63,193 +224,405 @@ DestinoRoteamento = DestinoRoteamentoEnum
 # ==============================================================================
 
 class Paciente(BaseModel):
-    nome: Optional[str] = Field(None, description="Nome completo do paciente (Obrigatório para rotina automática)")
-    idade: Optional[int] = Field(None, ge=0, le=120, description="Idade do paciente em anos (Obrigatório para rotina automática)")
-    cpf: Optional[str] = Field(None, description="CPF do paciente (Opcional)")
+    model_config = ConfigDict(extra="ignore")
+
+    nome: Optional[str] = Field(None, description="Nome completo do paciente")
+    idade: Optional[int] = Field(None, ge=0, le=120, description="Idade do paciente em anos")
+    cpf: Optional[str] = Field(None, description="CPF do paciente (opcional)")
 
 
-class CrmEstruturado(BaseModel):
-    numero: Optional[str] = Field(None, description="Número do CRM")
-    uf: Optional[str] = Field(None, description="UF do CRM (ex: SP, RJ)")
+class Crm(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    numero: Optional[str] = Field(None, description="Número do CRM normalizado")
+    uf: Optional[str] = Field("SP", description="UF do CRM (padrão SP)")
 
 
-class MedicoSolicitante(BaseModel):
-    nome: Optional[str] = Field(None, description="Nome completo do médico (Obrigatório para rotina automática)")
-    crm: Optional[str] = Field(None, description="Número do CRM completo ou formatado (ex: 145892-SP)")
-    crm_detalhado: Optional[CrmEstruturado] = Field(None, description="Objeto CRM detalhado com número e UF")
+# Alias
+CrmEstruturado = Crm
 
 
-class MedicamentoPrescrito(BaseModel):
+class Medico(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    nome: Optional[str] = Field(None, description="Nome do médico solicitante")
+    crm: Optional[Union[Crm, str]] = Field(None, description="CRM estruturado ou string")
+
+    @field_validator("crm", mode="before")
+    @classmethod
+    def normalizar_crm(cls, v):
+        if isinstance(v, str):
+            partes = v.strip().replace("/", "-").split("-")
+            num = partes[0].strip()
+            uf = partes[1].strip().upper() if len(partes) > 1 else "SP"
+            return Crm(numero=num, uf=uf)
+        return v
+
+    @property
+    def crm_detalhado(self) -> Optional[Crm]:
+        return self.crm if isinstance(self.crm, Crm) else None
+
+
+# Alias
+MedicoSolicitante = Medico
+
+
+class Medicamento(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     nome: str = Field(..., description="Nome do medicamento")
-    dosagem: str = Field(..., description="Dosagem prescrita (ex: 500mg, 10ml)")
-    frequencia: Optional[str] = Field(None, description="Frequência de administração (ex: 8 em 8 horas)")
+    dosagem: Optional[str] = Field(None, description="Dosagem prescrita")
+    frequencia: Optional[str] = Field(None, description="Frequência de administração")
 
 
-class ClassificacaoDocumento(BaseModel):
-    tipo_documento: Union[TipoDocumentoEnum, str] = Field(..., description="Categoria do documento clínico")
-    especialidade: Optional[str] = Field(None, description="Especialidade médica relacionada")
-    nivel_prioridade: NivelPrioridadeEnum = Field(..., description="Nível de urgência da triagem")
-    score_confianca_classificacao: float = Field(
-        ..., ge=0.0, le=1.0, description="Score de confiança na classificação (0.0 a 1.0)"
-    )
+# Alias
+MedicamentoPrescrito = Medicamento
 
 
-# Alias para compatibilidade reversa
-ClassificacaoClinica = ClassificacaoDocumento
+class ItemExameLaboratorial(BaseModel):
+    """Sub-modelo dedicado para exames laboratoriais e bioquímicos (RF-12 e Seção 5.3)."""
+    model_config = ConfigDict(extra="ignore")
+
+    analito: str = Field(..., description="Nome do analito/parâmetro (ex: Hemoglobina, Glicemia)")
+    valor_medido: str = Field(..., description="Valor obtido no exame (ex: 14.2, 95)")
+    unidade: Optional[str] = Field(None, description="Unidade de medida impressa (ex: g/dL, mg/dL)")
+    referencia_impressa: Optional[str] = Field(None, description="Intervalo ou referência do laboratório")
+    alterado: Optional[bool] = Field(None, description="Sinalização de alteração (*, Negrito, Alto/Baixo)")
 
 
-class DadosClinicosExtraidos(BaseModel):
+class Conflito(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    tipo: str = Field(..., description="Tipo do conflito detectado")
+    campos: List[str] = Field(default_factory=list, description="Campos envolvidos")
+    gravidade: Gravidade = Field(default=Gravidade.ALTA, description="Gravidade do conflito")
+    descricao: str = Field(default="", description="Descrição explicativa")
+
+
+# ==============================================================================
+# CLASSIFICAÇÃO, EXTRAÇÃO E QUALIDADE
+# ==============================================================================
+
+class Classificacao(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    tipo_documento: Union[TipoDocumento, str] = Field(..., description="Categoria estável do documento")
+    especialidade: Optional[Union[List[str], str]] = Field(default_factory=list, description="Especialidade(s) médica(s)")
+    nivel_prioridade: NivelPrioridade = Field(..., description="Nível de urgência da triagem")
+    score_classificacao: float = Field(..., ge=0.0, le=1.0, description="Score de confiança na classificação")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalizar_campos_classificacao(cls, values):
+        if isinstance(values, dict):
+            if "score_confianca_classificacao" in values and "score_classificacao" not in values:
+                values["score_classificacao"] = values.pop("score_confianca_classificacao")
+            esp = values.get("especialidade")
+            if isinstance(esp, str):
+                values["especialidade"] = [esp]
+        return values
+
+    @property
+    def score_confianca_classificacao(self) -> float:
+        return self.score_classificacao
+
+
+# Aliases
+ClassificacaoClinica = Classificacao
+ClassificacaoDocumento = Classificacao
+
+
+class DadosExtraidos(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     paciente: Paciente = Field(default_factory=Paciente)
-    medico_solicitante: MedicoSolicitante = Field(default_factory=MedicoSolicitante)
-    exame_ou_procedimento: Optional[str] = Field(None, description="Nome do exame ou procedimento realizado/solicitado")
-    diagnostico_principal: Optional[str] = Field(None, description="Diagnóstico ou achado clínico principal")
-    cid_extraido: Optional[str] = Field(None, description="Código CID-10 extraído literalmente do documento")
-    medicamentos: Optional[List[Union[MedicamentoPrescrito, str]]] = Field(
-        default_factory=list, description="Lista de medicamentos extraídos"
-    )
-    score_confianca_extracao: float = Field(
-        default=0.90, ge=0.0, le=1.0, description="Score de confiança na extração dos dados (0.0 a 1.0)"
-    )
-    achados_criticos: Optional[str] = Field(None, description="Achados de urgência ou sinais de alerta")
-    inconsistencias_detectadas: Optional[List[str]] = Field(
-        default_factory=list, description="Lista de inconsistências ou rasuras detectadas"
-    )
+    medico: Medico = Field(default_factory=Medico)
+    diagnostico: Optional[str] = Field(None, description="Diagnóstico ou achado clínico principal")
+    cid: Optional[str] = Field(None, description="Código CID-10 extraído")
+    exames: List[str] = Field(default_factory=list, description="Lista de exames realizados/solicitados")
+    exames_laboratoriais: List[ItemExameLaboratorial] = Field(default_factory=list, description="Parâmetros laboratoriais detalhados")
+    medicamentos: List[Union[Medicamento, str]] = Field(default_factory=list, description="Medicamentos prescritos")
+    urgencia: Urgencia = Field(default=Urgencia.INDETERMINADO, description="Indicador estruturado de urgência")
+    score_confianca_extracao: float = Field(default=0.90, ge=0.0, le=1.0)
+    achados_criticos: Optional[str] = Field(None, description="Achados críticos ou de alerta")
+    inconsistencias_detectadas: List[str] = Field(default_factory=list, description="Inconsistências observadas")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalizar_aliases_extraidos(cls, values):
+        if isinstance(values, dict):
+            if "medico_solicitante" in values and "medico" not in values:
+                values["medico"] = values.pop("medico_solicitante")
+            if "diagnostico_principal" in values and "diagnostico" not in values:
+                values["diagnostico"] = values.pop("diagnostico_principal")
+            if "cid_extraido" in values and "cid" not in values:
+                values["cid"] = values.pop("cid_extraido")
+            elif "cid_sugerido" in values and "cid" not in values:
+                values["cid"] = values.pop("cid_sugerido")
+            if "exame_ou_procedimento" in values and "exames" not in values:
+                val = values.pop("exame_ou_procedimento")
+                values["exames"] = [val] if val else []
+            elif "exame_realizado" in values and "exames" not in values:
+                val = values.pop("exame_realizado")
+                values["exames"] = [val] if val else []
+        return values
 
     # Propriedades de compatibilidade com versões iniciais
     @property
-    def exame_realizado(self) -> Optional[str]:
-        return self.exame_ou_procedimento
+    def medico_solicitante(self) -> Medico:
+        return self.medico
+
+    @property
+    def diagnostico_principal(self) -> Optional[str]:
+        return self.diagnostico
+
+    @property
+    def cid_extraido(self) -> Optional[str]:
+        return self.cid
 
     @property
     def cid_sugerido(self) -> Optional[str]:
-        return self.cid_extraido
+        return self.cid
+
+    @property
+    def exame_ou_procedimento(self) -> Optional[str]:
+        return self.exames[0] if self.exames else None
+
+    @property
+    def exame_realizado(self) -> Optional[str]:
+        return self.exames[0] if self.exames else None
 
 
-# Alias de compatibilidade
-DadosExtraidos = DadosClinicosExtraidos
+# Aliases
+DadosClinicosExtraidos = DadosExtraidos
 
 
-class QualidadeExtracao(BaseModel):
-    score_classificacao: float = Field(..., ge=0.0, le=1.0)
-    score_extracao: float = Field(..., ge=0.0, le=1.0)
-    score_combinado: float = Field(..., ge=0.0, le=1.0, description="Calculado como min(score_classificacao, score_extracao)")
-    limiar_aplicado: float = Field(default=0.85, description="Limiar configurado para auditoria automática (0.85)")
-    campos_ausentes: List[str] = Field(default_factory=list, description="Lista de campos obrigatórios ausentes")
-    campos_incerto: List[str] = Field(default_factory=list, description="Lista de campos com leitura ambígua/rasura")
-    conflitos: List[str] = Field(default_factory=list, description="Lista de inconsistências detectadas")
+class Qualidade(BaseModel):
+    model_config = ConfigDict(extra="ignore")
 
+    score_extracao: float = Field(default=0.90, ge=0.0, le=1.0)
+    score_combinado: float = Field(default=0.90, ge=0.0, le=1.0)
+    limiar_aplicado: float = Field(default=0.85, ge=0.0, le=1.0)
+    campos_ausentes: List[str] = Field(default_factory=list)
+    campos_incertos: List[str] = Field(default_factory=list)
+    conflitos: List[Conflito] = Field(default_factory=list)
+
+    @property
+    def score_classificacao(self) -> float:
+        return self.score_combinado
+
+
+# Alias
+QualidadeExtracao = Qualidade
+
+
+# ==============================================================================
+# DECISÃO, NOTIFICAÇÃO E ARMAZENAMENTO OCI
+# ==============================================================================
 
 class Notificacao(BaseModel):
-    gerada: bool = Field(default=False, description="Flag indicando se notificação de urgência foi gerada")
-    canal: str = Field(default="SIMULADO_SLACK_PLANTAO", description="Canal de notificação (ex: SIMULADO_SLACK_PLANTAO, Alerta_Plantao_Medico)")
-    mensagem: Optional[str] = Field(None, description="Conteúdo do alerta gerado para casos urgentes")
-    status: str = Field(default="REGISTRADA", description="Status do envio da notificação (REGISTRADA, ENVIADA)")
+    model_config = ConfigDict(extra="ignore")
+
+    gerada: bool = Field(default=True, description="Indica se o alerta foi gerado")
+    canal: str = Field(default="SIMULADO_SLACK_PLANTAO", description="Canal de notificação")
+    mensagem: Optional[str] = Field(None, description="Mensagem de alerta")
+    status: str = Field(default="REGISTRADA", description="Status do envio")
 
 
 class DecisaoRoteamento(BaseModel):
-    destino_principal: DestinoRoteamentoEnum = Field(..., description="Destino primário do documento")
-    destinos: List[DestinoRoteamentoEnum] = Field(default_factory=list, description="Lista de todos os destinos atribuídos")
-    requer_auditoria_humana: bool = Field(
-        ..., description="Flag ativada quando o score < 0.85, houver rasura ou dados vitais ausentes"
-    )
-    justificativa_roteamento: str = Field(..., description="Motivo técnico/clínico da escolha dos destinos")
-    notificacao_gerada: Optional[Notificacao] = Field(None, description="Alerta de tempo real gerado para casos de urgência")
+    model_config = ConfigDict(extra="ignore")
+
+    destino_principal: Optional[Destino] = None
+    destinos: List[Destino] = Field(default_factory=list)
+    requer_auditoria_humana: bool = False
+    justificativa_roteamento: str = ""
+    notificacao: Optional[Notificacao] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalizar_notificacao(cls, values):
+        if isinstance(values, dict):
+            if "notificacao_gerada" in values and "notificacao" not in values:
+                values["notificacao"] = values.pop("notificacao_gerada")
+        return values
+
+    @property
+    def notificacao_gerada(self) -> Optional[Notificacao]:
+        return self.notificacao
 
 
 class ArmazenamentoOCI(BaseModel):
-    bucket: str = Field(default="mediflow-documentos-clinicos", description="Nome do bucket no OCI Object Storage")
-    caminho_objeto: str = Field(..., description="Caminho do arquivo no bucket (ex: processados/urgentes/DOC-123.json)")
-    status_backup: str = Field(default="sucesso", description="Status da gravação na nuvem OCI")
+    model_config = ConfigDict(extra="ignore")
+
+    bucket: str = Field(default="mediflow-documentos-clinicos")
+    caminho_objeto: Optional[str] = Field(None, description="Caminho do objeto no bucket OCI")
+    status_backup: str = Field(default="sucesso", description="Status da persistência na nuvem")
+
+
+class ErroProcessamento(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    codigo: CodigoErro
+    mensagem: str
+
+
+class ErroResposta(BaseModel):
+    """Rejeição de requisição — não chega a virar triagem."""
+    model_config = ConfigDict(extra="ignore")
+
+    http: int = Field(..., ge=400, le=499)
+    codigo_funcional: CodigoErro
+    mensagem: str
 
 
 # ==============================================================================
-# MODELO PRINCIPAL (PAYLOAD FINAL DA TRIAGEM v2.0)
+# MODELO PRINCIPAL (PAYLOAD FINAL DA TRIAGEM v2.0 COM REGRAS R1 A R8)
 # ==============================================================================
 
 class TriagemMediFlow(BaseModel):
-    status: str = Field(default="PROCESSADO", description="Status do processamento (PROCESSADO, EM_REVISAO, ERRO)")
-    documento_id: str = Field(..., description="Identificador único do documento (ex: DOC-8F31A92B)")
-    canal_origem: Optional[str] = Field(None, description="Canal de entrada (ex: Pronto_Socorro, Ambulatorio, Web)")
-    classificacao: ClassificacaoDocumento
-    dados_extraidos: DadosClinicosExtraidos
-    qualidade: Optional[QualidadeExtracao] = None
-    decisao_roteamento: DecisaoRoteamento
+    model_config = ConfigDict(extra="ignore")
+
+    status: StatusTriagem = StatusTriagem.PROCESSADO
+    documento_id: str
+    canal_origem: Optional[str] = Field(None, description="Canal de entrada (ex: Pronto_Socorro, Web)")
+    classificacao: Optional[Classificacao] = None
+    dados_extraidos: Optional[DadosExtraidos] = None
+    qualidade: Optional[Qualidade] = None
+    decisao_roteamento: Optional[DecisaoRoteamento] = None
     armazenamento_oci: Optional[ArmazenamentoOCI] = None
+    erro: Optional[ErroProcessamento] = None
 
-    @model_validator(mode='after')
-    def aplicar_regras_de_negocio_especificacao_v1(self):
+    @model_validator(mode="after")
+    def aplicar_regras(self) -> "TriagemMediFlow":
         """
-        Regras de Negócio Oficiais MediFlow (Especificação Funcional v1.0 - William):
-        1. Calcula o Score Combinado = min(score_classificacao, score_extracao).
-        2. Verifica ausência de campos OBRIGATÓRIOS (Paciente, Idade, Médico, CRM, Diagnóstico/Exame).
-        3. Se Score Combinado < 0.85 OU houver campo obrigatório ausente:
-           -> Ativa requer_auditoria_humana = True
-           -> Adiciona REVISAO_HUMANA em destinos
-           -> Ajusta status para EM_REVISAO se não for Urgência Crítica pura.
-        4. Trata Caso Misto (Urgência Crítica + Ambiguidade/Rasura):
-           -> Mantém EMERGENCIA_MEDICA e adiciona REVISAO_HUMANA nos destinos.
+        Regras de Negócio Oficiais MediFlow (R1 a R8 - Especificação Funcional v1.0).
         """
-        score_class = self.classificacao.score_confianca_classificacao
-        score_ext = getattr(self.dados_extraidos, 'score_confianca_extracao', 0.90)
-        score_comb = min(score_class, score_ext)
+        # 1. Tratamento de Erro de Leitura
+        em_erro = self.status in (StatusTriagem.ERRO_PROCESSAMENTO, StatusTriagem.ERRO_PERSISTENCIA)
+        if em_erro:
+            if self.erro is None:
+                self.erro = ErroProcessamento(
+                    codigo=CodigoErro.PDF_CORROMPIDO,
+                    mensagem="Erro no processamento do documento clínico."
+                )
+            self.decisao_roteamento = None
+            self.qualidade = None
+            return self
 
-        # 2. Verificação de Campos Obrigatórios Vitais
-        campos_ausentes = []
-        if not self.dados_extraidos.paciente or not self.dados_extraidos.paciente.nome:
-            campos_ausentes.append("paciente.nome")
-        if not self.dados_extraidos.paciente or self.dados_extraidos.paciente.idade is None:
-            campos_ausentes.append("paciente.idade")
-        if not self.dados_extraidos.medico_solicitante or not self.dados_extraidos.medico_solicitante.nome:
-            campos_ausentes.append("medico_solicitante.nome")
-        if not self.dados_extraidos.medico_solicitante or not self.dados_extraidos.medico_solicitante.crm:
-            campos_ausentes.append("medico_solicitante.crm")
-        if not self.dados_extraidos.diagnostico_principal and not self.dados_extraidos.exame_ou_procedimento:
-            campos_ausentes.append("diagnostico_principal_ou_exame")
+        if self.classificacao is None or self.dados_extraidos is None:
+            return self
 
-        # 3. Monta Objeto de Qualidade se não fornecido
-        limiar = 0.85
+        c = self.classificacao
+        d = self.dados_extraidos
+
+        # 2. Configura ou recupera Qualidade
         if self.qualidade is None:
-            self.qualidade = QualidadeExtracao(
-                score_classificacao=score_class,
+            score_class = c.score_classificacao
+            score_ext = getattr(d, "score_confianca_extracao", 0.90)
+            self.qualidade = Qualidade(
                 score_extracao=score_ext,
-                score_combinado=score_comb,
-                limiar_aplicado=limiar,
-                campos_ausentes=campos_ausentes,
-                campos_incerto=[],
-                conflitos=[]
+                score_combinado=min(score_class, score_ext),
+                limiar_aplicado=0.85,
+            )
+        q = self.qualidade
+        limiar = q.limiar_aplicado
+        q.score_combinado = min(c.score_classificacao, q.score_extracao)
+
+        # 3. Verificação de Campos Obrigatórios Vitais (RF-21)
+        ausentes = set(q.campos_ausentes)
+        if not d.paciente or not d.paciente.nome:
+            ausentes.add("paciente.nome")
+        if not d.paciente or d.paciente.idade is None:
+            ausentes.add("paciente.idade")
+        if not d.medico or not d.medico.nome:
+            ausentes.add("medico.nome")
+        if not d.medico or not d.medico.crm or (isinstance(d.medico.crm, Crm) and not d.medico.crm.numero):
+            ausentes.add("medico.crm")
+        if not d.diagnostico and not d.exames:
+            ausentes.add("diagnostico")
+        q.campos_ausentes = sorted(list(ausentes))
+
+        # 4. Avaliação de Ambiguidade e Regras
+        urgente = (c.nivel_prioridade == NivelPrioridade.URGENTE) or (d.urgencia == Urgencia.SIM)
+        fora_da_taxonomia = c.tipo_documento in (TipoDocumento.OUTRO, TipoDocumento.NAO_IDENTIFICADO)
+        abaixo_do_limiar = q.score_combinado < limiar
+        falta_obrigatorio = bool(set(q.campos_ausentes) & CAMPOS_OBRIGATORIOS)
+        impeditivos = [x for x in q.conflitos if getattr(x.gravidade, "value", x.gravidade) in GRAVIDADES_IMPEDITIVAS]
+        prioridade_indefinida = (c.nivel_prioridade == NivelPrioridade.NAO_IDENTIFICADA)
+
+        ambiguidade = bool(
+            falta_obrigatorio or q.campos_incertos or impeditivos or abaixo_do_limiar
+            or fora_da_taxonomia or prioridade_indefinida
+        )
+
+        # 5. Destinos (R1, R3, R4)
+        destinos: List[Destino] = []
+        if urgente:
+            destinos.append(Destino.FILA_URGENCIA_MEDICA)
+        elif not ambiguidade:
+            dest_tipo = DESTINO_POR_TIPO.get(c.tipo_documento, Destino.PRONTUARIO_ELETRONICO)
+            destinos.append(dest_tipo)
+
+        if ambiguidade:
+            if urgente:
+                destinos = [Destino.FILA_URGENCIA_MEDICA, Destino.FILA_REVISAO_HUMANA]
+            else:
+                destinos = [Destino.FILA_REVISAO_HUMANA]
+
+        # Sincroniza decisão
+        if self.decisao_roteamento is None:
+            self.decisao_roteamento = DecisaoRoteamento()
+
+        self.decisao_roteamento.destinos = destinos
+        self.decisao_roteamento.destino_principal = destinos[0]
+        self.decisao_roteamento.requer_auditoria_humana = ambiguidade
+
+        # Justificativa
+        motivos = []
+        if abaixo_do_limiar:
+            motivos.append(f"score combinado {q.score_combinado:.2f} < limiar {limiar:.2f}")
+        if falta_obrigatorio:
+            motivos.append("campos obrigatórios ausentes: " + ", ".join(sorted(set(q.campos_ausentes) & CAMPOS_OBRIGATORIOS)))
+        if q.campos_incertos:
+            motivos.append("campos incertos: " + ", ".join(q.campos_incertos))
+        if impeditivos:
+            motivos.append("conflitos impeditivos: " + ", ".join(x.tipo for x in impeditivos))
+        if fora_da_taxonomia:
+            motivos.append(f"tipo fora da taxonomia: {getattr(c.tipo_documento, 'value', c.tipo_documento)}")
+
+        if urgente and ambiguidade:
+            self.decisao_roteamento.justificativa_roteamento = (
+                "Urgência com ambiguidade: mantém FILA_URGENCIA_MEDICA e acrescenta FILA_REVISAO_HUMANA. " + "; ".join(motivos) + "."
+            )
+        elif urgente:
+            self.decisao_roteamento.justificativa_roteamento = (
+                "Urgência clínica: FILA_URGENCIA_MEDICA com alerta registrado. Sem ambiguidade, segue sem revisão humana."
+            )
+        elif ambiguidade:
+            self.decisao_roteamento.justificativa_roteamento = "Revisão humana obrigatória: " + "; ".join(motivos) + "."
+        else:
+            tipo_txt = getattr(c.tipo_documento, "value", c.tipo_documento)
+            dest_txt = getattr(self.decisao_roteamento.destino_principal, "value", self.decisao_roteamento.destino_principal)
+            self.decisao_roteamento.justificativa_roteamento = (
+                f"Classificação de rotina: {tipo_txt} encaminhado para {dest_txt}."
             )
 
-        # 4. Avaliação das Travas de Segurança (Human-In-The-Loop)
-        motivos_revisao = []
-        if score_comb < limiar:
-            motivos_revisao.append(f"Score combinado ({score_comb:.2f}) abaixo do limiar de segurança ({limiar}).")
-        if len(campos_ausentes) > 0:
-            motivos_revisao.append(f"Campos obrigatórios ausentes: {', '.join(campos_ausentes)}.")
+        # 6. Notificação Automática de Urgência
+        if urgente and not self.decisao_roteamento.notificacao:
+            diag = d.diagnostico or (d.exames[0] if d.exames else "achado crítico em triagem")
+            self.decisao_roteamento.notificacao = Notificacao(
+                gerada=True,
+                canal="SIMULADO_SLACK_PLANTAO",
+                mensagem=f"🚨 ALERTA URGENTE [{self.documento_id}]: {diag}",
+                status="REGISTRADA",
+            )
 
-        # Sincroniza lista de destinos
-        if not self.decisao_roteamento.destinos:
-            self.decisao_roteamento.destinos = [self.decisao_roteamento.destino_principal]
-
-        if len(motivos_revisao) > 0:
-            self.decisao_roteamento.requer_auditoria_humana = True
-            if DestinoRoteamentoEnum.REVISAO_HUMANA not in self.decisao_roteamento.destinos:
-                self.decisao_roteamento.destinos.append(DestinoRoteamentoEnum.REVISAO_HUMANA)
-
-            # Ajusta status para EM_REVISAO se não for urgência médica estrita
-            if self.status != "pendente_auditoria":
-                self.status = "EM_REVISAO"
-            if self.classificacao.nivel_prioridade != NivelPrioridadeEnum.URGENTE:
-                self.decisao_roteamento.destino_principal = DestinoRoteamentoEnum.REVISAO_HUMANA
-
-        # 5. Notificação Automática de Urgência
-        if self.classificacao.nivel_prioridade == NivelPrioridadeEnum.URGENTE:
-            if not self.decisao_roteamento.notificacao_gerada:
-                self.decisao_roteamento.notificacao_gerada = Notificacao(
-                    gerada=True,
-                    canal="SIMULADO_SLACK_PLANTAO",
-                    mensagem=f"🚨 ALERTA URGENTE [{self.documento_id}]: {self.dados_extraidos.diagnostico_principal or 'Achado crítico em triagem'}",
-                    status="REGISTRADA"
-                )
+        # 7. Status Final
+        if self.status != StatusTriagem.ERRO_PROCESSAMENTO:
+            if self.decisao_roteamento.requer_auditoria_humana:
+                self.status = StatusTriagem.EM_REVISAO
+            else:
+                self.status = StatusTriagem.PROCESSADO
 
         return self
 

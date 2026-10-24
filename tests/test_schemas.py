@@ -1,7 +1,7 @@
 """
 Testes unitários para validação dos schemas Pydantic do MediFlow.
-Garante que o contrato de dados atende às exigências do Hackathon ONE G10
-e às especificações oficiais da equipe (Luciana / William v2.0).
+Garante que o contrato de dados atende às exigências do Hackathon ONE G10,
+ao CONTRATO_DE_DADOS_v2.md e aos 79 fixtures de validação (William / Luciana).
 """
 import pytest
 from src.schemas import (
@@ -15,16 +15,31 @@ from src.schemas import (
     DecisaoRoteamento,
     ArmazenamentoOCI,
     ResultadoTriagemClinica,
-    # Nomes e classes v2.0 (Luciana / William)
+    # Nomes e classes canônicas v2.0 (William / Luciana)
     TipoArquivoEnum,
-    NivelPrioridadeEnum,
+    TipoDocumento,
     TipoDocumentoEnum,
+    NivelPrioridadeEnum,
+    StatusTriagem,
+    Destino,
     DestinoRoteamentoEnum,
+    Urgencia,
+    Gravidade,
+    CodigoErro,
+    Crm,
     CrmEstruturado,
+    Medico,
+    Medicamento,
     MedicamentoPrescrito,
+    ItemExameLaboratorial,
+    Conflito,
+    Classificacao,
     ClassificacaoDocumento,
     DadosClinicosExtraidos,
+    Qualidade,
     QualidadeExtracao,
+    ErroProcessamento,
+    ErroResposta,
     TriagemMediFlow,
 )
 
@@ -109,8 +124,8 @@ def test_schema_luciana_v2_com_medicamento_e_crm_estruturado():
     assert med.dosagem == "875mg + 125mg"
 
     crm = CrmEstruturado(numero="123456", uf="SP")
-    medico = MedicoSolicitante(nome="Dr. Roberto Santos", crm="123456-SP", crm_detalhado=crm)
-    assert medico.crm_detalhado.uf == "SP"
+    medico = MedicoSolicitante(nome="Dr. Roberto Santos", crm="123456-SP")
+    assert medico.crm.uf == "SP"
 
     triagem = TriagemMediFlow(
         documento_id="DOC-FARMA-001",
@@ -137,7 +152,7 @@ def test_schema_luciana_v2_com_medicamento_e_crm_estruturado():
         )
     )
 
-    assert triagem.status == "PROCESSADO"
+    assert triagem.status == StatusTriagem.PROCESSADO
     assert triagem.qualidade.score_combinado == 0.95
     assert triagem.decisao_roteamento.requer_auditoria_humana is False
 
@@ -168,7 +183,7 @@ def test_regras_negocio_trava_seguranca_score_baixo():
     assert triagem.qualidade.score_combinado == 0.72
     assert triagem.decisao_roteamento.requer_auditoria_humana is True
     assert DestinoRoteamentoEnum.REVISAO_HUMANA in triagem.decisao_roteamento.destinos
-    assert triagem.status == "EM_REVISAO"
+    assert triagem.status == StatusTriagem.EM_REVISAO
 
 
 def test_regras_negocio_alerta_urgencia_automatico():
@@ -193,6 +208,73 @@ def test_regras_negocio_alerta_urgencia_automatico():
         )
     )
 
-    assert triagem.decisao_roteamento.notificacao_gerada is not None
-    assert triagem.decisao_roteamento.notificacao_gerada.gerada is True
-    assert "AVCi" in triagem.decisao_roteamento.notificacao_gerada.mensagem
+    assert triagem.decisao_roteamento.notificacao is not None
+    assert triagem.decisao_roteamento.notificacao.gerada is True
+    assert "AVCi" in triagem.decisao_roteamento.notificacao.mensagem
+
+
+def test_contrato_v2_analitos_laboratoriais_rf12():
+    """Valida suporte a ItemExameLaboratorial conforme RF-12 e Seção 5.3 da Especificação Funcional"""
+    hemoglobina = ItemExameLaboratorial(
+        analito="Hemoglobina",
+        valor_medido="8.5",
+        unidade="g/dL",
+        referencia_impressa="12.0 a 16.0 g/dL",
+        alterado=True,
+    )
+    plaquetas = ItemExameLaboratorial(
+        analito="Plaquetas",
+        valor_medido="250.000",
+        unidade="/mm3",
+        referencia_impressa="150.000 a 450.000 /mm3",
+        alterado=False,
+    )
+
+    triagem = TriagemMediFlow(
+        documento_id="DOC-LAB-001",
+        classificacao=Classificacao(
+            tipo_documento=TipoDocumento.LAUDO_EXAME_LABORATORIAL,
+            especialidade=["Hematologia"],
+            nivel_prioridade=NivelPrioridade.ROTINA,
+            score_classificacao=0.97,
+        ),
+        dados_extraidos=DadosExtraidos(
+            paciente=Paciente(nome="Beatriz Santos", idade=34),
+            medico=Medico(nome="Dr. Fernando", crm="55443-SP"),
+            diagnostico="Anemia moderada a esclarecer",
+            exames=["Hemograma Completo"],
+            exames_laboratoriais=[hemoglobina, plaquetas],
+            urgencia=Urgencia.NAO,
+        ),
+    )
+
+    assert triagem.status == StatusTriagem.PROCESSADO
+    assert len(triagem.dados_extraidos.exames_laboratoriais) == 2
+    assert triagem.dados_extraidos.exames_laboratoriais[0].alterado is True
+    assert triagem.decisao_roteamento.destino_principal == Destino.PRONTUARIO_ELETRONICO
+
+
+def test_contrato_v2_erros_leitura_e_requisicao():
+    """Valida os dois níveis de erro definidos no CONTRATO_DE_DADOS_v2.md"""
+    # 1. Erro de requisição (HTTP 413)
+    erro_req = ErroResposta(
+        http=413,
+        codigo_funcional=CodigoErro.ARQUIVO_MAIOR_QUE_LIMITE,
+        mensagem="O arquivo possui 25.00MB, excedendo o limite de 20.00MB."
+    )
+    assert erro_req.http == 413
+    assert erro_req.codigo_funcional == CodigoErro.ARQUIVO_MAIOR_QUE_LIMITE
+
+    # 2. Erro de leitura de documento na triagem (PDF protegido)
+    triagem_erro = TriagemMediFlow(
+        status=StatusTriagem.ERRO_PROCESSAMENTO,
+        documento_id="DOC-SENHA-999",
+        erro=ErroProcessamento(
+            codigo=CodigoErro.PDF_PROTEGIDO,
+            mensagem="Documento protegido por senha."
+        )
+    )
+    assert triagem_erro.status == StatusTriagem.ERRO_PROCESSAMENTO
+    assert triagem_erro.erro.codigo == CodigoErro.PDF_PROTEGIDO
+    assert triagem_erro.classificacao is None
+    assert triagem_erro.dados_extraidos is None

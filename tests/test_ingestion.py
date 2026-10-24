@@ -63,14 +63,30 @@ def test_carregar_bytes_pdf():
 
 
 def test_limite_tamanho_excedido():
-    """Valida bloqueio de segurança para uploads maiores que 20MB"""
-    tamanho_excessivo = 21 * 1024 * 1024  # 21MB
-    dados_ficticios = b"0" * 100  # não aloca 21MB em ram, testa a validação lógica
+    """Valida bloqueio de segurança para uploads maiores que 10MB (alinhado a Limite_Tamanho_Acima10MB)"""
+    tamanho_excessivo = 11 * 1024 * 1024  # 11MB
+    dados_ficticios = b"0" * 100  # não aloca 11MB em ram, testa a validação lógica
 
     with pytest.raises(TamanhoExcedidoError) as exc_info:
         DocumentLoader.validar_limite_tamanho(tamanho_excessivo)
 
     assert exc_info.value.codigo == "ARQUIVO_MAIOR_QUE_LIMITE"
+
+
+def test_limite_paginas_excedido():
+    """Valida bloqueio de segurança para PDFs com mais de 20 páginas (alinhado a Limite_Paginas_21)"""
+    doc_fitz = fitz.open()
+    for _ in range(21):
+        page = doc_fitz.new_page()
+        page.insert_text((50, 50), "Página de teste de limite.")
+    pdf_bytes = doc_fitz.tobytes()
+    doc_fitz.close()
+
+    with pytest.raises(TamanhoExcedidoError) as exc_info:
+        DocumentLoader.carregar_bytes(pdf_bytes, nome_arquivo="documento_longo_21paginas.pdf")
+
+    assert exc_info.value.codigo == "ARQUIVO_MAIOR_QUE_LIMITE"
+    assert "20 páginas" in exc_info.value.mensagem
 
 
 def test_tratamento_encoding_latin1():
