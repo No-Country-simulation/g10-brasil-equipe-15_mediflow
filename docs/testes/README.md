@@ -28,13 +28,13 @@ Todos os 79 fixtures do catálogo foram integrados como testes nativos do `pytes
 python -m pytest tests/test_contrato_fixtures.py
 ```
 
-### Para executar a suíte completa da aplicação (143 testes):
+### Para executar a suíte completa da aplicação (144 testes):
 ```powershell
 python -m pytest
 ```
 
-### Distribuição dos 143 Testes Automatizados:
+### Distribuição dos 144 Testes Automatizados:
 * **79 testes de Fixtures Oficiais** (`tests/test_contrato_fixtures.py`): ✅ 100% Aprovados
-* **11 testes de Ingestão e Segurança** (`tests/test_ingestion.py`): ✅ 100% Aprovados
+* **12 testes de Ingestão e Segurança** (`tests/test_ingestion.py`): ✅ 100% Aprovados (inclui limite de 10MB e 20 páginas)
 * **7 testes de Schemas Harmonizados** (`tests/test_schemas.py`): ✅ 100% Aprovados
 * **46 testes de Roteamento LangGraph** (`tests/test_workflow.py`): ✅ 100% Aprovados
