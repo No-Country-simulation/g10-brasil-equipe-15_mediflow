@@ -6,22 +6,25 @@
 
   <!-- BADGES SHIELDS.IO -->
   <p>
-    <a href="#-equipe-15---hackathon-one-g10"><img src="[suspicious link removed]" alt="Equipe 15"></a>
-    <a href="#-tecnologias-e-stack"><img src="[suspicious link removed]" alt="Python 3.12"></a>
-    <a href="#-tecnologias-e-stack"><img src="[suspicious link removed]" alt="FastAPI"></a>
-    <a href="#-tecnologias-e-stack"><img src="[suspicious link removed]" alt="Pydantic v2"></a>
-    <a href="#-tecnologias-e-stack"><img src="[suspicious link removed]" alt="Google Gemini"></a>
-    <a href="#-tecnologias-e-stack"><img src="[suspicious link removed]" alt="OCI Always Free"></a>
-    <a href="#-status-do-projeto"><img src="[suspicious link removed]" alt="Status"></a>
+    <a href="#-equipe-15---hackathon-one-g10"><img src="https://img.shields.io/badge/Equipe%2015-Hackathon%20ONE-blueviolet?style=for-the-badge&logo=rocket&logoColor=white" alt="Equipe 15"></a>
+    <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.12"></a>
+    <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/FastAPI-0.111-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI"></a>
+    <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/Pydantic-v2-E92063?style=for-the-badge&logo=pydantic&logoColor=white" alt="Pydantic v2"></a>
+    <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/Google%20Gemini-AI-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Google Gemini"></a>
+    <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/OCI-Always%20Free-F80000?style=for-the-badge&logo=oracle&logoColor=white" alt="OCI Always Free"></a>
+    <a href="#-status-do-projeto"><img src="https://img.shields.io/badge/Status-Em%20Desenvolvimento-yellow?style=for-the-badge&logo=github&logoColor=white" alt="Status"></a>
   </p>
 
   <p>
     <a href="#-visão-geral-do-problema-e-solução">Visão Geral</a> •
-    <a href="ARQUITETURA.md"><b>Guia de Arquitetura</b></a> •
+    <a href="#-principais-funcionalidades">Funcionalidades</a> •
     <a href="#-arquitetura-e-fluxo-de-dados">Arquitetura</a> •
     <a href="#-cenários-de-demonstração">Cenários de Teste</a> •
+    <a href="#-endpoints-da-api-rest">API</a> •
+    <a href="#-estrutura-do-repositório">Estrutura</a> •
     <a href="#-equipe-15---hackathon-one-g10">Time</a> •
-    <a href="#-como-executar">Como Rodar</a>
+    <a href="#-como-executar-o-projeto-localmente">Como Rodar</a> •
+    <a href="ARQUITETURA.md"><b>Guia de Arquitetura</b></a>
   </p>
 
   ---
