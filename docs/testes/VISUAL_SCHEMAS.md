@@ -191,7 +191,49 @@ graph LR
 
 ---
 
-## 3. 🧠 Motor de Decisão Clínica Integrado no Schema (`@model_validator`)
+## 3. 🔄 Ciclo de Vida e Máquina de Estados da Triagem
+
+O processamento de qualquer documento pelo ecossistema **MediFlow** é governado por uma máquina de estados finita e auditável:
+
+```mermaid
+stateDiagram-v2
+    [*] --> RECEBIDO: Ingestão via API / Streamlit
+    RECEBIDO --> PROCESSANDO: Validação preliminar (Allowlist & Limites A6)
+    
+    state PROCESSANDO {
+        [*] --> SanitizacaoMime: Limite 10.00MB e 20 páginas
+        SanitizacaoMime --> ExtracaoMultimodal: Gemini 1.5 + Schemas Canônicos
+        ExtracaoMultimodal --> AvaliacaoRegras: Validador Pydantic v2 + LangGraph
+        AvaliacaoRegras --> [*]
+    }
+
+    PROCESSANDO --> PROCESSADO: Score >= 0.85 & Vitais Presentes
+    PROCESSANDO --> EM_REVISAO: Score < 0.85 ou Incerteza / Ausência de Vital
+    PROCESSANDO --> ERRO_PROCESSAMENTO: Falha na Leitura (PDF Corrompido / Protegido)
+    
+    PROCESSADO --> PersistenciaOCI: Salva em /processados (/rotina ou /urgentes)
+    EM_REVISAO --> PersistenciaOCI: Salva em /auditoria_humana
+    ERRO_PROCESSAMENTO --> [*]: Retorna ErroResposta / ErroProcessamento
+
+    PersistenciaOCI --> [*]: Finalizado com Sucesso
+    PersistenciaOCI --> ERRO_PERSISTENCIA: Falha no Upload OCI SDK
+    ERRO_PERSISTENCIA --> [*]
+```
+
+### Matriz de Transição de Estados
+
+| Estado Origem | Evento / Condição | Estado Destino | Ação / Efeito Colateral |
+| :--- | :--- | :--- | :--- |
+| `[*]` | Envio via API (`POST /api/v1/triagens`) ou Streamlit | `RECEBIDO` | Emissão de `documento_id`, persistência em `/recebidos` e retorno `HTTP 202 Accepted`. |
+| `RECEBIDO` | Início da esteira assíncrona | `PROCESSANDO` | Execução do carregador seguro e sanitização PyMuPDF. |
+| `PROCESSANDO` | `score_combinado >= 0.85` e vitais presentes | `PROCESSADO` | Encaminhamento direto para a fila departamental correspondente. |
+| `PROCESSANDO` | `score_combinado < 0.85` ou rasura ou vital ausente | `EM_REVISAO` | Retenção obrigatória para auditoria médica (*Human-in-the-Loop*). |
+| `PROCESSANDO` | PDF protegido por senha ou corrompido | `ERRO_PROCESSAMENTO` | Geração do envelope `ErroProcessamento` sem invocar IA desnecessariamente. |
+| `PROCESSADO` / `EM_REVISAO` | Falha de rede ou timeout com a nuvem Oracle | `ERRO_PERSISTENCIA` | Registro do incidente para retry sem perda de metadados. |
+
+---
+
+## 4. 🧠 Motor de Decisão Clínica Integrado no Schema (`@model_validator`)
 
 O modelo [`TriagemMediFlow`](../../src/schemas/clinical.py) implementa um validador pós-construção (`@model_validator(mode="after")`) que aplica de maneira determinística as regras **R1 a R8**:
 
@@ -210,7 +252,7 @@ flowchart TD
     %% Caminho de Ambiguidade
     SET_AMB --> AMB_URG{"Urgência Presente?"}
     
-    AMB_URG -- 🟢 SIM --> R2["<b>Regra R2: Urgência com Ambiguidade</b><br/>• Destinos: [FILA_URGENCIA_MEDICA, FILA_REVISAO_HUMANA]<br/>• Status: <b>EM_REVISAO</b><br/>• Notificação de Emergência Gerada"]
+    AMB_URG -- 🟢 SIM --> R2["<b>Regra R2 / R4: Urgência com Ambiguidade</b><br/>• Destinos: [FILA_URGENCIA_MEDICA, FILA_REVISAO_HUMANA]<br/>• Status: <b>EM_REVISAO</b><br/>• Notificação de Emergência Gerada"]
     
     AMB_URG -- ❌ NÃO --> R3["<b>Regra R3: Rotina com Ambiguidade</b><br/>• Destinos: [FILA_REVISAO_HUMANA]<br/>• Status: <b>EM_REVISAO</b><br/>• Requer auditoria humana = True"]
 
@@ -227,7 +269,60 @@ flowchart TD
 
 ---
 
-## 4. 📋 Dicionário de Componentes e Modelos
+## 5. 🏥 Roteamento Clínico Hospitalar e Alocação OCI
+
+O diagrama a seguir detalha o mapeamento determinístico entre as entidades classificadas e as 5 filas hospitalares canônicas, bem como a segregação de persistência no OCI Object Storage:
+
+```mermaid
+flowchart LR
+    subgraph ENTRADA["Documento Validado"]
+        DOC["TriagemMediFlow<br/>(Classificação & Qualidade)"]
+    end
+
+    subgraph MOTOR["Motor de Decisão (LangGraph)"]
+        DECISAO{"Avaliação de Destino"}
+    end
+
+    subgraph FILAS["As 5 Filas Hospitalares Canônicas"]
+        F1["🚨 FILA_URGENCIA_MEDICA<br/><i>Achados críticos / TEP / Emergência</i>"]
+        F2["💊 FARMACIA_HOSPITALAR<br/><i>Receituários médicos de rotina</i>"]
+        F3["📋 AUDITORIA_AUTORIZACOES<br/><i>Guias TISS/TUSS de procedimentos</i>"]
+        F4["📁 PRONTUARIO_ELETRONICO<br/><i>Laudos (Imagem/Lab), Altas e Atestados</i>"]
+        F5["🧑‍⚕️ FILA_REVISAO_HUMANA<br/><i>Ambiguidade, rasura, score < 0.85</i>"]
+    end
+
+    subgraph OCI["Nuvem Oracle (Always Free)"]
+        BUCKET_URG[("processados/urgentes/")]
+        BUCKET_ROT[("processados/rotina/")]
+        BUCKET_AUD[("auditoria_humana/")]
+    end
+
+    DOC --> DECISAO
+
+    DECISAO -- "Urgência Alta Confiança" --> F1
+    DECISAO -- "Receituário Rotina" --> F2
+    DECISAO -- "Guia Procedimento" --> F3
+    DECISAO -- "Laudos / Atestados" --> F4
+    DECISAO -- "Score Baixo / Rasura" --> F5
+    DECISAO -- "Urgência Ambígua (Caso Misto)" --> F1
+    DECISAO -- "Urgência Ambígua (Caso Misto)" --> F5
+
+    F1 --> BUCKET_URG
+    F2 --> BUCKET_ROT
+    F3 --> BUCKET_ROT
+    F4 --> BUCKET_ROT
+    F5 --> BUCKET_AUD
+
+    style F1 fill:#F8D7DA,stroke:#721C24,stroke-width:2px
+    style F5 fill:#FFF3CD,stroke:#856404,stroke-width:2px
+    style F2 fill:#D4EDDA,stroke:#155724,stroke-width:2px
+    style F3 fill:#D4EDDA,stroke:#155724,stroke-width:2px
+    style F4 fill:#D4EDDA,stroke:#155724,stroke-width:2px
+```
+
+---
+
+## 6. 📋 Dicionário de Componentes e Modelos
 
 | Modelo | Arquivo | Responsabilidade | Sub-entidades Contidas |
 | :--- | :--- | :--- | :--- |
@@ -247,9 +342,10 @@ flowchart TD
 
 ---
 
-## 5. 🛡️ Garantias e Regras de Qualidade dos Schemas
+## 7. 🛡️ Garantias e Regras de Qualidade dos Schemas
 
 1. **Proteção Extra (`extra="ignore"`):** Todos os modelos aceitam payloads com campos adicionais sem quebrar a desserialização, garantindo interoperabilidade entre agentes e versões da API.
 2. **Propriedades de Conveniência:** Suporte transparente a nomes legados (`medico_solicitante`, `diagnostico_principal`, `cid_extraido`, `cid_sugerido`, `score_confianca_classificacao`).
 3. **Ponto Fixo e Idempotência:** Uma instância de `TriagemMediFlow` revalidada (`TriagemMediFlow.model_validate(obj.model_dump())`) preserva rigorosamente o mesmo estado, sem oscilação de score ou destinos.
-4. **Cobertura de Testes:** 100% dos modelos são validados contra os **79 fixtures canônicos** em [`tests/test_contrato_fixtures.py`](../../tests/test_contrato_fixtures.py) e [`tests/test_schemas.py`](../../tests/test_schemas.py).
+4. **Cobertura Integral de Testes:** 100% dos modelos são validados contra os **79 fixtures canônicos** e auditados pelos **150 testes automatizados** em [`tests/test_contrato_fixtures.py`](../../tests/test_contrato_fixtures.py), [`tests/test_schemas.py`](../../tests/test_schemas.py) e [`tests/test_workflow.py`](../../tests/test_workflow.py).
+

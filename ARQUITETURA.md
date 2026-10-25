@@ -4,7 +4,7 @@
 > **Projeto 2:** Agente Autônomo para Triagem, Extração e Roteamento de Documentos Clínicos  
 > **Equipe 15:** MediFlow  
 > **Manual Oficial de Referência:** `34aa946f-2883-4917-aec1-aae0df0f43d1.pdf`  
-> **Implementação Central:** [`src/schemas/clinical.py`](src/schemas/clinical.py) | **Suíte de Testes:** 149 testes automatizados via Pytest  
+> **Implementação Central:** [`src/schemas/clinical.py`](src/schemas/clinical.py) | **Suíte de Testes:** 150 testes automatizados via Pytest  
 
 ---
 
@@ -152,27 +152,58 @@ A camada de apresentação do MediFlow adota a **Estratégia Dual**, garantindo 
 
 ---
 
-## ⚖️ 4. O Grafo de Decisão Clínica (LangGraph)
+## ⚖️ 4. O Grafo de Decisão Clínica (LangGraph) e Ciclo de Vida
+
+### 4.1 Máquina de Estados e Ciclo de Vida da Triagem
+
+O ciclo de vida de qualquer documento processado pelo **MediFlow** transita de forma estrita e rastreável pelos estados controlados pelo enum `StatusTriagem`:
+
+```mermaid
+stateDiagram-v2
+    [*] --> RECEBIDO: Upload via API / Streamlit
+    RECEBIDO --> PROCESSANDO: Ingestão validada & início do pipeline
+    
+    state PROCESSANDO {
+        [*] --> IngestaoSanitizacao: Validação 10MB / 20 págs / MIME
+        IngestaoSanitizacao --> ExtracaoMultimodal: Gemini 1.5 + Schemas
+        ExtracaoMultimodal --> AvaliacaoRegras: Pydantic v2 & LangGraph
+        AvaliacaoRegras --> [*]
+    }
+
+    PROCESSANDO --> PROCESSADO: Score >= 0.85 & Vitais Presentes
+    PROCESSANDO --> EM_REVISAO: Score < 0.85 ou Incerteza / Ausência de Vital
+    PROCESSANDO --> ERRO_PROCESSAMENTO: Falha de Leitura / PDF Corrompido / Senha
+    
+    PROCESSADO --> PersistenciaOCI: Salva em /processados (/rotina ou /urgentes)
+    EM_REVISAO --> PersistenciaOCI: Salva em /auditoria_humana
+    ERRO_PROCESSAMENTO --> [*]: Retorna ErroResposta / ErroProcessamento
+
+    PersistenciaOCI --> [*]: Fim do Pipeline
+    PersistenciaOCI --> ERRO_PERSISTENCIA: Falha no Upload OCI SDK
+    ERRO_PERSISTENCIA --> [*]
+```
+
+### 4.2 O Grafo de Decisão Clínica (LangGraph)
 
 O fluxo de decisão segue um grafo determinístico modelado com o **LangGraph**:
 
 ```mermaid
 graph TD
-    Start([Início da Triagem]) --> NodeExtract[Nó: Extração & Validação Pydantic]
-    NodeExtract --> NodeRules[Nó: Avaliação de Regras Clínicas & Conflitos]
-    NodeRules --> CondScore{Avaliação Condicional:<br/>Score Combinado >= 0.85 &<br/>5 Campos Vitais Presentes?}
+    Start(["Início da Triagem"]) --> NodeExtract["Nó: Extração & Validação Pydantic"]
+    NodeExtract --> NodeRules["Nó: Avaliação de Regras Clínicas & Conflitos"]
+    NodeRules --> CondScore{"Avaliação Condicional:<br/>Score Combinado >= 0.85 &<br/>5 Campos Vitais Presentes?"}
 
-    CondScore -- "NÃO: Score < 0.85 OU Ausência de Vital" --> CondUrgenciaNegativa{Urgência Clínica Declarada?}
-    CondUrgenciaNegativa -- "Não Urgente" --> NodeRevisao[Destino: FILA_REVISAO_HUMANA<br/>Status: EM_REVISAO]
-    CondUrgenciaNegativa -- "Urgente" --> NodeMisto[Destino Duplo: FILA_URGENCIA_MEDICA + FILA_REVISAO_HUMANA<br/>Status: EM_REVISAO + Alerta Plantão]
+    CondScore -- "NÃO: Score < 0.85 OU Ausência de Vital" --> CondUrgenciaNegativa{"Urgência Clínica Declarada?"}
+    CondUrgenciaNegativa -- "Não Urgente" --> NodeRevisao["Destino: FILA_REVISAO_HUMANA<br/>Status: EM_REVISAO"]
+    CondUrgenciaNegativa -- "Urgente" --> NodeMisto["Destino Duplo: FILA_URGENCIA_MEDICA + FILA_REVISAO_HUMANA<br/>Status: EM_REVISAO + Alerta Plantão"]
 
-    CondScore -- "SIM: Alta Confiança & Completo" --> CondTipo{Avaliação de Prioridade & Tipo Documental}
-    CondTipo -- "Prioridade URGENTE" --> NodeUrgencia[Destino: FILA_URGENCIA_MEDICA<br/>Status: PROCESSADO + Notificação Imediata]
-    CondTipo -- "RECEITUARIO_MEDICO" --> NodeFarmacia[Destino: FARMACIA_HOSPITALAR<br/>Status: PROCESSADO]
-    CondTipo -- "GUIA_PROCEDIMENTO" --> NodeAuditoria[Destino: AUDITORIA_AUTORIZACOES<br/>Status: PROCESSADO]
-    CondTipo -- "Outros Tipos de Rotina" --> NodeProntuario[Destino: PRONTUARIO_ELETRONICO<br/>Status: PROCESSADO]
+    CondScore -- "SIM: Alta Confiança & Completo" --> CondTipo{"Avaliação de Prioridade & Tipo Documental"}
+    CondTipo -- "Prioridade URGENTE" --> NodeUrgencia["Destino: FILA_URGENCIA_MEDICA<br/>Status: PROCESSADO + Notificação Imediata"]
+    CondTipo -- "RECEITUARIO_MEDICO" --> NodeFarmacia["Destino: FARMACIA_HOSPITALAR<br/>Status: PROCESSADO"]
+    CondTipo -- "GUIA_PROCEDIMENTO" --> NodeAuditoria["Destino: AUDITORIA_AUTORIZACOES<br/>Status: PROCESSADO"]
+    CondTipo -- "Outros Tipos de Rotina" --> NodeProntuario["Destino: PRONTUARIO_ELETRONICO<br/>Status: PROCESSADO"]
 
-    NodeRevisao --> EndNode([Fim da Triagem])
+    NodeRevisao --> EndNode(["Fim da Triagem"])
     NodeMisto --> EndNode
     NodeUrgencia --> EndNode
     NodeFarmacia --> EndNode
@@ -180,18 +211,33 @@ graph TD
     NodeProntuario --> EndNode
 ```
 
-### Regras Clínicas de Roteamento (R1 a R8):
-1. **Fórmula do Score Combinado (Regra R5):**  
-   $$\text{score\_combinado} = \min(\text{score\_classificacao}, \text{score\_extracao})$$
-2. **Limiar Clínico Estrito ($0.85$):**  
-   - $\ge 0.85$ sem conflitos impeditivos $\rightarrow$ **Aprovado para roteamento automático (`PROCESSADO`)**.
-   - $< 0.85$ $\rightarrow$ **Retido para revisão humana (`EM_REVISAO`)**.
-3. **Os 5 Campos Vitais Obrigatórios (RF-21 / Regra R6):**  
-   `paciente.nome`, `paciente.idade`, `medico.nome`, `medico.crm`, `diagnostico`. A ausência de qualquer um deles retém o documento em `EM_REVISAO`.
-4. **Tratamento de Urgência Conforme o Edital (Regra R1):**  
-   Urgência bem documentada e sem ambiguidades termina com status `PROCESSADO`, `requer_auditoria_humana = False` e destino único `FILA_URGENCIA_MEDICA`.
-5. **Casos Mistos (Regra R4):**  
-   Urgência acompanhada de rasura ou ambiguidade gera atribuição dupla (`FILA_URGENCIA_MEDICA` + `FILA_REVISAO_HUMANA`) em `EM_REVISAO` com `requer_auditoria_humana = True`.
+### 4.3 As 8 Regras Clínicas Determinísticas de Roteamento (R1 a R8):
+
+1. **Regra R1 (Urgência com Alta Confiança):**  
+   Urgência bem documentada (`prioridade == URGENTE` ou `urgencia == SIM`), score combinado $\ge 0.85$ e campos vitais completos.  
+   ➔ **Destino:** `[FILA_URGENCIA_MEDICA]`, **Status:** `PROCESSADO`, **Auditoria Humana:** `False`, com emissão de alerta imediato.
+2. **Regra R2 (Rotina de Alta Confiança - Roteamento por Tipo Documental):**  
+   Score combinado $\ge 0.85$, sem pendências vitais e sem urgência.  
+   ➔ `RECEITUARIO_MEDICO` $\rightarrow$ `[FARMACIA_HOSPITALAR]`  
+   ➔ `GUIA_PROCEDIMENTO` $\rightarrow$ `[AUDITORIA_AUTORIZACOES]`  
+   ➔ `LAUDO_EXAME_IMAGEM`, `LAUDO_EXAME_LABORATORIAL`, `RELATORIO_ALTA_INTERNACAO`, `ATESTADO_MEDICO` $\rightarrow$ `[PRONTUARIO_ELETRONICO]`  
+   ➔ **Status:** `PROCESSADO`, **Auditoria Humana:** `False`.
+3. **Regra R3 (Score Baixo ou Conflitos Impeditivos):**  
+   Score combinado $< 0.85$, campos incertos presentes ou conflitos de gravidade `ALTA` ou `MEDIA` (ex.: sobredosagem medicamentosa, CRM inválido).  
+   ➔ **Destino:** `[FILA_REVISAO_HUMANA]`, **Status:** `EM_REVISAO`, **Auditoria Humana:** `True`.
+4. **Regra R4 (Casos Mistos - Urgência com Ambiguidade ou Ilegibilidade):**  
+   Urgência clínica combinada com score baixo, dados truncados ou rasura.  
+   ➔ **Destinos Duplos:** `[FILA_URGENCIA_MEDICA, FILA_REVISAO_HUMANA]`, **Status:** `EM_REVISAO`, **Auditoria Humana:** `True`, com disparo de alerta de emergência simultâneo.
+5. **Regra R5 (Fórmula Canônica do Score Combinado):**  
+   `score_combinado = min(score_classificacao, score_extracao)`  
+   As penalidades determinísticas de qualidade (conflitos ALTA: `-0.30`, MEDIA: `-0.20`, BAIXA: `-0.10`, vitais ausentes: `-0.20` e incertezas: `-0.10`) são abatidas no cálculo prévio do `score_extracao` (com piso em `0.0`). Se `score_combinado < 0.85`, a revisão humana é acionada.
+6. **Regra R6 (Trava de Segurança dos 5 Campos Vitais - RF-21):**  
+   Campos vitais obrigatórios: `paciente.nome`, `paciente.idade`, `medico.nome`, `medico.crm`, `diagnostico` (ou analitos laboratoriais). A ausência de qualquer um deles retém o documento compulsoriamente em `EM_REVISAO`.
+7. **Regra R7 (Documentos Não Classificados ou Fora de Escopo):**  
+   Tipos `OUTRO`, `NAO_IDENTIFICADO` ou sem mapeamento departamental direto.  
+   ➔ **Destino:** `[FILA_REVISAO_HUMANA]`, **Status:** `EM_REVISAO`, **Auditoria Humana:** `True`.
+8. **Regra R8 (Garantia de Idempotência e Ponto Fixo):**  
+   A revalidação sucessiva de qualquer payload (`TriagemMediFlow.model_validate(obj.model_dump())`) preserva exatamente o mesmo estado, sem oscilações de scores, destinos ou flags.
 
 ---
 
@@ -281,7 +327,7 @@ mediflow-documentos-clinicos/ (Bucket OCI Always Free)
 
 ---
 
-## 🧪 7. Engenharia de Qualidade e Suíte de Testes (149 Testes)
+## 🧪 7. Engenharia de Qualidade e Suíte de Testes (150 Testes)
 
 A conformidade do MediFlow com os requisitos funcionais e com o edital da Oracle é auditada por uma suíte de 150 testes automatizados no Pytest:
 
