@@ -21,6 +21,8 @@ O contrato responde a quatro perguntas fundamentais:
 
 O contrato é **executável e determinístico**: implementado via Pydantic v2 em [`src/schemas/clinical.py`](../../src/schemas/clinical.py), ele aplica as regras no `@model_validator` e valida os 79 fixtures oficiais como instâncias estritas.
 
+> 📊 **Guia Visual Completo dos Schemas:** Para visualizar os diagramas de classes, relacionamentos de enums e o fluxograma determinístico das regras R1 a R8, consulte o [**Guia Visual dos Schemas (VISUAL_SCHEMAS.md)**](VISUAL_SCHEMAS.md).
+
 ---
 
 ## 2. Enums Controlados (Fonte Única com Resiliência Automática)
