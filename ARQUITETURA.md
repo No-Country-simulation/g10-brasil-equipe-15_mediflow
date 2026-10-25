@@ -34,8 +34,14 @@ O MediFlow é estruturado em 5 camadas funcionais desacopladas e auditáveis:
 ```mermaid
 flowchart TD
     subgraph CLIENTS["🖥️ Camada de Interface & Exposição"]
-        UI["🖥️ Streamlit Web App<br/>(Triagem Visual & Painel HiTL)"]
-        API_CLI["🌐 API REST FastAPI<br/>(Endpoints Assíncronos / HIS)"]
+        REACT["⚛️ Portal Web Hospitalar (React SPA)<br/><i>Interface Corporativa de Produção</i>"]
+        STREAMLIT["🔬 Bancada de Auditoria Médica (Streamlit)<br/><i>Painel de Testes & Human-in-the-Loop</i>"]
+        API_CLI["🌐 Sistemas Hospitalares Externos (HIS / PEP)<br/><i>Integração REST B2B</i>"]
+    end
+
+    subgraph API_GATEWAY["⚡ Gateway FastAPI Server (src/api/)"]
+        EP_POST["POST /api/v1/triagens<br/>(HTTP 202 Accepted)"]
+        EP_GET["GET /api/v1/triagens/{id}<br/>(Polling de Resultados)"]
     end
 
     subgraph INGESTION["📥 Camada 1: Ingestão & Gateway de Proteção"]
@@ -68,7 +74,11 @@ flowchart TD
         OCI_AUDIT[("Bucket OCI: /auditoria_humana<br/>(Documentos retidos)")]
     end
 
-    CLIENTS -->|Upload de Documento| LOADER
+    REACT -->|Upload & Polling| API_GATEWAY
+    STREAMLIT -->|Upload Direto / REST| API_GATEWAY
+    API_CLI -->|Integração B2B| API_GATEWAY
+
+    API_GATEWAY -->|Encaminha Documento| LOADER
     LOADER --> VAL_RULES
     VAL_RULES -- "Rejeitado" --> ERR_GATEWAY
     VAL_RULES -- "Aprovado" --> OCI_IN
@@ -89,7 +99,8 @@ flowchart TD
     Q_REV --> OCI_AUDIT
     Q_MISTO --> OCI_AUDIT
     
-    Q_REV -.->|Feedback Médico Human-in-the-Loop| UI
+    Q_REV -.->|Feedback Médico Human-in-the-Loop| STREAMLIT
+    Q_REV -.->|Aprovação Médica HiTL| REACT
 ```
 
 ---
@@ -123,9 +134,21 @@ flowchart TD
 - **Objetivo:** Persistência em nuvem segura em conformidade com as diretrizes do edital da Oracle.
 - **Política Always Free:** Utiliza exclusivamente a camada gratuita da Oracle Cloud Infrastructure, segregando objetos em pastas lógicas no bucket `mediflow-documentos-clinicos`.
 
-### 3.5 Camada 5: Apresentação e Integração (`src/app/` e `src/api/`)
-- **Streamlit Web App:** Tela visual intuitiva para upload rápido, visualização de documentos originais lado a lado com os dados extraídos, e bancada de revisão clínica (*Human-in-the-Loop*).
-- **FastAPI Server:** Interface RESTful assíncrona (`POST /api/v1/triagens` respondendo com `HTTP 202 Accepted` e `GET /api/v1/triagens/{id}` para polling do resultado).
+### 3.5 Camada 5: Apresentação e Integração (Estratégia Dual: React + Streamlit via FastAPI)
+A camada de apresentação do MediFlow adota a **Estratégia Dual**, garantindo aderência total ao edital da Oracle e maturidade de engenharia corporativa:
+
+- **Portal Web Corporativo (React SPA — Giovane):**
+  - Frontend moderno em React (Single Page Application) desenvolvido para ambiente de produção hospitalar.
+  - Interface rica com upload *drag-and-drop*, dashboards de produtividade médica, renderização em alta resolução de laudos e receitas, e tela avançada de triagem clínica.
+  - Opera de forma 100% desacoplada, consumindo a API REST assíncrona via HTTP/JSON.
+
+- **Bancada de Triagem & Auditoria Médica (Streamlit — `src/app/streamlit_app.py`):**
+  - Painel visual interativo em Python que atende ao diferencial oficial do checklist da Oracle (*"Painel de Auditoria Human-in-the-Loop em Streamlit"*).
+  - Funciona como bancada operacional de testes rápidos para a equipe de engenharia e auditores médicos, permitindo inspecionar o JSON estruturado lado a lado com a mídia original.
+
+- **FastAPI REST Gateway (`src/api/`):**
+  - Servidor backend padronizado com documentação OpenAPI/Swagger interativa automática (`/docs`).
+  - Responde com `HTTP 202 Accepted` em operações assíncronas e gerencia a esteira de Background Tasks, servindo de forma agnóstica tanto ao React quanto ao Streamlit e a sistemas legados hospitalares (HIS/PEP).
 
 ---
 
@@ -260,7 +283,7 @@ mediflow-documentos-clinicos/ (Bucket OCI Always Free)
 
 ## 🧪 7. Engenharia de Qualidade e Suíte de Testes (149 Testes)
 
-A conformidade do MediFlow com os requisitos funcionais e com o edital da Oracle é auditada por uma suíte de 149 testes automatizados no Pytest:
+A conformidade do MediFlow com os requisitos funcionais e com o edital da Oracle é auditada por uma suíte de 150 testes automatizados no Pytest:
 
 | Módulo de Teste | Quantidade | Escopo e Cobertura Técnica |
 | :--- | :---: | :--- |
@@ -292,9 +315,106 @@ pip install -r requirements.txt
 cp .env.example .env
 # Configurar GEMINI_API_KEY e credenciais OCI Always Free
 
-# 5. Executar a suíte completa de 149 testes automatizados
+# 5. Executar a suíte completa de 150 testes automatizados
 python -m pytest
 
-# 6. Iniciar a interface web de demonstração (Streamlit)
-streamlit run src/app/main.py
+# 6. Opção A: Iniciar o Servidor FastAPI (Backend REST para React e API)
+uvicorn src.api.main:app --reload --port 8000
+
+# 7. Opção B: Iniciar a Bancada Streamlit (Auditoria Rápida & HiTL)
+streamlit run src/app/streamlit_app.py
 ```
+
+---
+
+## 📁 9. Estrutura de Diretórios & Organização do Repositório
+
+### 9.1 Árvore Oficial Atual (Backend, IA, Nuvem & Testes)
+
+```text
+g10-brasil-equipe-15_mediflow/
+├── data/
+│   └── samples/                                <- Amostras clínicas dos 3 cenários do edital
+│       ├── 01_cenario_rotina.json              <- RX Tórax normal (Rotina ambulatorial)
+│       ├── 01_laudo_rotina.pdf                 <- PDF digital de rotina
+│       ├── 02_cenario_urgencia.json            <- TEP Agudo I26.9 (Urgência com alerta)
+│       ├── 02_laudo_urgencia_tep.pdf           <- PDF digital de urgência
+│       └── 03_cenario_ambiguidade.json         <- Receita com dose anômala (Revisão humana)
+│
+├── docs/                                       <- Documentação técnica e governança de QA
+│   ├── testes/                                 <- Central de Engenharia de Qualidade
+│   │   ├── CONTRATO_DE_DADOS.md                <- Contrato canônico unificado (fonte da verdade)
+│   │   ├── CATALOGO_DE_DOCUMENTOS_DE_TESTE.md  <- Catálogo completo dos 79 fixtures
+│   │   ├── AUDITORIA_2026-10-20.md             <- Histórico de resolução de pendências
+│   │   ├── Mapa_de_Documentos_de_Teste_MediFlow.pdf <- Matriz visual de rastreabilidade (PDF)
+│   │   └── README.md                           <- Guia de navegação de testes e QA
+│   └── GUIA_INTEGRACAO_LLM.md                  <- Guia de consumo do Ingestion Loader para IA
+│
+├── src/                                        <- Código-fonte da aplicação (Python Backend & IA)
+│   ├── agents/                                 <- Agentes de Inteligência Multimodal (Google Gemini 1.5)
+│   ├── app/                                    <- Interfaces Python (Streamlit HiTL)
+│   │   └── streamlit_app.py                    <- Painel web de auditoria médica e testes rápidos
+│   ├── ingestion/                              <- Camada de Ingestão e Gateway de Segurança
+│   │   └── loader.py                           <- Carregador blindado (10MB, 20 págs, MIME, sanitização)
+│   ├── schemas/                                <- Modelos de Dados Pydantic v2
+│   │   └── clinical.py                         <- Schemas canônicos (TriagemMediFlow, ErroResposta, etc.)
+│   ├── storage/                                <- Integração com Oracle Cloud Infrastructure (OCI)
+│   ├── workflow/                               <- Motor de Orquestração Determinística (LangGraph)
+│   │   ├── graph.py                            <- Grafo de estados, nós e cálculo de regras
+│   │   └── state.py                            <- Estrutura do GraphState compartilhado
+│   └── config.py                               <- Configurações globais e variáveis de ambiente
+│
+├── tests/                                      <- Suíte Oficial de Testes Automatizados (150 testes)
+│   ├── test_contrato_fixtures.py               <- 79 testes: ponto fixo dos fixtures e regras R1 a R8
+│   ├── test_workflow.py                        <- 46 testes: transições e arestas do LangGraph
+│   ├── test_ingestion.py                       <- 18 testes: arquivos reais, PDF, JPG, WEBP e DOCX (415)
+│   ├── test_schemas.py                         <- 7 testes: Pydantic v2 e envelopes de erro Nível 1 e 2
+│   └── fixtures/                               <- Base de 79 fixtures canônicos
+│       ├── demo/                               <- 12 casos essenciais para o pitch (TXT, PDF, JPG, JSON)
+│       ├── catalogo/                           <- 67 casos avançados (qualidade, borda, limites)
+│       └── manifest.csv                        <- Rastreabilidade formal em formato de máquina
+│
+├── ARQUITETURA.md                              <- Especificação Técnica Oficial da Arquitetura
+├── README.md                                   <- Documentação Principal do Repositório
+├── pytest.ini                                  <- Configuração corporativa do Pytest
+├── requirements.txt                            <- Dependências oficiais do ecossistema Python
+└── .env.example                                <- Modelo de chaves (Gemini API e OCI Always Free)
+```
+
+---
+
+### 9.2 Sugestão Arquitetural para o Frontend React (`frontend/`)
+
+Para manter o desacoplamento arquitetural e permitir que **Giovane e Victor** desenvolvam a Single Page Application (SPA) em React com máxima produtividade e sem misturar dependências do Node.js com o Python, recomenda-se a seguinte estrutura de pastas na raiz do projeto:
+
+```text
+frontend/                                       <- Aplicação Web Corporativa (React SPA — Giovane & Victor)
+├── public/                                     <- Assets estáticos públicos (favicons, logos hospitalares)
+├── src/
+│   ├── assets/                                 <- Imagens, ícones médicos SVG e estilos
+│   ├── components/                             <- Componentes de UI modulares e reutilizáveis
+│   │   ├── common/                             <- Botões, Badges de Status, Modais, Spinners de Loading
+│   │   ├── triage/                             <- CardTriagem, ScoreBadge, TabelaMedicamentos, AlertaUrgencia
+│   │   ├── viewer/                             <- Visualizador de PDF e Imagens Lado a Lado
+│   │   └── upload/                             <- Dropzone com validação prévia de tamanho (10MB no client)
+│   ├── hooks/                                  <- Custom React Hooks
+│   │   ├── useTriage.ts                        <- Disparo de triagem e controle de requisições
+│   │   └── usePolling.ts                       <- Polling assíncrono para GET /api/v1/triagens/{id}
+│   ├── pages/                                  <- Telas / Rotas da Aplicação
+│   │   ├── HomePage.tsx                        <- Apresentação e visão geral do MediFlow
+│   │   ├── UploadPage.tsx                      <- Tela de envio e pré-visualização de documentos
+│   │   ├── DashboardPage.tsx                   <- Visão geral das filas hospitalares (Kanban de triagem)
+│   │   └── AuditPage.tsx                       <- Bancada Human-in-the-Loop para casos EM_REVISAO
+│   ├── services/                               <- Camada de Comunicação com o Backend
+│   │   └── api.ts                              <- Cliente Axios configurado para a API FastAPI
+│   ├── types/                                  <- Tipagens TypeScript sincronizadas com o Contrato
+│   │   └── clinical.ts                         <- Interface TriagemMediFlow, Enums, ErroResposta
+│   ├── styles/                                 <- Configurações de TailwindCSS e temas visuais
+│   ├── App.tsx                                 <- Gerenciador de rotas e layout global
+│   └── main.tsx                                <- Ponto de entrada da aplicação
+├── package.json                                <- Dependências do ecossistema Node/React (Vite, Axios, Tailwind)
+├── vite.config.ts                              <- Configuração do bundler Vite (com proxy para http://localhost:8000)
+├── tailwind.config.js                          <- Design System médico (paleta: azul, verde, vermelho de alerta)
+└── README.md                                   <- Guia rápido de instalação (npm install && npm run dev)
+```
+

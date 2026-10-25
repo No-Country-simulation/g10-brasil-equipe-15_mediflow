@@ -48,11 +48,12 @@ O **MediFlow** atua como um **Agente Autônomo Multimodal** que lê documentos c
 
 | Ícone | Funcionalidade | Descrição Técnica |
 | :---: | :--- | :--- |
-| 🚀 | **Ingestão Assíncrona** | API REST em **FastAPI** respondendo com `HTTP 202 Accepted` + polling (`GET`), evitando *timeouts* durante a inferência. |
+| 🚀 | **Ingestão Blindada & Assíncrona** | Validação estrita de limites de segurança (**10.00MB** e **20 páginas** - Regra A6). Suporte a PDF, TXT e Imagens (JPG, PNG, WEBP), com rejeição imediata de DOCX (HTTP 415) e resposta assíncrona (`HTTP 202 Accepted`). |
 | 🛡️ | **Contratos Estritos Pydantic v2** | Separação entre os 5 campos vitais (*Paciente, Idade, Médico, CRM, Diagnóstico*) e campos neutros, garantindo **fidelidade sem alucinações**. |
 | 🛑 | **Trava Human-in-the-Loop (HITL)** | Retenção automática em `EM_REVISAO` se o score combinado for `< 0.85`, se houver rasura ou ausência de dado vital. |
-| 🚨 | **Gerenciamento de Casos Mistos** | Atribuição dupla e síncrona para casos de urgência com rasura (`FILA_EMERGENCIA_MEDICA` + `FILA_REVISAO_HUMANA`). |
-| ☁️ | **Persistência Segura OCI** | Armazenamento automático segregado nas pastas `/recebidos`, `/processados` e `/auditoria_humana` na nuvem Oracle. |
+| 🚨 | **Gerenciamento de Casos Mistos** | Atribuição dupla e síncrona para casos de urgência com ambiguidade (`FILA_URGENCIA_MEDICA` + `FILA_REVISAO_HUMANA`). |
+| ☁️ | **Persistência Segura OCI** | Armazenamento automático segregado nas pastas `/recebidos`, `/processados` e `/auditoria_humana` na nuvem Oracle Always Free. |
+| 🖥️ | **Estratégia Dual de Frontend** | **Portal Corporativo em React SPA (Giovane & Victor)** para produção + **Bancada Streamlit (HiTL)** para testes rápidos e auditoria médica. |
 
 > [!IMPORTANT]
 > **Regra do Limiar de Confiança (\\(0.85\\)):** O score de confiança combinado é calculado por \\(\min(\text{score\_classificacao}, \text{score\_extracao})\\). Qualquer documento abaixo de **0.85** é travado para revisão humana.
@@ -66,7 +67,7 @@ O ciclo de vida do documento no **MediFlow** é totalmente desacoplado e assínc
 ```mermaid
 flowchart TD
     subgraph INGESTION["1. Ingestão & API REST"]
-        A["📄 Documento Clínico"] -->|POST /api/v1/triagens| B["⚡ FastAPI Server"]
+        A["🖥️ Clientes Web & Interfaces<br/>(React SPA / Streamlit HiTL)"] -->|POST /api/v1/triagens| B["⚡ FastAPI Server"]
         B -->|HTTP 202 Accepted| A
     end
 
@@ -160,16 +161,31 @@ Testamos a robustez do **MediFlow** através dos 3 cenários clínicos obrigató
 ## 📁 Estrutura do Repositório
 
 ```text
-📂 mediflow/
- ├── 📄 README.md                            # Documentação principal estilizada (v2.0)
- ├── 📜 MediFlow_Especificacao_Funcional_v1.0.pdf # Especificação funcional e requisitos
- ├── 🐍 schema_mediflow_v2.py                # Contrato Pydantic v2 de validação clínica
- ├── 🐍 app_mediflow_fastapi_v2.py           # API REST FastAPI com ingestão assíncrona
- ├── 🐍 cenarios_teste_mediflow_v2.py        # Suíte de testes automatizada (3 cenários)
- ├── 🐍 prompt_clinico_mediflow.py           # System Prompts clínicos para o Gemini
- ├── 🐍 teste_oci_mediflow.py                # Script de validação dos buckets OCI
- └── 📊 mediflow-trello-import.csv           # Matriz de tarefas e planejamento
+g10-brasil-equipe-15_mediflow/
+├── data/                                       # Amostras clínicas dos 3 cenários do edital (PDF/JSON)
+├── docs/                                       # Governança de testes, contratos de dados e guias
+│   └── testes/                                 # Contrato Canônico, Catálogo dos 79 Fixtures e Auditorias
+├── src/                                        # Código-fonte da aplicação (Python Backend & IA)
+│   ├── agents/                                 # Agentes de Inteligência Multimodal (Google Gemini 1.5)
+│   ├── app/                                    # Bancada Streamlit de testes rápidos e auditoria médica
+│   ├── ingestion/                              # Ingestão blindada (10MB, 20 págs, sanitização de PDF/TXT/Imagens)
+│   ├── schemas/                                # Contrato Canônico Pydantic v2 (clinical.py)
+│   ├── storage/                                # Persistência OCI Object Storage Always Free
+│   ├── workflow/                               # Grafo de Decisão Clínica LangGraph (StateGraph)
+│   └── config.py                               # Configurações globais e variáveis de ambiente
+├── tests/                                      # Suíte Oficial Pytest com 150 testes automatizados
+│   ├── fixtures/                               # 79 fixtures canônicos (demo, catalogo, manifest.csv)
+│   ├── test_contrato_fixtures.py               # 79 testes de regras R1 a R8 e ponto fixo
+│   ├── test_workflow.py                        # 46 testes de roteamento e arestas LangGraph
+│   ├── test_ingestion.py                       # 18 testes de arquivos físicos e limites de segurança
+│   └── test_schemas.py                         # 7 testes de validação Pydantic v2
+├── frontend/                                   # (Recomendado) Portal Web Corporativo (React SPA - Giovane & Victor)
+├── ARQUITETURA.md                              # Especificação Técnica Oficial da Arquitetura
+├── README.md                                   # Documentação Principal do Repositório
+├── pytest.ini                                  # Configuração corporativa do Pytest
+└── requirements.txt                            # Dependências oficiais do ecossistema Python
 ```
+> 🔍 *Para visualizar a hierarquia detalhada com subdiretórios e a arquitetura completa do frontend React, consulte o [**Guia de Arquitetura (ARQUITETURA.md)**](ARQUITETURA.md#📁-9-estrutura-de-diretórios--organização-do-repositório).*
 
 ---
 
@@ -185,7 +201,7 @@ Testamos a robustez do **MediFlow** através dos 3 cenários clínicos obrigató
 | **Marcelo Petitot Rezende** | ⚙️ Backend Architect | API REST FastAPI Assíncrona & Docker |
 | **Cristiano Oliveira** | 🔌 Backend Developer | Endpoints de Ingestão & Notificações |
 | **Victor Marcelo** | 🎨 Frontend Developer | React Interface, Figma Wireframes & UX |
-| **William** | 🧪 QA & Requirements Lead | Especificação Funcional v1.0 & Suíte de 67 Testes |
+| **William** | 🧪 QA & Requirements Lead | Especificação Funcional v1.0 & Suíte de 150 Testes Pytest |
 | **Gisele Oliveira** | 🧠 AI & Data Support | Suporte em Arquitetura & Suíte de Dados |
 | **Alexander Lin** | 🔄 Integration Support | Suporte em APIs, Automações & Pitch Support |
 
@@ -197,19 +213,33 @@ Testamos a robustez do **MediFlow** através dos 3 cenários clínicos obrigató
 
 ### 1️⃣ Clonar o Repositório & Instalar Dependências
 ```bash
-git clone [suspicious link removed]
-cd mediflow
-pip install fastapi uvicorn pydantic oci google-generativeai httpx
+git clone https://github.com/No-Country-simulation/g10-brasil-equipe-15_mediflow.git
+cd g10-brasil-equipe-15_mediflow
+
+# Crie e ative seu ambiente virtual Python
+python -m venv .venv
+.venv\Scripts\activate   # No Windows (ou source .venv/bin/activate no Linux/Mac)
+
+# Instale as dependências oficiais
+pip install -r requirements.txt
+cp .env.example .env
 ```
 
-### 2️⃣ Executar a Bateria de Testes Automatizada
+### 2️⃣ Executar a Bateria de 150 Testes Automatizados
 ```bash
 python -m pytest
 ```
 
-### 3️⃣ Subir o Servidor FastAPI
+### 3️⃣ Iniciar as Aplicações
+
+- **Opção A: Bancada de Testes & Auditoria Streamlit (HiTL)**
 ```bash
-uvicorn app_mediflow_fastapi_v2:app --reload --port 8000
+streamlit run src/app/streamlit_app.py
+```
+
+- **Opção B: Servidor FastAPI (Backend REST para React e HIS)**
+```bash
+uvicorn src.api.main:app --reload --port 8000
 ```
 > 🌐 **Swagger UI:** Acesse a documentação interativa das rotas em `http://localhost:8000/docs`
 
