@@ -151,7 +151,7 @@ with st.sidebar:
         uploaded_file = st.file_uploader(
             "Arraste ou selecione um laudo/receita:",
             type=["pdf", "png", "jpg", "jpeg", "txt"],
-            help="Formatos aceitos: PDF, TXT ou Imagens (Máx: 20MB)"
+            help="Formatos aceitos: PDF, TXT ou Imagens (Máx: 10MB / 20 páginas)"
         )
         
         if uploaded_file is not None:

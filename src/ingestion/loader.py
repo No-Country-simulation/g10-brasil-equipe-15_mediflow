@@ -77,7 +77,7 @@ class DocumentoIngerido(BaseModel):
 class DocumentLoader:
     """Carregador robusto com proteções de segurança, encoding e integridade."""
 
-    FORMATOS_SUPORTADOS = {".pdf", ".txt", ".png", ".jpg", ".jpeg"}
+    FORMATOS_SUPORTADOS = {".pdf", ".txt", ".png", ".jpg", ".jpeg", ".webp"}
     LIMITE_MAXIMO_BYTES = 10 * 1024 * 1024  # 10 MB (alinhado aos testes de limites do MVP)
     LIMITE_MAXIMO_PAGINAS = 20              # Máximo 20 páginas por documento
 

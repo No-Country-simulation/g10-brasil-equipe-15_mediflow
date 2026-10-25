@@ -12,7 +12,7 @@ Para facilitar a integração entre a **etapa de ingestão de arquivos** e o **A
 
 ## 1. Como Chamar o Carregador de Documentos
 
-O módulo de ingestão está pronto e centralizado na classe `DocumentLoader`. Ele já faz toda a parte de segurança (limite de 20MB, tratamento de PDFs protegidos/corrompidos e detecção de codificação):
+O módulo de ingestão está pronto e centralizado na classe `DocumentLoader`. Ele já faz toda a parte de segurança (limite de 10MB e 20 páginas, tratamento de PDFs protegidos/corrompidos e detecção de codificação):
 
 ```python
 from src.ingestion import DocumentLoader

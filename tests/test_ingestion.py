@@ -227,3 +227,16 @@ def test_ingestao_fixture_william_imagem_multimodal():
     assert doc.requer_ocr is True
     assert doc.conteudo_bytes is not None
     assert len(doc.conteudo_bytes) > 0
+
+
+def test_ingestao_fixture_william_imagem_webp():
+    """Valida suporte a imagem no formato moderno WEBP (alinhado a Limite_Formato_Webp - A6)."""
+    webp_fixture = FIXTURES_DIR / "catalogo" / "Limite_Formato_Webp" / "Limite_Formato_Webp.webp"
+    assert webp_fixture.exists(), "Fixture WEBP deve existir em tests/fixtures/catalogo/"
+
+    doc = DocumentLoader.carregar_arquivo(webp_fixture)
+    assert doc.formato == "WEBP"
+    assert doc.requer_ocr is True
+    assert doc.conteudo_bytes is not None
+    assert doc.metadados["mime"] == "image/webp"
+    assert len(doc.conteudo_bytes) > 0

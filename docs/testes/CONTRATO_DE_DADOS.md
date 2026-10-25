@@ -165,7 +165,7 @@ Entrada de Documento
 
 | Nível de Erro | Formato Retornado | Quando Ocorre | Exemplos nos Fixtures |
 | :--- | :--- | :--- | :--- |
-| **Nível 1: Requisição Inválida (HTTP)** | `ErroResposta {http, codigo_funcional, mensagem}` | O documento é rejeitado no portão de entrada antes de entrar na esteira clínica. | Os 8 fixtures `Validacao_*` (arquivo corrompido, tamanho > 20MB, mime não suportado). |
+| **Nível 1: Requisição Inválida (HTTP)** | `ErroResposta {http, codigo_funcional, mensagem}` | O documento é rejeitado no portão de entrada antes de entrar na esteira clínica. | Os 8 fixtures `Validacao_*` (arquivo corrompido, tamanho > 10MB, mime não suportado). |
 | **Nível 2: Erro de Leitura/Processamento** | `TriagemMediFlow {status=ERRO_PROCESSAMENTO, erro={codigo, mensagem}}` | O arquivo foi aceito pelo gateway, mas sua leitura técnica falhou internamente. | `Qualidade_Pdf_ComSenha` (`PDF_PROTEGIDO`), `Qualidade_Pdf_Corrompido` (`PDF_CORROMPIDO`). |
 
 ### Exemplo JSON de Nível 1 (`ErroResposta`):
@@ -173,7 +173,7 @@ Entrada de Documento
 {
   "http": 413,
   "codigo_funcional": "ARQUIVO_MAIOR_QUE_LIMITE",
-  "mensagem": "O arquivo possui 22.40MB, excedendo o limite seguro de 20.00MB."
+  "mensagem": "O arquivo possui 10.50MB, excedendo o limite de 10.00MB."
 }
 ```
 

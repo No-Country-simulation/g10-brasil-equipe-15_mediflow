@@ -260,7 +260,7 @@ def test_contrato_erros_leitura_e_requisicao():
     erro_req = ErroResposta(
         http=413,
         codigo_funcional=CodigoErro.ARQUIVO_MAIOR_QUE_LIMITE,
-        mensagem="O arquivo possui 25.00MB, excedendo o limite de 20.00MB."
+        mensagem="O arquivo possui 10.50MB, excedendo o limite de 10.00MB."
     )
     assert erro_req.http == 413
     assert erro_req.codigo_funcional == CodigoErro.ARQUIVO_MAIOR_QUE_LIMITE

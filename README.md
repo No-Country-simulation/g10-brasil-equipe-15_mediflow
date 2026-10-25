@@ -76,7 +76,7 @@ flowchart TD
 
     subgraph AI_ENGINE["3. Inteligência Multimodal"]
         B -->|Background Task| D["🧠 Google Gemini Multimodal"]
-        D -->|Extração de Entidades| E["📋 Pydantic v2 Contract<br/>(schema_mediflow_v2.py)"]
+        D -->|Extração de Entidades| E["📋 Pydantic v2 Contract<br/>(src/schemas/clinical.py)"]
     end
 
     subgraph ROUTING["4. Orquestrador LangGraph"]
