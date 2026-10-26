@@ -3,7 +3,7 @@
 > **Hackathon ONE G10 — Oracle Next Education & Alura**  
 > **Projeto 2:** Agente Autônomo para Triagem, Extração e Roteamento de Documentos Clínicos  
 > **Manual de Referência:** `34aa946f-2883-4917-aec1-aae0df0f43d1.pdf`  
-> **Status da Aplicação:** 184 testes automatizados via Pytest  
+> **Status da Aplicação:** 192 testes automatizados via Pytest  
 
 Bem-vindo ao guia oficial de contribuição do **MediFlow**! Este documento foi desenhado para orientar os 9 integrantes da equipe no fluxo de trabalho diário com GitFlow, organização de pastas, responsabilidades por módulo e padrões de qualidade inegociáveis.
 
@@ -59,18 +59,22 @@ g10-brasil-equipe-15_mediflow/
 │   │   └── loader.py                           <- Carregador blindado (10MB, 20 págs, sanitização, magic bytes)
 │   ├── schemas/                                <- Modelos Canônicos Pydantic v2
 │   │   └── clinical.py                         <- Contrato oficial (TriagemMediFlow, ErroResposta, etc.)
-│   ├── storage/                                <- Integração com Oracle Cloud Infrastructure (OCI Always Free)
+│   ├── storage/                                <- Conector OCI Object Storage Always Free (oci_storage.py)
 │   ├── workflow/                               <- Motor de Orquestração Determinística (LangGraph)
 │   │   ├── graph.py                            <- Grafo de estados, nós e cálculo de regras R1 a R8
 │   │   └── state.py                            <- Estrutura do GraphState compartilhado
 │   └── config.py                               <- Configurações globais e leitura do .env
 │
-├── tests/                                      <- Suíte Oficial Pytest com 184 testes automatizados
+├── scripts/                                    <- Utilitários de homologação e scripts de diagnóstico
+│   └── testar_oci.py                           <- Validação real ponta a ponta no bucket OCI Always Free
+│
+├── tests/                                      <- Suíte Oficial Pytest com 192 testes automatizados
 │   ├── fixtures/                               <- Base de 79 fixtures canônicos (demo, catalogo, manifest.csv)
 │   ├── test_contrato_fixtures.py               <- 79 testes: ponto fixo dos fixtures e regras R1 a R8
 │   ├── test_workflow.py                        <- 73 testes: transições e arestas do LangGraph
 │   ├── test_ingestion.py                       <- 18 testes: arquivos físicos reais e limites
 │   ├── test_audit_items.py                     <- 8 testes dedicados de auditoria técnica e sanidade
+│   ├── test_oci_storage.py                     <- 8 testes: persistência OCI com SDK simulado (mock)
 │   └── test_schemas.py                         <- 7 testes: Pydantic v2 e envelopes de erro
 │
 ├── frontend/                                   <- Portal Web Corporativo em React SPA (Vite + TypeScript)
@@ -91,10 +95,10 @@ Esta tabela mapeia o que já está homologado no projeto e o que ainda precisa s
 | :--- | :--- | :--- | :---: | :--- |
 | **Ingestão & Sanitização de Arquivos** | [`src/ingestion/loader.py`](src/ingestion/loader.py) | **Cristiano Oliveira** | <mark>🟢 CONCLUÍDO</mark> | 100% blindado (10MB, 20 págs, PDF, TXT, JPG, PNG, WEBP e bloqueio de DOCX com 415). 18 testes unitários. |
 | **Contrato Canônico Pydantic v2 & Fixtures** | [`src/schemas/clinical.py`](src/schemas/clinical.py) & `docs/testes/` | **William e Luciana** | <mark>🟢 CONCLUÍDO</mark> | Schemas unificados (`TriagemMediFlow`, RF-12, enums resilientes `_missing_`), 79 fixtures canônicos validados e ponto fixo. |
-| **Motor de Decisão Clínica LangGraph** | [`src/workflow/`](src/workflow/) | **Iza Paloma M. Coelho** | <mark>🟢 CONCLUÍDO</mark> | Grafo de estados, nós de processamento, regras R1 a R8 e arestas para 5 destinos e casos mistos. 46 testes. |
+| **Motor de Decisão Clínica LangGraph** | [`src/workflow/`](src/workflow/) | **Iza Paloma M. Coelho** | <mark>🟢 CONCLUÍDO</mark> | Grafo de estados, nós de processamento, regras R1 a R8 e arestas para 5 destinos e casos mistos. 73 testes. |
 | **Bancada de Auditoria Médica Streamlit** | [`src/app/streamlit_app.py`](src/app/streamlit_app.py) | **Cristiano Oliveira e Time** | <mark>🟢 CONCLUÍDO</mark> | Painel funcional em Python para testes rápidos de laboratório e auditoria HiTL (atende ao diferencial do edital). |
+| **Persistência OCI Object Storage Always Free** | [`src/storage/`](src/storage/) & [`scripts/`](scripts/) | **Iza Paloma M. Coelho** | <mark>🟢 CONCLUÍDO</mark> | Conector OCI em Python implementado (`oci_storage.py`), com teste real (`scripts/testar_oci.py`) e 8 testes com mock. |
 | **Agente Gemini Multimodal (Extração IA)** | [`src/agents/`](src/agents/) | **Luciana e Iza** | <mark>🟡 EM ANDAMENTO</mark> | **A fazer:** Implementar chamadas à API Gemini 1.5 com *Structured Outputs* orientadas por `src/schemas/clinical.py`. |
-| **Persistência OCI Object Storage Always Free** | [`src/storage/`](src/storage/) | **Iza (com apoio a definir)** | <mark>🟡 EM ANDAMENTO</mark> | **A fazer:** Conectar SDK OCI em Python para upload automático nos buckets `/recebidos`, `/processados` e `/auditoria_humana`. |
 | **API REST FastAPI Assíncrona** | [`src/api/`](src/api/) | **Cristiano Oliveira e/ou Giovane Brandino** | <mark>🟡 EM ANDAMENTO</mark> | **A fazer:** Implementar rotas `POST /api/v1/triagens` (HTTP 202) e `GET /api/v1/triagens/{id}` para conectar o backend. |
 | **Portal Web Corporativo em React SPA** | `frontend/` | **Giovane Brandino e Victor Marcelo** | <mark>⚪ PENDENTE</mark> | **A fazer:** Criar projeto Vite + React + TypeScript + Tailwind consumindo os endpoints da API FastAPI. |
 | **Gravação do Pitch e Demonstração Final** | Raiz / Docs | **Luciana e Toda a Equipe** | <mark>⚪ PENDENTE</mark> | **A fazer:** Gravar vídeo de até 5 min demonstrando os 3 cenários clínicos do edital e gerar links de entrega. |
