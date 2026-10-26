@@ -614,3 +614,39 @@ def test_adapter_preserva_sinais_sem_usar_score_ilustrativo(montar_entrada):
     assert r["qualidade"].campos_incertos == ["paciente.nome"]
     assert len(r["qualidade"].conflitos) == 1
     assert r["decisao"].requer_auditoria_humana
+
+@pytest.mark.parametrize("campo_ausente", ["medicamentos", "exames"])
+def test_ausencia_opcional_isolada(montar_entrada, campo_ausente):
+    entrada = montar_entrada()
+    dados = entrada.dados_extraidos.model_dump()
+
+    contrato_novo = "exames" in DadosExtraidos.model_fields
+    chave_exame = "exames" if contrato_novo else "exame_realizado"
+    chave_cid = "cid" if contrato_novo else "cid_sugerido"
+
+    dados["medicamentos"] = ["Medicamento fictício"]
+    dados[chave_exame] = (
+        ["Exame fictício"] if contrato_novo else "Exame fictício"
+    )
+    dados[chave_cid] = "Z00.0"
+
+    if campo_ausente == "medicamentos":
+        dados["medicamentos"] = []
+    else:
+        dados[chave_exame] = [] if contrato_novo else None
+
+    payload = entrada.model_dump()
+    payload["dados_extraidos"] = dados
+    entrada = EntradaWorkflow.model_validate(payload)
+
+    resultado = criar_grafo().invoke({"entrada": entrada})
+    qualidade = resultado["qualidade"]
+
+    outro_campo = (
+        "exames" if campo_ausente == "medicamentos" else "medicamentos"
+    )
+
+    assert campo_ausente in qualidade.campos_ausentes
+    assert outro_campo not in qualidade.campos_ausentes
+    assert qualidade.score_extracao == 1.0
+    assert not resultado["decisao"].requer_auditoria_humana
