@@ -5,9 +5,10 @@ Reutiliza o contrato oficial.
 Não representa a resposta final da API.
 """
 
+from math import isfinite
 from typing import Literal, TypedDict
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.schemas import (
     ClassificacaoClinica,
@@ -20,7 +21,7 @@ class ConflitoWorkflow(BaseModel):
 
     tipo: str = Field(min_length=1)
     gravidade: Literal["ALTA", "MEDIA", "BAIXA"]
-    descricao: str = Field(min_length=1)
+    descricao: str = ""
     campos: list[str] = Field(default_factory=list)
 
 class EntradaWorkflow(BaseModel):
@@ -32,8 +33,9 @@ class EntradaWorkflow(BaseModel):
 
     # Sinais estruturados produzidos pela análise.
     # O grafo não deduz urgência por palavras isoladas.
-    urgencia: Literal["SIM", "NAO", "INDETERMINADO"]
+    urgencia: Literal["SIM", "NAO", "INDETERMINADO"] | None = None
 
+    campos_ausentes: list[str] = Field(default_factory=list)
     campos_incertos: list[str] = Field(default_factory=list)
     conflitos: list[ConflitoWorkflow] = Field(default_factory=list)
 
@@ -53,7 +55,7 @@ class EntradaWorkflow(BaseModel):
             raise ValueError("documento_id não pode estar vazio.")
         return valor
 
-    @field_validator("campos_incertos")
+    @field_validator("campos_incertos", "campos_ausentes")
     @classmethod
     def normalizar_campos(cls, valores: list[str]) -> list[str]:
         return sorted({
@@ -62,8 +64,55 @@ class EntradaWorkflow(BaseModel):
             if valor.strip()
         })
 
+    @model_validator(mode="after")
+    def alinhar_sinais(self):
+        dados = self.dados_extraidos
+        interna = getattr(dados, "urgencia", None)
+        interna = getattr(interna, "value", interna)
+        explicita = "urgencia" in dados.model_fields_set
+        if explicita and self.urgencia is not None and self.urgencia != interna:
+            raise ValueError("Urgência divergente entre a entrada e dados_extraidos.")
+        self.urgencia = interna if explicita else (self.urgencia or interna or "INDETERMINADO")
+        # Copia o modelo para não modificar o objeto pertencente à extração.
+        if hasattr(dados, "urgencia"):
+            self.dados_extraidos = dados.model_copy(
+                deep=True, update={"urgencia": type(dados.urgencia)(self.urgencia)}
+            )
+        score = self.classificacao.score_confianca_classificacao
+        if not isfinite(score):
+            raise ValueError("O score de classificação deve ser finito.")
+        return self
+
+    @classmethod
+    def de_extracao(cls, payload: dict, *, limiar: float = 0.85):
+        """Recebe blocos extraídos sem executar TriagemMediFlow.aplicar_regras.
+
+        Scores ilustrativos da massa e decisões sugeridas pela LLM não entram
+        no cálculo. O limiar vem da aplicação, nunca do documento clínico.
+        """
+        qualidade = payload.get("qualidade") or {}
+        dados = payload["dados_extraidos"]
+        if "medico" not in DadosExtraidos.model_fields and any(
+            campo in dados for campo in ("medico", "diagnostico", "exames", "urgencia")
+        ):
+            raise ValueError(
+                "Integre o contrato harmonizado antes de receber seus campos canônicos."
+            )
+        return cls(
+            documento_id=payload["documento_id"],
+            classificacao=payload["classificacao"],
+            dados_extraidos=payload["dados_extraidos"],
+            urgencia=payload.get("urgencia"),
+            campos_ausentes=qualidade.get("campos_ausentes", []),
+            campos_incertos=qualidade.get("campos_incertos", []),
+            conflitos=qualidade.get("conflitos", []),
+            limiar=limiar,
+        )
+
 
 class QualidadeWorkflow(BaseModel):
+    conflitos: list[ConflitoWorkflow] = Field(default_factory=list)
+    observacoes: list[str] = Field(default_factory=list)
     campos_ausentes: list[str]
     campos_incertos: list[str]
     score_classificacao: float = Field(

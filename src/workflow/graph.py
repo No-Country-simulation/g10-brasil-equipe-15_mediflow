@@ -6,6 +6,7 @@ Não chama Gemini, não persiste na OCI e não envia alertas externos.
 """
 
 import unicodedata
+import re
 
 from langgraph.graph import END, START, StateGraph
 
@@ -77,21 +78,78 @@ def avaliar_qualidade(estado: EstadoWorkflow) -> dict:
     entrada = estado["entrada"]
     dados = entrada.dados_extraidos
 
+    # Converte os nomes legados apenas na fronteira do workflow.
+    payload = dados.model_dump()
+    medico = payload.get("medico", payload.get("medico_solicitante")) or {}
+    paciente = payload.get("paciente") or {}
+    diagnostico = payload.get("diagnostico", payload.get("diagnostico_principal"))
+    crm = medico.get("crm")
+    if isinstance(crm, str):
+        partes = re.split(r"[-/]", crm.strip())
+        numero = partes[0].strip()
+        uf = partes[1].strip().upper() if len(partes) == 2 else None
+    else:
+        numero = (crm or {}).get("numero")
+        uf = (crm or {}).get("uf")
+        # O default SP do schema não comprova que a UF estava no documento.
+        medico_modelo = getattr(dados, "medico", None)
+        crm_modelo = getattr(medico_modelo, "crm", None)
+        if hasattr(crm_modelo, "model_fields_set") and "uf" not in crm_modelo.model_fields_set:
+            uf = None
+    ufs = set("AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO".split())
+    crm_valido = (
+        isinstance(numero, str) and numero.strip().isdigit()
+        and isinstance(uf, str) and uf.upper() in ufs
+    )
     obrigatorios = {
-        "paciente.nome": dados.paciente.nome,
-        "paciente.idade": dados.paciente.idade,
-        "medico_solicitante.nome": dados.medico_solicitante.nome,
-        "medico_solicitante.crm": dados.medico_solicitante.crm,
-        "diagnostico_principal": dados.diagnostico_principal,
+        "paciente.nome": paciente.get("nome"),
+        "paciente.idade": paciente.get("idade"),
+        "medico.nome": medico.get("nome"),
+        "medico.crm": crm if crm_valido else None,
+        "diagnostico": diagnostico,
     }
+    aliases = {
+        "medico_solicitante.nome": "medico.nome",
+        "medico_solicitante.crm": "medico.crm",
+        "diagnostico_principal": "diagnostico",
+        "cid_sugerido": "cid", "cid_extraido": "cid",
+        "exame_realizado": "exames", "exame_ou_procedimento": "exames",
+    }
+    def campo_canonico(campo):
+        for antigo, atual in aliases.items():
+            if campo == antigo or campo.startswith(antigo + ".") or campo.startswith(antigo + "["):
+                return atual + campo[len(antigo):]
+        return campo
 
-    ausentes = [
-        campo
-        for campo, valor in obrigatorios.items()
-        if vazio(valor)
-    ]
+    ausentes = {campo_canonico(c) for c in entrada.campos_ausentes}
+    exames = payload.get("exames", payload.get("exame_realizado"))
+    tem_exames = bool(exames) and (not isinstance(exames, str) or bool(exames.strip()))
+    tem_exames = tem_exames or bool(payload.get("exames_laboratoriais"))
+    tipo = normalizar_tipo(entrada.classificacao.tipo_documento)
+    # Exceção restrita à tipologia descrita no contrato, seção 5.2.
+    laboratorio_sem_diagnostico = (
+        tipo in {
+            "LAUDO EXAME LABORATORIAL", 
+            "LAUDO DE EXAME LABORATORIAL", 
+            "LAUDO LABORATORIAL"
+        }
+        and tem_exames and "diagnostico" not in ausentes
+    )
+    for campo, valor in obrigatorios.items():
+        if vazio(valor) and not (campo == "diagnostico" and laboratorio_sem_diagnostico):
+            ausentes.add(campo)
+    # Opcionais ficam rastreáveis, sem penalidade nem bloqueio por sua ausência.
+    cid = payload.get("cid", payload.get("cid_sugerido"))
+    if vazio(cid):
+        ausentes.add("cid")
+    if not payload.get("medicamentos"):
+        ausentes.add("medicamentos")
+    if not tem_exames:
+        ausentes.add("exames")
+    obrigatorios_ausentes = sorted(ausentes & obrigatorios.keys())
+    ausentes = sorted(ausentes)
 
-    incertos = set(entrada.campos_incertos)
+    incertos = {campo_canonico(c) for c in entrada.campos_incertos}
 
     # Compatibilidade temporária:
     # o contrato local usa AMBIGUO em vez de NAO_IDENTIFICADA.
@@ -114,7 +172,7 @@ def avaliar_qualidade(estado: EstadoWorkflow) -> dict:
         campos = tuple(
             sorted(
                 {
-                    campo.strip()
+                    campo_canonico(campo.strip())
                     for campo in conflito.campos
                     if campo.strip()
                 }
@@ -128,7 +186,7 @@ def avaliar_qualidade(estado: EstadoWorkflow) -> dict:
             conflito.descricao.strip(),
         )
 
-        conflitos_unicos[chave] = conflito
+        conflitos_unicos[chave] = conflito.model_copy(update={"campos": list(campos)})
 
     penalidades = {
         "ALTA": 0.30,
@@ -146,7 +204,7 @@ def avaliar_qualidade(estado: EstadoWorkflow) -> dict:
         min(
             1.0,
             1.0
-            - 0.20 * len(ausentes)
+            - 0.20 * len(obrigatorios_ausentes)
             - 0.10 * len(incertos)
             - desconto_conflitos,
         ),
@@ -166,10 +224,10 @@ def avaliar_qualidade(estado: EstadoWorkflow) -> dict:
 
     motivos = []
 
-    if ausentes:
+    if obrigatorios_ausentes:
         motivos.append(
             "Campos obrigatórios ausentes: "
-            + ", ".join(ausentes)
+            + ", ".join(obrigatorios_ausentes)
         )
 
     if incertos:
@@ -191,7 +249,6 @@ def avaliar_qualidade(estado: EstadoWorkflow) -> dict:
         )
 
     # Preserva urgência e exige revisão quando os sinais divergem.
-    # Este comportamento deve ser registrado com a equipe.
     if (
         entrada.urgencia == "NAO"
         and entrada.classificacao.nivel_prioridade
@@ -220,7 +277,13 @@ def avaliar_qualidade(estado: EstadoWorkflow) -> dict:
             "Tipo documental sem mapeamento conhecido."
         )
 
+    observacoes = [
+        f"Conflito BAIXA registrado: {c.tipo}: {c.descricao}"
+        for c in conflitos_unicos.values() if c.gravidade == "BAIXA"
+    ]
     qualidade = QualidadeWorkflow(
+        conflitos=list(conflitos_unicos.values()),
+        observacoes=observacoes,
         campos_ausentes=ausentes,
         campos_incertos=sorted(incertos),
         score_classificacao=score_classificacao,
@@ -267,11 +330,12 @@ def decidir_urgencia(estado: EstadoWorkflow) -> dict:
             + "; ".join(motivos)
         )
 
+    observacoes = estado["qualidade"].observacoes
     return {
         "decisao": DecisaoWorkflow(
             destinos=destinos,
             requer_auditoria_humana=requer_revisao,
-            justificativa=justificativa,
+            justificativa=justificativa + (" Observações: " + "; ".join(observacoes) if observacoes else ""),
             regras_acionadas=(
                 ["URGENCIA", "REVISAO"]
                 if requer_revisao
@@ -283,6 +347,7 @@ def decidir_urgencia(estado: EstadoWorkflow) -> dict:
 
 
 def decidir_revisao(estado: EstadoWorkflow) -> dict:
+    observacoes = estado["qualidade"].observacoes
     return {
         "decisao": DecisaoWorkflow(
             destinos=[
@@ -290,7 +355,7 @@ def decidir_revisao(estado: EstadoWorkflow) -> dict:
             ],
             requer_auditoria_humana=True,
             justificativa="; ".join(
-                estado["qualidade"].motivos_revisao
+                estado["qualidade"].motivos_revisao + observacoes
             ),
             regras_acionadas=["REVISAO"],
             alerta_simulado=False,
@@ -308,6 +373,7 @@ def decidir_rotina(estado: EstadoWorkflow) -> dict:
             "Destino de rotina não mapeado."
         )
 
+    observacoes = estado["qualidade"].observacoes
     return {
         "decisao": DecisaoWorkflow(
             destinos=[destino],
@@ -315,6 +381,7 @@ def decidir_rotina(estado: EstadoWorkflow) -> dict:
             justificativa=(
                 "Documento de rotina sem impedimentos "
                 "para encaminhamento."
+                + (" Observações: " + "; ".join(observacoes) if observacoes else "")
             ),
             regras_acionadas=["ROTINA"],
             alerta_simulado=False,
