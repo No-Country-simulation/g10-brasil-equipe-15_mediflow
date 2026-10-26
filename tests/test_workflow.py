@@ -122,9 +122,9 @@ def test_limiar_recebido_na_entrada_e_aplicado(executar):
     [
         ("nome", "paciente.nome"),
         ("idade", "paciente.idade"),
-        ("nome_medico", "medico_solicitante.nome"),
-        ("crm", "medico_solicitante.crm"),
-        ("diagnostico", "diagnostico_principal"),
+        ("nome_medico", "medico.nome"),
+        ("crm", "medico.crm"),
+        ("diagnostico", "diagnostico"),
     ],
 )
 def test_campo_obrigatorio_ausente(
@@ -189,14 +189,14 @@ def test_campos_incertos_duplicados_contam_uma_vez(executar):
     resultado = executar(
         incertos=[
             " medico_solicitante.crm ",
-            "medico_solicitante.crm",
+            "medico.crm",
             "",
             "   ",
         ],
     )
 
     assert resultado["qualidade"].campos_incertos == [
-        "medico_solicitante.crm"
+        "medico.crm"
     ]
     assert resultado["qualidade"].score_extracao == 0.90
 
@@ -219,7 +219,7 @@ def test_penalidade_por_conflito(
         tipo="CONFLITO_CONTROLADO",
         gravidade=gravidade,
         descricao="Exemplo fictício para testar a regra.",
-        campos=["diagnostico_principal"],
+        campos=["diagnostico"],
     )
 
     resultado = executar(conflitos=[conflito])
@@ -236,7 +236,7 @@ def test_conflito_repetido_nao_duplica_penalidade(executar):
         tipo="CONFLITO_CONTROLADO",
         gravidade="BAIXA",
         descricao="Mesmo conflito repetido.",
-        campos=["diagnostico_principal"],
+        campos=["diagnostico"],
     )
 
     resultado = executar(
@@ -255,12 +255,12 @@ def test_penalidades_distintas_sao_somadas(executar):
         tipo="CONFLITO_CONTROLADO",
         gravidade="BAIXA",
         descricao="Conflito fictício.",
-        campos=["diagnostico_principal"],
+        campos=["diagnostico"],
     )
 
     resultado = executar(
         nome=None,
-        incertos=["medico_solicitante.crm"],
+        incertos=["medico.crm"],
         conflitos=[conflito],
     )
 
@@ -302,7 +302,7 @@ def test_urgencia_com_ambiguidade_tem_dois_destinos(executar):
     resultado = executar(
         prioridade=NivelPrioridade.URGENTE,
         urgencia="SIM",
-        incertos=["medico_solicitante.crm"],
+        incertos=["medico.crm"],
     )
 
     assert resultado["decisao"].destinos == [
@@ -449,3 +449,168 @@ def test_grafo_nao_confirma_persistencia(executar):
 
     assert resultado["decisao"].etapa == "DECISAO_CALCULADA"
     assert "armazenamento_oci" not in resultado
+
+# Regressões A1/A3/A5 e integração com o contrato harmonizado de 24–25/10.
+@pytest.mark.parametrize("gravidade", ["ALTA", "MEDIA", "BAIXA"])
+def test_conflitos_preservados_em_qualidade(executar, gravidade):
+    conflito = ConflitoWorkflow(tipo="DOSE_SUSPEITA", gravidade=gravidade,
+                               descricao="Dado fictício", campos=["diagnostico_principal"])
+    resultado = executar(conflitos=[conflito])
+    registrados = resultado["qualidade"].conflitos
+    assert len(registrados) == 1
+    assert registrados[0].gravidade == gravidade
+    assert registrados[0].campos == ["diagnostico"]
+    assert conflito.campos == ["diagnostico_principal"]  # sem mutação da entrada
+
+
+@pytest.mark.parametrize("urgente", [False, True])
+def test_conflito_baixo_visivel_sem_bloqueio(executar, urgente):
+    resultado = executar(
+        prioridade=NivelPrioridade.URGENTE if urgente else NivelPrioridade.ROTINA,
+        urgencia="SIM" if urgente else "NAO",
+        conflitos=[ConflitoWorkflow(tipo="DADOS_PACIENTE", gravidade="BAIXA",
+                                   descricao="Observação fictícia")],
+    )
+    assert resultado["qualidade"].score_extracao == .90
+    assert resultado["qualidade"].conflitos[0].gravidade == "BAIXA"
+    assert "DADOS_PACIENTE" in resultado["decisao"].justificativa
+    assert not resultado["decisao"].requer_auditoria_humana
+
+
+def test_conflitos_baixos_acumulados_podem_baixar_score(executar):
+    r = executar(conflitos=[ConflitoWorkflow(tipo=f"OBS_{i}", gravidade="BAIXA") for i in range(2)])
+    assert r["qualidade"].score_extracao == .8
+    assert len(r["qualidade"].conflitos) == 2
+    assert r["decisao"].requer_auditoria_humana
+
+
+def test_opcionais_ausentes_registrados_sem_penalidade(executar):
+    r = executar()
+    assert {"cid", "medicamentos", "exames"} <= set(r["qualidade"].campos_ausentes)
+    assert r["qualidade"].score_extracao == 1
+    assert not r["decisao"].requer_auditoria_humana
+
+
+def test_sinais_ausentes_de_extracao_canonizados(montar_entrada):
+    entrada = montar_entrada().model_copy(update={
+        "campos_ausentes": ["medico_solicitante.nome", "medico.nome"]
+    })
+    r = criar_grafo().invoke({"entrada": entrada})
+    assert r["qualidade"].campos_ausentes.count("medico.nome") == 1
+    assert r["qualidade"].score_extracao == .8
+    assert r["decisao"].requer_auditoria_humana
+
+
+def test_incertezas_legadas_canonizadas(montar_entrada):
+    entrada = montar_entrada(incertos=["medico_solicitante.crm", "medico.crm"])
+    r = criar_grafo().invoke({"entrada": entrada})
+    assert r["qualidade"].campos_incertos == ["medico.crm"]
+    assert r["qualidade"].score_extracao == .9
+
+
+NOVO_CONTRATO = "medico" in DadosExtraidos.model_fields
+
+
+@pytest.mark.skipif(not NOVO_CONTRATO, reason="CRM estruturado depende do contrato harmonizado")
+@pytest.mark.parametrize("crm", [
+    {"numero": None, "uf": "SP"},
+    {"numero": "  ", "uf": "SP"},
+    {"numero": "ABC", "uf": "SP"},
+    {"numero": "12345", "uf": None},
+    {"numero": "12345", "uf": "XX"},
+    {"numero": "12345"},
+])
+def test_crm_estruturado_incompleto_exige_revisao(montar_entrada, crm):
+    entrada = montar_entrada()
+    dados = entrada.dados_extraidos.model_dump()
+    dados["medico"]["crm"] = crm
+    entrada = EntradaWorkflow.model_validate({**entrada.model_dump(), "dados_extraidos": dados})
+    r = criar_grafo().invoke({"entrada": entrada})
+    assert "medico.crm" in r["qualidade"].campos_ausentes
+    assert r["qualidade"].score_extracao == .8
+    assert r["decisao"].requer_auditoria_humana
+
+
+@pytest.mark.skipif(not NOVO_CONTRATO, reason="Requer blocos do contrato harmonizado")
+def test_adapter_usa_urgencia_da_extracao_e_ignora_decisao(montar_entrada):
+    entrada = montar_entrada()
+    payload = entrada.model_dump()
+    payload.pop("urgencia")
+    payload["dados_extraidos"]["urgencia"] = "SIM"
+    payload["qualidade"] = {"score_extracao": .01, "limiar_aplicado": .01,
+                            "conflitos": [{"tipo": "OBS", "gravidade": "BAIXA"}]}
+    payload["decisao_roteamento"] = {"destinos": ["PRONTUARIO_ELETRONICO"]}
+    e = EntradaWorkflow.de_extracao(payload, limiar=.85)
+    r = criar_grafo().invoke({"entrada": e})
+    assert e.urgencia == "SIM"
+    assert r["qualidade"].score_extracao == .9
+    assert r["qualidade"].limiar_aplicado == .85
+    assert r["decisao"].destinos == [DestinoRoteamento.EMERGENCIA]
+    assert not r["decisao"].requer_auditoria_humana
+
+
+@pytest.mark.skipif(not NOVO_CONTRATO, reason="Requer urgência no contrato harmonizado")
+def test_fontes_de_urgencia_divergentes_sao_rejeitadas(montar_entrada):
+    payload = montar_entrada().model_dump()
+    payload["dados_extraidos"]["urgencia"] = "SIM"
+    payload["urgencia"] = "NAO"
+    with pytest.raises(ValidationError, match="Urgência divergente"):
+        EntradaWorkflow.model_validate(payload)
+
+
+@pytest.mark.skipif(not NOVO_CONTRATO, reason="Requer lista de exames do contrato harmonizado")
+@pytest.mark.parametrize("tipo,revisao", [
+    ("LAUDO_EXAME_LABORATORIAL", False),
+    ("RECEITUARIO_MEDICO", True),
+    ("GUIA_PROCEDIMENTO", True),
+    ("LAUDO_EXAME_IMAGEM", True),
+])
+def test_excecao_diagnostico_restrita_a_laboratorio(montar_entrada, tipo, revisao):
+    payload = montar_entrada(tipo=tipo).model_dump()
+    payload["dados_extraidos"]["diagnostico"] = None
+    payload["dados_extraidos"]["exames"] = ["Hemograma fictício"]
+    entrada = EntradaWorkflow.model_validate(payload)
+    r = criar_grafo().invoke({"entrada": entrada})
+    assert r["decisao"].requer_auditoria_humana is revisao
+
+
+@pytest.mark.skipif(not NOVO_CONTRATO, reason="Requer lista de exames do contrato harmonizado")
+def test_diagnostico_declarado_ausente_nao_e_ocultado(montar_entrada):
+    payload = montar_entrada(tipo="LAUDO_EXAME_LABORATORIAL").model_dump()
+    payload["dados_extraidos"]["diagnostico"] = None
+    payload["dados_extraidos"]["exames"] = ["Hemograma fictício"]
+    payload["campos_ausentes"] = ["diagnostico"]
+    r = criar_grafo().invoke({"entrada": EntradaWorkflow.model_validate(payload)})
+    assert r["decisao"].requer_auditoria_humana
+
+
+@pytest.mark.skipif(not NOVO_CONTRATO, reason="Requer urgência do contrato harmonizado")
+def test_urgencia_interna_indeterminada_gera_incerteza(montar_entrada):
+    payload = montar_entrada().model_dump()
+    payload.pop("urgencia")
+    payload["dados_extraidos"]["urgencia"] = "INDETERMINADO"
+    e = EntradaWorkflow.de_extracao(payload)
+    r = criar_grafo().invoke({"entrada": e})
+    assert "urgencia" in r["qualidade"].campos_incertos
+    assert r["decisao"].requer_auditoria_humana
+    assert not r["decisao"].alerta_simulado
+
+
+@pytest.mark.skipif(NOVO_CONTRATO, reason="Proteção exclusiva do contrato legado")
+def test_adapter_nao_descarta_campos_novos_no_contrato_legado(montar_entrada):
+    payload = montar_entrada().model_dump()
+    payload["dados_extraidos"]["urgencia"] = "SIM"
+    with pytest.raises(ValueError, match="contrato harmonizado"):
+        EntradaWorkflow.de_extracao(payload)
+
+
+def test_adapter_preserva_sinais_sem_usar_score_ilustrativo(montar_entrada):
+    payload = montar_entrada().model_dump()
+    payload["qualidade"] = {"score_extracao": .01, "campos_incertos": ["paciente.nome"],
+                            "conflitos": [{"tipo": "OBS", "gravidade": "BAIXA"}]}
+    entrada = EntradaWorkflow.de_extracao(payload)
+    r = criar_grafo().invoke({"entrada": entrada})
+    assert r["qualidade"].score_extracao == .8
+    assert r["qualidade"].campos_incertos == ["paciente.nome"]
+    assert len(r["qualidade"].conflitos) == 1
+    assert r["decisao"].requer_auditoria_humana
