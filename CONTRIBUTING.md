@@ -3,9 +3,9 @@
 > **Hackathon ONE G10 — Oracle Next Education & Alura**  
 > **Projeto 2:** Agente Autônomo para Triagem, Extração e Roteamento de Documentos Clínicos  
 > **Manual de Referência:** `34aa946f-2883-4917-aec1-aae0df0f43d1.pdf`  
-> **Status da Aplicação:** 150 testes automatizados via Pytest  
+> **Status da Aplicação:** 184 testes automatizados via Pytest  
 
-Bem-vindo ao guia oficial de contribuição do **MediFlow**! Este documento foi desenhado para orientar os 8 integrantes da equipe no fluxo de trabalho diário com GitFlow, organização de pastas, responsabilidades por módulo e padrões de qualidade inegociáveis.
+Bem-vindo ao guia oficial de contribuição do **MediFlow**! Este documento foi desenhado para orientar os 9 integrantes da equipe no fluxo de trabalho diário com GitFlow, organização de pastas, responsabilidades por módulo e padrões de qualidade inegociáveis.
 
 ---
 
@@ -56,7 +56,7 @@ g10-brasil-equipe-15_mediflow/
 │   ├── app/                                    <- Bancada Streamlit de testes rápidos e auditoria médica (HiTL)
 │   │   └── streamlit_app.py                    <- Painel web visual interativo
 │   ├── ingestion/                              <- Camada de Ingestão e Gateway de Segurança
-│   │   └── loader.py                           <- Carregador blindado (10MB, 20 págs, sanitização e allowlist)
+│   │   └── loader.py                           <- Carregador blindado (10MB, 20 págs, sanitização, magic bytes)
 │   ├── schemas/                                <- Modelos Canônicos Pydantic v2
 │   │   └── clinical.py                         <- Contrato oficial (TriagemMediFlow, ErroResposta, etc.)
 │   ├── storage/                                <- Integração com Oracle Cloud Infrastructure (OCI Always Free)
@@ -65,11 +65,12 @@ g10-brasil-equipe-15_mediflow/
 │   │   └── state.py                            <- Estrutura do GraphState compartilhado
 │   └── config.py                               <- Configurações globais e leitura do .env
 │
-├── tests/                                      <- Suíte Oficial Pytest com 150 testes automatizados
+├── tests/                                      <- Suíte Oficial Pytest com 184 testes automatizados
 │   ├── fixtures/                               <- Base de 79 fixtures canônicos (demo, catalogo, manifest.csv)
 │   ├── test_contrato_fixtures.py               <- 79 testes: ponto fixo dos fixtures e regras R1 a R8
-│   ├── test_workflow.py                        <- 46 testes: transições e arestas do LangGraph
+│   ├── test_workflow.py                        <- 73 testes: transições e arestas do LangGraph
 │   ├── test_ingestion.py                       <- 18 testes: arquivos físicos reais e limites
+│   ├── test_audit_items.py                     <- 8 testes dedicados de auditoria técnica e sanidade
 │   └── test_schemas.py                         <- 7 testes: Pydantic v2 e envelopes de erro
 │
 ├── frontend/                                   <- Portal Web Corporativo em React SPA (Vite + TypeScript)

@@ -37,7 +37,7 @@ Todos os enums utilizam **tokens puros em caixa alta (sem acentos e sem espaços
 | `Destino` | `FILA_URGENCIA_MEDICA`, `FARMACIA_HOSPITALAR`, `AUDITORIA_AUTORIZACOES`, `PRONTUARIO_ELETRONICO`, `FILA_REVISAO_HUMANA` | `"Fila_Emergencia_Medica"`, `"Farmacia_Hospitalar"`, `"Auditoria_Autorizacoes"`, `"Prontuario_Eletronico"`, `"Fila_Revisao_Humana"` | `decisao_roteamento.destinos` |
 | `Urgencia` | `SIM`, `NAO`, `INDETERMINADO` | Case-insensitive (`"sim"`, `"nao"`, `"indeterminado"`) | `dados_extraidos.urgencia` |
 | `Gravidade` | `ALTA`, `MEDIA`, `BAIXA` | Case-insensitive | `qualidade.conflitos[].gravidade` |
-| `CodigoErro` | `FORMATO_NAO_SUPORTADO`, `CAMPOS_INVALIDOS`, `REQUISICAO_INVALIDA`, `ARQUIVO_MAIOR_QUE_LIMITE`, `MIME_INVALIDO`, `PDF_PROTEGIDO`, `PDF_CORROMPIDO` | Alinhado com as exceções de `src/ingestion/loader.py` | `erro.codigo` / `codigo_funcional` |
+| `CodigoErro` | `FORMATO_NAO_SUPORTADO`, `CAMPOS_INVALIDOS`, `REQUISICAO_INVALIDA`, `ARQUIVO_MAIOR_QUE_LIMITE`, `MIME_INVALIDO`, `PDF_PROTEGIDO`, `PDF_CORROMPIDO`, `ERRO_PERSISTENCIA` | Alinhado com as exceções de `src/ingestion/loader.py` e persistência OCI | `erro.codigo` / `codigo_funcional` |
 
 ### Decisões de Design Clínico e Arquitetural:
 

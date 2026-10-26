@@ -12,7 +12,7 @@
     <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/Pydantic-v2-E92063?style=for-the-badge&logo=pydantic&logoColor=white" alt="Pydantic v2"></a>
     <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/Google%20Gemini-AI-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Google Gemini"></a>
     <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/OCI-Always%20Free-F80000?style=for-the-badge&logo=oracle&logoColor=white" alt="OCI Always Free"></a>
-    <a href="#2%EF%B8%8F%E2%83%A3-executar-a-bateria-de-150-testes-automatizados"><img src="https://img.shields.io/badge/Pytest-150%20passed-brightgreen?style=for-the-badge&logo=pytest&logoColor=white" alt="150 Testes Pytest"></a>
+    <a href="#2%EF%B8%8F%E2%83%A3-executar-a-bateria-de-184-testes-automatizados"><img src="https://img.shields.io/badge/Pytest-184%20passed-brightgreen?style=for-the-badge&logo=pytest&logoColor=white" alt="184 Testes Pytest"></a>
     <a href="#-status-do-projeto"><img src="https://img.shields.io/badge/Status-Em%20Desenvolvimento-yellow?style=for-the-badge&logo=github&logoColor=white" alt="Status"></a>
   </p>
 
@@ -177,11 +177,12 @@ g10-brasil-equipe-15_mediflow/
 │   ├── storage/                                # Persistência OCI Object Storage Always Free
 │   ├── workflow/                               # Grafo de Decisão Clínica LangGraph (StateGraph)
 │   └── config.py                               # Configurações globais e variáveis de ambiente
-├── tests/                                      # Suíte Oficial Pytest com 150 testes automatizados
+├── tests/                                      # Suíte Oficial Pytest com 184 testes automatizados
 │   ├── fixtures/                               # 79 fixtures canônicos (demo, catalogo, manifest.csv)
 │   ├── test_contrato_fixtures.py               # 79 testes de regras R1 a R8 e ponto fixo
-│   ├── test_workflow.py                        # 46 testes de roteamento e arestas LangGraph
+│   ├── test_workflow.py                        # 73 testes de roteamento e arestas LangGraph
 │   ├── test_ingestion.py                       # 18 testes de arquivos físicos e limites de segurança
+│   ├── test_audit_items.py                     # 8 testes dedicados de auditoria técnica e sanidade
 │   └── test_schemas.py                         # 7 testes de validação Pydantic v2
 ├── frontend/                                   # (Recomendado) Portal Web Corporativo (React SPA - Giovane & Victor)
 ├── ARQUITETURA.md                              # Especificação Técnica Oficial da Arquitetura
@@ -205,7 +206,7 @@ g10-brasil-equipe-15_mediflow/
 | **Marcelo Petitot Rezende** | ⚙️ Backend Architect | API REST FastAPI Assíncrona & Docker |
 | **Cristiano Oliveira** | 🔌 Backend Developer | Endpoints de Ingestão & Notificações |
 | **Victor Marcelo** | 🎨 Frontend Developer | React Interface, Figma Wireframes & UX |
-| **William** | 🧪 QA & Requirements Lead | Especificação Funcional v1.0 & Suíte de 150 Testes Pytest |
+| **William** | 🧪 QA & Requirements Lead | Especificação Funcional v1.0 & Suíte de 184 Testes Pytest |
 | **Gisele Oliveira** | 🧠 AI & Data Support | Suporte em Arquitetura & Suíte de Dados |
 | **Alexander Lin** | 🔄 Integration Support | Suporte em APIs, Automações & Pitch Support |
 
@@ -229,7 +230,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-### 2️⃣ Executar a Bateria de 150 Testes Automatizados
+### 2️⃣ Executar a Bateria de 184 Testes Automatizados
 ```bash
 python -m pytest
 ```

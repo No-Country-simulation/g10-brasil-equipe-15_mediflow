@@ -168,7 +168,7 @@ graph LR
         
         GV["<b>Gravidade</b><br/>• ALTA<br/>• MEDIA<br/>• BAIXA"]
         
-        CE["<b>CodigoErro</b><br/>• FORMATO_NAO_SUPORTADO<br/>• CAMPOS_INVALIDOS<br/>• REQUISICAO_INVALIDA<br/>• ARQUIVO_MAIOR_QUE_LIMITE<br/>• MIME_INVALIDO<br/>• PDF_PROTEGIDO<br/>• PDF_CORROMPIDO"]
+        CE["<b>CodigoErro</b><br/>• FORMATO_NAO_SUPORTADO<br/>• CAMPOS_INVALIDOS<br/>• REQUISICAO_INVALIDA<br/>• ARQUIVO_MAIOR_QUE_LIMITE<br/>• MIME_INVALIDO<br/>• PDF_PROTEGIDO<br/>• PDF_CORROMPIDO<br/>• ERRO_PERSISTENCIA"]
     end
 
     subgraph SCHEMAS["Modelos Pydantic v2"]
@@ -347,5 +347,5 @@ flowchart LR
 1. **Proteção Extra (`extra="ignore"`):** Todos os modelos aceitam payloads com campos adicionais sem quebrar a desserialização, garantindo interoperabilidade entre agentes e versões da API.
 2. **Propriedades de Conveniência:** Suporte transparente a nomes legados (`medico_solicitante`, `diagnostico_principal`, `cid_extraido`, `cid_sugerido`, `score_confianca_classificacao`).
 3. **Ponto Fixo e Idempotência:** Uma instância de `TriagemMediFlow` revalidada (`TriagemMediFlow.model_validate(obj.model_dump())`) preserva rigorosamente o mesmo estado, sem oscilação de score ou destinos.
-4. **Cobertura Integral de Testes:** 100% dos modelos são validados contra os **79 fixtures canônicos** e auditados pelos **150 testes automatizados** em [`tests/test_contrato_fixtures.py`](../../tests/test_contrato_fixtures.py), [`tests/test_schemas.py`](../../tests/test_schemas.py) e [`tests/test_workflow.py`](../../tests/test_workflow.py).
+4. **Cobertura Integral de Testes:** 100% dos modelos são validados contra os **79 fixtures canônicos** e auditados pelos **184 testes automatizados** em [`tests/test_contrato_fixtures.py`](../../tests/test_contrato_fixtures.py), [`tests/test_schemas.py`](../../tests/test_schemas.py), [`tests/test_workflow.py`](../../tests/test_workflow.py), [`tests/test_ingestion.py`](../../tests/test_ingestion.py) e [`tests/test_audit_items.py`](../../tests/test_audit_items.py).
 

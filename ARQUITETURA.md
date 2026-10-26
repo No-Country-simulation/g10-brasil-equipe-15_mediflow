@@ -361,7 +361,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # Configurar GEMINI_API_KEY e credenciais OCI Always Free
 
-# 5. Executar a suíte completa de 150 testes automatizados
+# 5. Executar a suíte completa de 184 testes automatizados
 python -m pytest
 
 # 6. Opção A: Iniciar o Servidor FastAPI (Backend REST para React e API)
@@ -392,6 +392,7 @@ g10-brasil-equipe-15_mediflow/
 │   │   ├── CONTRATO_DE_DADOS.md                <- Contrato canônico unificado (fonte da verdade)
 │   │   ├── CATALOGO_DE_DOCUMENTOS_DE_TESTE.md  <- Catálogo completo dos 79 fixtures
 │   │   ├── AUDITORIA_2026-10-20.md             <- Histórico de resolução de pendências
+│   │   ├── VISUAL_SCHEMAS.md                   <- Guia visual com diagramas Mermaid autoritativos
 │   │   ├── Mapa_de_Documentos_de_Teste_MediFlow.pdf <- Matriz visual de rastreabilidade (PDF)
 │   │   └── README.md                           <- Guia de navegação de testes e QA
 │   └── GUIA_INTEGRACAO_LLM.md                  <- Guia de consumo do Ingestion Loader para IA
@@ -401,7 +402,7 @@ g10-brasil-equipe-15_mediflow/
 │   ├── app/                                    <- Interfaces Python (Streamlit HiTL)
 │   │   └── streamlit_app.py                    <- Painel web de auditoria médica e testes rápidos
 │   ├── ingestion/                              <- Camada de Ingestão e Gateway de Segurança
-│   │   └── loader.py                           <- Carregador blindado (10MB, 20 págs, MIME, sanitização)
+│   │   └── loader.py                           <- Carregador blindado (10MB, 20 págs, MIME, magic bytes)
 │   ├── schemas/                                <- Modelos de Dados Pydantic v2
 │   │   └── clinical.py                         <- Schemas canônicos (TriagemMediFlow, ErroResposta, etc.)
 │   ├── storage/                                <- Integração com Oracle Cloud Infrastructure (OCI)
@@ -410,12 +411,14 @@ g10-brasil-equipe-15_mediflow/
 │   │   └── state.py                            <- Estrutura do GraphState compartilhado
 │   └── config.py                               <- Configurações globais e variáveis de ambiente
 │
-├── tests/                                      <- Suíte Oficial de Testes Automatizados (150 testes)
+├── tests/                                      <- Suíte Oficial de Testes Automatizados (184 testes)
 │   ├── test_contrato_fixtures.py               <- 79 testes: ponto fixo dos fixtures e regras R1 a R8
-│   ├── test_workflow.py                        <- 46 testes: transições e arestas do LangGraph
+│   ├── test_workflow.py                        <- 73 testes: transições e arestas do LangGraph
 │   ├── test_ingestion.py                       <- 18 testes: arquivos reais, PDF, JPG, WEBP e DOCX (415)
+│   ├── test_audit_items.py                     <- 8 testes dedicados de auditoria técnica e sanidade
 │   ├── test_schemas.py                         <- 7 testes: Pydantic v2 e envelopes de erro Nível 1 e 2
 │   └── fixtures/                               <- Base de 79 fixtures canônicos
+
 │       ├── demo/                               <- 12 casos essenciais para o pitch (TXT, PDF, JPG, JSON)
 │       ├── catalogo/                           <- 67 casos avançados (qualidade, borda, limites)
 │       └── manifest.csv                        <- Rastreabilidade formal em formato de máquina
