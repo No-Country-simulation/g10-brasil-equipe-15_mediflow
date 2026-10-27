@@ -26,6 +26,8 @@ from src.schemas import (
     ArmazenamentoOCI,
     CodigoErro,
     ErroProcessamento,
+    Conflito,
+    Gravidade,
 )
 from src.workflow.graph import criar_grafo
 from src.workflow.state import ConflitoWorkflow, EntradaWorkflow
@@ -231,6 +233,12 @@ class TriagemService:
         destinos_finais = [Destino(d.value) for d in decisao_wf.destinos] if decisao_wf else [Destino.FILA_REVISAO_HUMANA]
         justificativa = decisao_wf.justificativa if decisao_wf else "Processamento concluído."
 
+        # Preserva os motivos de revisão humana levantados pelo agente (CT-057 e §16 item 12)
+        if status_final == StatusTriagem.EM_REVISAO and qualidade_wf and getattr(qualidade_wf, "motivos_revisao", None):
+            motivos_str = "; ".join(qualidade_wf.motivos_revisao)
+            if motivos_str and motivos_str not in justificativa:
+                justificativa = f"{justificativa} Motivo da retenção: {motivos_str}."
+
         notificacao = None
         if decisao_wf and decisao_wf.alerta_simulado:
             notificacao = {
@@ -239,7 +247,48 @@ class TriagemService:
                 "status": "REGISTRADA"
             }
 
-        # 4. Construção do Contrato Oficial TriagemMediFlow
+        # Extrai os scores e métricas calculadas deterministicamente pelo LangGraph (Fórmula A3)
+        score_classif_final = (
+            qualidade_wf.score_classificacao
+            if qualidade_wf and hasattr(qualidade_wf, "score_classificacao")
+            else score_classif
+        )
+        score_extrac_final = (
+            qualidade_wf.score_extracao
+            if qualidade_wf and hasattr(qualidade_wf, "score_extracao")
+            else score_extrac
+        )
+        score_combinado_final = (
+            qualidade_wf.score_combinado
+            if qualidade_wf and hasattr(qualidade_wf, "score_combinado")
+            else min(score_classif_final, score_extrac_final)
+        )
+        campos_ausentes_finais = (
+            list(qualidade_wf.campos_ausentes)
+            if qualidade_wf and hasattr(qualidade_wf, "campos_ausentes")
+            else campos_ausentes
+        )
+        campos_incertos_finais = (
+            list(qualidade_wf.campos_incertos)
+            if qualidade_wf and hasattr(qualidade_wf, "campos_incertos")
+            else []
+        )
+        conflitos_finais = []
+        if qualidade_wf and hasattr(qualidade_wf, "conflitos"):
+            for c in qualidade_wf.conflitos:
+                if isinstance(c, Conflito):
+                    conflitos_finais.append(c)
+                else:
+                    conflitos_finais.append(
+                        Conflito(
+                            tipo=getattr(c, "tipo", str(c)),
+                            gravidade=getattr(c, "gravidade", Gravidade.ALTA),
+                            descricao=getattr(c, "descricao", ""),
+                            campos=getattr(c, "campos", []),
+                        )
+                    )
+
+        # 4. Construção do Contrato Oficial TriagemMediFlow com métricas reais do agente
         triagem = TriagemMediFlow(
             status=status_final,
             documento_id=documento_id,
@@ -247,7 +296,7 @@ class TriagemService:
                 tipo_documento=tipo_doc,
                 especialidade=["Clínica Médica"],
                 nivel_prioridade="URGENTE" if urgente else "ROTINA",
-                score_classificacao=score_classif,
+                score_classificacao=score_classif_final,
             ),
             dados_extraidos=DadosExtraidos(
                 paciente=dados_paciente,
@@ -259,15 +308,16 @@ class TriagemService:
                 urgencia="SIM" if urgente else "NAO",
             ),
             qualidade=Qualidade(
-                score_extracao=score_extrac,
-                score_combinado=min(score_classif, score_extrac),
+                score_extracao=score_extrac_final,
+                score_combinado=score_combinado_final,
                 limiar_aplicado=float(os.getenv("LIMIAR_CONFIANCA", "0.85")),
-                campos_ausentes=campos_ausentes,
-                campos_incertos=[],
-                conflitos=[],
+                campos_ausentes=campos_ausentes_finais,
+                campos_incertos=campos_incertos_finais,
+                conflitos=conflitos_finais,
             ),
             decisao_roteamento=DecisaoRoteamento(
                 destinos=destinos_finais,
+                destino_principal=destinos_finais[0] if destinos_finais else Destino.FILA_REVISAO_HUMANA,
                 requer_auditoria_humana=(status_final == StatusTriagem.EM_REVISAO),
                 justificativa_roteamento=justificativa,
                 notificacao=notificacao,
@@ -330,22 +380,26 @@ class TriagemService:
     def _extrair_paciente(self, texto: str) -> Paciente:
         nome_match = re.search(r"Paciente:\s*([^\n\r,]+)", texto, re.IGNORECASE)
         idade_match = re.search(r"Idade:\s*(\d{1,3})", texto, re.IGNORECASE)
-        nome = nome_match.group(1).strip() if nome_match else "Paciente Não Identificado"
-        idade = int(idade_match.group(1)) if idade_match else 40
+        nome = nome_match.group(1).strip() if nome_match else None
+        idade = int(idade_match.group(1)) if idade_match else None
         return Paciente(nome=nome, idade=idade)
 
     def _extrair_medico(self, texto: str) -> Medico:
         nome_match = re.search(r"M[eé]dico(?:\s+Solicitante)?:\s*([^\n\r,]+)", texto, re.IGNORECASE)
         crm_num_match = re.search(r"CRM(?:\/([A-Z]{2}))?:\s*(\d{4,8})", texto, re.IGNORECASE)
-        nome = nome_match.group(1).strip() if nome_match else "Dr. Responsável"
-        numero = crm_num_match.group(2) if crm_num_match else "123456"
-        uf = crm_num_match.group(1) if (crm_num_match and crm_num_match.group(1)) else "SP"
-        return Medico(nome=nome, crm=Crm(numero=numero, uf=uf))
+        nome = nome_match.group(1).strip() if nome_match else None
+        if crm_num_match:
+            numero = crm_num_match.group(2)
+            uf = crm_num_match.group(1) or "SP"
+            crm = Crm(numero=numero, uf=uf)
+        else:
+            crm = None
+        return Medico(nome=nome, crm=crm)
 
     def _extrair_diagnostico_e_cid(self, texto: str) -> tuple[Optional[str], Optional[str]]:
         diag_match = re.search(r"Diagn[oó]stico(?:\s+Principal)?:\s*([^\n\r]+)", texto, re.IGNORECASE)
         cid_match = re.search(r"\b([A-Z]\d{2}(?:\.\d{1,2})?)\b", texto)
-        diag = diag_match.group(1).strip() if diag_match else "Avaliação clínica de rotina"
+        diag = diag_match.group(1).strip() if diag_match else None
         cid = cid_match.group(1).strip() if cid_match else None
         return diag, cid
 

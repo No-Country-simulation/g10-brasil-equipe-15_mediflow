@@ -11,8 +11,14 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+import os
 import streamlit as st
+from dotenv import load_dotenv
+
 from src.ingestion import DocumentLoader, IngestaoError
+from src.services.gemini_service import GeminiService
+
+load_dotenv()
 
 # ==============================================================================
 # CONFIGURAÇÃO DA PÁGINA
@@ -44,6 +50,10 @@ st.markdown("""
         padding: 15px;
         border-radius: 8px;
         margin-bottom: 15px;
+        color: #1F2937 !important;
+    }
+    .card-urgente p, .card-urgente b, .card-urgente span {
+        color: #1F2937 !important;
     }
     .card-revisao {
         background-color: #FFFBEB;
@@ -51,6 +61,10 @@ st.markdown("""
         padding: 15px;
         border-radius: 8px;
         margin-bottom: 15px;
+        color: #1F2937 !important;
+    }
+    .card-revisao p, .card-revisao b, .card-revisao span {
+        color: #1F2937 !important;
     }
     .card-rotina {
         background-color: #F0FDF4;
@@ -58,10 +72,14 @@ st.markdown("""
         padding: 15px;
         border-radius: 8px;
         margin-bottom: 15px;
+        color: #1F2937 !important;
+    }
+    .card-rotina p, .card-rotina b, .card-rotina span {
+        color: #1F2937 !important;
     }
     .badge-alerta {
         background-color: #DC2626;
-        color: white;
+        color: white !important;
         padding: 4px 10px;
         border-radius: 12px;
         font-weight: bold;
@@ -166,6 +184,16 @@ with st.sidebar:
                 st.error(f"Erro de Ingestão: {e.codigo} — {e.mensagem}")
             except Exception as e:
                 st.error(f"Erro inesperado: {str(e)}")
+
+    st.markdown("---")
+    chave_env = os.getenv("GEMINI_API_KEY", "")
+    tem_chave_valida = bool(chave_env and not chave_env.startswith("sua_chave"))
+    api_key_custom = st.text_input(
+        "🔑 Chave Gemini API (Opcional):",
+        value=chave_env if tem_chave_valida else "",
+        type="password",
+        help="Insira sua chave do Google AI Studio para executar inferência ao vivo com gemini-3.8-flash."
+    )
 
     st.markdown("---")
     st.markdown("**Hackathon ONE G10 — Oracle & Alura**")
@@ -283,12 +311,144 @@ if doc_ingerido is not None:
 
         else:
             # Caso de upload real de arquivo novo
-            st.info("Arquivo recebido com sucesso na Ingestão! O texto bruto está pronto para envio à API do Gemini para classificação automática.")
-            st.markdown(f"""
-            - **Documento ID:** `{doc_ingerido.documento_id}`
-            - **Status:** `RECEBIDO_EM_FILA`
-            - **Caracteres Extraídos:** {len(doc_ingerido.conteudo_texto)}
-            """)
+            st.info("Arquivo recebido com sucesso na Ingestão! Pronto para análise inteligente com Gemini.")
+            
+            btn_col1, btn_col2 = st.columns([2, 1])
+            with btn_col1:
+                executar_ia = st.button("🧠 Executar Triagem Clínica com Gemini IA", type="primary", use_container_width=True)
+            with btn_col2:
+                usar_fallback_teste = st.button("⚡ Testar com Simulação", use_container_width=True)
+
+            if "resultado_ia" not in st.session_state:
+                st.session_state.resultado_ia = None
+
+            if executar_ia:
+                with st.spinner("Analisando documento clínico com o modelo Gemini IA (Multimodal)..."):
+                    service = GeminiService(api_key=api_key_custom or os.getenv("GEMINI_API_KEY"))
+                    
+                    mime_map = {
+                        "PDF": "application/pdf",
+                        "JPG": "image/jpeg",
+                        "JPEG": "image/jpeg",
+                        "PNG": "image/png",
+                        "WEBP": "image/webp",
+                        "TXT": "text/plain"
+                    }
+                    formato_upper = (doc_ingerido.formato or "JPG").upper()
+                    mime_tipo = doc_ingerido.metadados.get("mime") or mime_map.get(formato_upper, "image/jpeg")
+
+                    classif = service.classificar_documento(
+                        conteudo_texto=doc_ingerido.conteudo_texto or "",
+                        conteudo_bytes=doc_ingerido.conteudo_bytes,
+                        mime_type=mime_tipo
+                    )
+                    extrac = service.extrair_dados_clinicos(
+                        conteudo_texto=doc_ingerido.conteudo_texto or "",
+                        conteudo_bytes=doc_ingerido.conteudo_bytes,
+                        mime_type=mime_tipo
+                    )
+                    st.session_state.resultado_ia = {
+                        "classificacao": classif,
+                        "extracao": extrac,
+                        "chave_ativa": bool(api_key_custom or tem_chave_valida),
+                        "simulado": False
+                    }
+
+            if usar_fallback_teste:
+                st.session_state.resultado_ia = {
+                    "simulado": True
+                }
+
+            if st.session_state.resultado_ia:
+                res = st.session_state.resultado_ia
+                if res.get("simulado"):
+                    st.markdown("""
+                    <div class='card-rotina'>
+                        <h3 style='margin: 0; color: #059669;'>🟢 PROCESSAMENTO AUTÔNOMO (SIMULADO)</h3>
+                        <p style='margin-top: 8px; font-weight: bold;'>Destino: Prontuário Eletrônico</p>
+                        <p style='margin: 0;'><b>Justificativa:</b> Documento clínico analisado com sucesso em modo de demonstração local.</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    classif = res["classificacao"]
+                    extrac = res["extracao"]
+                    tipo_doc_str = classif.tipo_documento.value if hasattr(classif.tipo_documento, "value") else str(classif.tipo_documento)
+                    prioridade_str = classif.nivel_prioridade.value if hasattr(classif.nivel_prioridade, "value") else str(classif.nivel_prioridade)
+                    score_val = getattr(classif, "score_confianca_classificacao", 0.0)
+
+                    if not res.get("chave_ativa"):
+                        st.warning("⚠️ Chave GEMINI_API_KEY não configurada ou inválida. O serviço operou com o **fail-safe resiliente (Seção 12 E.F.)**, direcionando o documento para revisão humana com segurança.")
+
+                    if "URGENTE" in prioridade_str.upper():
+                        st.markdown(f"""
+                        <div class='card-urgente'>
+                            <div style='display: flex; justify-content: space-between; align-items: center;'>
+                                <h3 style='margin: 0; color: #DC2626;'>🚨 ACHADO CRÍTICO / URGÊNCIA</h3>
+                                <span class='badge-alerta'>ALERTA PLANTÃO</span>
+                            </div>
+                            <p style='margin-top: 8px; font-weight: bold;'>Destino: Fila de Urgência Médica</p>
+                            <p style='margin: 0;'><b>Tipo:</b> {tipo_doc_str} | <b>Score:</b> {score_val:.2f}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    elif score_val < 0.85 or "NAO_IDENTIFICAD" in tipo_doc_str:
+                        st.markdown(f"""
+                        <div class='card-revisao'>
+                            <h3 style='margin: 0; color: #D97706;'>🧑‍⚕️ REQUER REVISÃO HUMANA (Auditoria Médica)</h3>
+                            <p style='margin-top: 8px; font-weight: bold;'>Destino: Fila de Revisão Humana</p>
+                            <p style='margin: 0;'><b>Score:</b> {score_val:.2f} (Abaixo do limiar de 0.85) | <b>Tipo:</b> {tipo_doc_str}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"""
+                        <div class='card-rotina'>
+                            <h3 style='margin: 0; color: #059669;'>🟢 PROCESSAMENTO AUTÔNOMO APROVADO</h3>
+                            <p style='margin-top: 8px; font-weight: bold;'>Destino: Roteamento Hospitalar Direto</p>
+                            <p style='margin: 0;'><b>Tipo:</b> {tipo_doc_str} | <b>Score de Confiança:</b> {score_val:.2f}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    st.markdown("#### 📋 Entidades Extraídas pelo Gemini:")
+                    col_e1, col_e2 = st.columns(2)
+                    with col_e1:
+                        st.write(f"**Paciente:** {extrac.paciente.nome or 'Não identificado'}")
+                        st.write(f"**Idade:** {extrac.paciente.idade if extrac.paciente.idade is not None else 'N/I'} anos")
+                        st.write(f"**Médico:** {extrac.medico_solicitante.nome or 'Não identificado'}")
+                    with col_e2:
+                        import re
+                        crm_raw = extrac.medico_solicitante.crm
+                        if hasattr(crm_raw, "numero") and hasattr(crm_raw, "uf"):
+                            num = re.sub(r"(?i)^crm[\s\:\/\.\-]*", "", str(crm_raw.numero or "")).strip()
+                            uf = str(crm_raw.uf or "").strip()
+                            crm_txt = f"{num}-{uf}" if num and uf else (num or uf or "N/I")
+                        elif isinstance(crm_raw, dict):
+                            num = re.sub(r"(?i)^crm[\s\:\/\.\-]*", "", str(crm_raw.get("numero", "") or "")).strip()
+                            uf = str(crm_raw.get("uf", "") or "").strip()
+                            crm_txt = f"{num}-{uf}" if num and uf else (num or uf or "N/I")
+                        elif crm_raw:
+                            crm_str = str(crm_raw).strip()
+                            if "numero=" in crm_str:
+                                m_num = re.search(r"numero=['\"]?([^'\"\s]+)['\"]?", crm_str)
+                                m_uf = re.search(r"uf=['\"]?([^'\"\s]+)['\"]?", crm_str)
+                                num = m_num.group(1) if m_num else ""
+                                uf = m_uf.group(1) if m_uf else ""
+                                num = re.sub(r"(?i)^crm[\s\:\/\.\-]*", "", num).strip()
+                                crm_txt = f"{num}-{uf}" if num and uf else (num or uf or "N/I")
+                            else:
+                                crm_txt = re.sub(r"(?i)^crm[\s\:\/\.\-]*", "", crm_str).strip()
+                        else:
+                            crm_txt = "N/I"
+
+                        # Limpeza final de qualquer prefixo CRM residual
+                        crm_txt = re.sub(r"(?i)^crm[\s\:\/\.\-]*", "", crm_txt).strip() or "N/I"
+
+                        st.write(f"**CRM:** {crm_txt}")
+                        st.write(f"**CID-10 Extraído:** {extrac.cid_extraido or 'Nenhum impresso'}")
+                        st.write(f"**Diagnóstico:** {extrac.diagnostico_principal or 'N/I'}")
+
+                    if extrac.medicamentos:
+                        st.markdown("**Medicamentos Prescritos:**")
+                        for med in extrac.medicamentos:
+                            st.write(f"- 💊 **{med.nome}**: {med.dosagem} ({med.frequencia or 'posologia livre'})")
 
     # -------------------------------------------------------------------------
     # ABA INFERIOR: PAYLOAD JSON ESTRUTURADO (PRONTO PARA ORACLE CLOUD)

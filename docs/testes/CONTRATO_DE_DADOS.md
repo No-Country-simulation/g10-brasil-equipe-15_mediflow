@@ -314,14 +314,18 @@ python -m pytest
 python -m pytest tests/test_contrato_fixtures.py
 
 # Execução dos testes de ingestão física e sanitização
-python -m pytest tests/test_ingestion.py tests/test_sanitization.py
+python -m pytest tests/test_ingestion.py
+
+# Execução dos testes unitários do GeminiService (IA Resiliente)
+python -m pytest tests/test_gemini_service.py
 ```
 
-### Status Atual da Suíte (208 testes passando):
+### Status Atual da Suíte (217 testes passando):
 - **79 testes de contrato (`test_contrato_fixtures.py`):** 65 funcionais + 2 erros de leitura + 12 negativos técnicos, todos validados e com consistência de ponto fixo.
 - **73 testes de motor LangGraph (`test_workflow.py`):** Cobertura determinística de transições de estado, cálculo de regras R1 a R8 e as 5 filas hospitalares.
 - **18 testes de ingestão física e segurança (`test_ingestion.py`):** Validação de envelopes, MIME, arquivos corrompidos, PDFs protegidos e fixtures físicos reais (`.pdf`, `.jpg`, `.webp`, rejeição de `.docx` com HTTP 415).
 - **16 testes de API REST FastAPI (`test_api.py`):** Endpoints assíncronos (`/api/v1/triagens`), polling de status, histórico de auditoria e conformidade com a EPT (CT-001 a CT-080).
+- **9 testes de integração Gemini (`test_gemini_service.py`):** Resiliência REST no Windows, timeout de 15s, Saída Estruturada nativa Pydantic v2 e duplo fallback seguro.
 - **8 testes de persistência OCI Object Storage (`test_oci_storage.py`):** Upload Always Free, simulação de SDK, integridade de hash SHA-256 e sem sobrescrita (`if-none-match`).
 - **8 testes de auditoria clínica e sanidade (`test_audit_items.py`):** Verificações adicionais de consistência médica e conformidade com o edital.
 - **7 testes de schemas harmonizados (`test_schemas.py`):** Validação Pydantic v2, enums resilientes e envelopes de erro Nível 1 e Nível 2.
@@ -334,4 +338,4 @@ python -m pytest tests/test_ingestion.py tests/test_sanitization.py
 | :--- | :--- | :--- |
 | **Fase 1: Rigor Clínico e Fixtures** | William (`CONTRATO_DE_DADOS.md` original) | Criação dos 79 fixtures canônicos, taxonomia estrita dos enums, definição das regras R1 a R8 e alinhamento da urgência com o edital da Oracle. |
 | **Fase 2: Expansão de Negócio** | Luciana (`schema_mediflow_v3.py`) | Expansão para suporte a `ItemExameLaboratorial` (RF-12), propriedades de conveniência para API e integração com armazenamento OCI. |
-| **Fase 3: Contrato Canônico Unificado** | Repositório Oficial (`src/schemas/clinical.py`) | Fusão completa em Pydantic v2, normalização resiliente via `_missing_`, tratamento de erros em dois níveis, 208 testes Pytest automatizados e consolidação em um único contrato oficial. |
+| **Fase 3: Contrato Canônico Unificado** | Repositório Oficial (`src/schemas/clinical.py`) | Fusão completa em Pydantic v2, normalização resiliente via `_missing_`, tratamento de erros em dois níveis, 217 testes Pytest automatizados e consolidação em um único contrato oficial integrado ao GeminiService e API FastAPI. |

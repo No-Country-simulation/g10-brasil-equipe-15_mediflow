@@ -237,3 +237,34 @@ def test_ct080_nenhuma_resposta_expoe_stacktrace(client):
     assert res.status_code == 404
     assert "Traceback" not in res.text
     assert "raise " not in res.text
+
+
+def test_ct057_revisao_humana_preserva_qualidade_e_motivos_do_grafo(client):
+    """CT-057: API propaga métricas reais de qualidade do LangGraph e motivos específicos de revisão."""
+    # Documento com campos ausentes (sem paciente e sem diagnóstico) para forçar revisão
+    payload = {
+        "documento_texto": "Receituário Médico\nDr. Renato CRM: 14589/SP"
+    }
+    post_res = client.post("/api/v1/triagens", json=payload)
+    assert post_res.status_code == 202
+    doc_id = post_res.json()["documento_id"]
+
+    get_res = client.get(f"/api/v1/triagens/{doc_id}")
+    assert get_res.status_code == 200
+    triagem = get_res.json()
+
+    # Deve entrar em revisão humana
+    assert triagem["status"] == "EM_REVISAO"
+    assert "FILA_REVISAO_HUMANA" in triagem["decisao_roteamento"]["destinos"]
+
+    # Qualidade calculada pelo grafo (Fórmula A3) não pode ser o 0.95 estático
+    qualidade = triagem["qualidade"]
+    assert qualidade["score_extracao"] < 0.95
+    assert qualidade["score_combinado"] < 0.95
+    assert len(qualidade["campos_ausentes"]) > 0
+    assert any("paciente" in c for c in qualidade["campos_ausentes"])
+
+    # Motivos de revisão preservados na justificativa
+    justificativa = triagem["decisao_roteamento"]["justificativa_roteamento"]
+    assert "campos obrigatórios ausentes" in justificativa.lower()
+
