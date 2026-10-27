@@ -4,7 +4,7 @@
 > **Projeto 2:** Agente Autônomo para Triagem, Extração e Roteamento de Documentos Clínicos  
 > **Equipe 15:** MediFlow  
 > **Manual Oficial de Referência:** `34aa946f-2883-4917-aec1-aae0df0f43d1.pdf`  
-> **Implementação Central:** [`src/schemas/clinical.py`](src/schemas/clinical.py) | **Suíte de Testes:** 150 testes automatizados via Pytest  
+> **Implementação Central:** [`src/schemas/clinical.py`](src/schemas/clinical.py) | **Suíte de Testes:** 208 testes automatizados via Pytest  
 
 ---
 
@@ -146,9 +146,19 @@ A camada de apresentação do MediFlow adota a **Estratégia Dual**, garantindo 
   - Painel visual interativo em Python que atende ao diferencial oficial do checklist da Oracle (*"Painel de Auditoria Human-in-the-Loop em Streamlit"*).
   - Funciona como bancada operacional de testes rápidos para a equipe de engenharia e auditores médicos, permitindo inspecionar o JSON estruturado lado a lado com a mídia original.
 
-- **FastAPI REST Gateway (`src/api/`):**
+- **FastAPI REST Gateway Assíncrono (`src/api/`):**
   - Servidor backend padronizado com documentação OpenAPI/Swagger interativa automática (`/docs`).
   - Responde com `HTTP 202 Accepted` em operações assíncronas e gerencia a esteira de Background Tasks, servindo de forma agnóstica tanto ao React quanto ao Streamlit e a sistemas legados hospitalares (HIS/PEP).
+  - **Especificação dos Endpoints Oficiais (`/api/v1`):**
+    - `POST /api/v1/triagens`: Recebe payloads em JSON (`CriarTriagemTextoRequest`) ou `multipart/form-data` (arquivos até 10MB/20 páginas). Valida integridade e retorna imediatamente `HTTP 202 Accepted` contendo `documento_id`, `status: "RECEBIDO"`, `status_url` e `historico_url`.
+    - `GET /api/v1/triagens/{id}`: Retorna o modelo canônico completo [`TriagemMediFlow`](src/schemas/clinical.py) enriquecido com o roteamento do LangGraph e metadados OCI.
+    - `GET /api/v1/triagens/{id}/status`: Consulta ultra-leve de polling contendo status (`RECEBIDO`, `PROCESSANDO`, `PROCESSADO`, `EM_REVISAO`, `ERRO_PROCESSAMENTO`), destinos hospitalares e flag de auditoria.
+    - `GET /api/v1/triagens/{id}/historico`: Linha do tempo auditável de eventos emitidos durante o ciclo de vida do documento (ingestão, OCR, extração LLM, roteamento LangGraph e OCI).
+    - `GET /api/v1/health`: Endpoint de sanidade e liveness probe para orquestradores de contêiner e monitoramento hospitalar.
+  - **Blindagem Contra Falhas e Segurança:**
+    - Erros de validação HTTP 400, 413, 415 e 422 mapeados para envelopes controlados [`ErroResposta`](src/schemas/clinical.py).
+    - Exception handlers globais protegem contra vazamento de stack traces e dados sensíveis (CT-080 da EPT).
+    - Decodificação resiliente com suporte automático a UTF-8, Windows-1252 e Latin-1 para terminais hospitalares heterogêneos.
 
 ---
 

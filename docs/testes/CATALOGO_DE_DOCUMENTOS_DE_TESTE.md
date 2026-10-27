@@ -2,9 +2,9 @@
 
 **Projeto:** MediFlow — Equipe 15 (Hackathon ONE G10 - Oracle & Alura)  
 **Repositório Oficial:** `g10-brasil-equipe-15_mediflow`  
-**Versão:** 2.0 — 24/10/2026 (Homologado e Integrado ao Pytest)  
+**Versão:** 2.1 — 26/10/2026 (Homologado e Integrado ao Pytest — 208 testes)  
 **Atualização desta versão:** 79 fixtures oficiais cobrindo integralmente as 8 categorias, limites de tamanho e páginas (10MB / 20 páginas), múltiplos encodings (Latin-1/UTF-8), regras de conflito (A1) e casos de borda (A4/A5).  
-**Execução Automatizada:** `python -m pytest tests/test_contrato_fixtures.py` (79 testes) ou `python -m pytest` (149 testes)  
+**Execução Automatizada:** `python -m pytest tests/test_contrato_fixtures.py` (79 testes) ou `python -m pytest` (208 testes)  
 **Contrato Canônico:** [`CONTRATO_DE_DADOS.md`](CONTRATO_DE_DADOS.md) e [`src/schemas/clinical.py`](../../src/schemas/clinical.py)  
 **Base documental:** `Projeto_oracle.pdf`, `MediFlow_-_Análise_de_Requisitos_v1.1.pdf` e `MediFlow_Especificacao_Funcional_v1.0.pdf`  
 **Manifesto executável:** [`tests/fixtures/manifest.csv`](../../tests/fixtures/manifest.csv)
@@ -364,7 +364,7 @@ Como o bloco vem primeiro, ordenar a pasta por nome já agrupa os casos por assu
 
 > **Todos os 79 fixtures oficiais estão integrados e são executados diretamente pelo Pytest:**
 > - Para rodar apenas os 79 fixtures do catálogo: `python -m pytest tests/test_contrato_fixtures.py`
-> - Para rodar a suíte completa da aplicação (149 testes automatizados): `python -m pytest`
+> - Para rodar a suíte completa da aplicação (208 testes automatizados): `python -m pytest`
 > 
 > *(Nota de Governança: Todos os 79 fixtures sintéticos já se encontram pré-gerados e prontos para consumo imediato em `tests/fixtures/`. A equipe e a banca avaliadora não precisam compilar nem gerar arquivos adicionais para executar os testes via Pytest. Os scripts originais de síntese estão preservados no pacote de insumos históricos de QA).*
 
@@ -379,7 +379,7 @@ Como o bloco vem primeiro, ordenar a pasta por nome já agrupa os casos por assu
 
 ## 13. Rastreabilidade com os critérios de aceite (§16)
 
-> **Status de Cobertura Oficial (24/10/2026):** ✅ **100% dos 15 critérios de aceite comprovados e aprovados** via testes automatizados no Pytest (149 testes aprovados em 1.20s).
+> **Status de Cobertura Oficial (26/10/2026):** ✅ **100% dos 15 critérios de aceite comprovados e aprovados** via testes automatizados no Pytest (208 testes aprovados em ~3.3s).
 
 | Critério | Fixtures que comprovam |
 | --- | --- |
