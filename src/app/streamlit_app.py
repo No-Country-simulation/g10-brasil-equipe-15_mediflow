@@ -17,6 +17,7 @@ import re
 import streamlit as st
 from dotenv import load_dotenv
 
+from typing import Any, Dict, List, Optional
 from src.ingestion import DocumentLoader, IngestaoError
 from src.services.gemini_service import GeminiService
 from src.workflow.graph import criar_grafo
@@ -25,7 +26,9 @@ from src.schemas import (
     TriagemMediFlow,
     StatusTriagem,
     Destino,
+    DestinoRoteamento,
     Classificacao,
+    ClassificacaoClinica,
     DadosExtraidos,
     Paciente,
     Medico,
@@ -34,6 +37,110 @@ from src.schemas import (
 )
 
 load_dotenv(override=True)
+
+MAPA_DESTINOS_ROTULOS = {
+    "EMERGENCIA": "Pronto-Socorro / Emergência Hospitalar",
+    "EMERGENCIA_HOSPITALAR": "Pronto-Socorro / Emergência Hospitalar",
+    "REVISAO_HUMANA": "Fila de Auditoria Médica (Human-in-the-Loop)",
+    "FILA_REVISAO_HUMANA": "Fila de Auditoria Médica (Human-in-the-Loop)",
+    "PRONTUARIO_ELETRONICO": "Prontuário Eletrônico do Paciente",
+    "FARMACIA_HOSPITALAR": "Farmácia Hospitalar",
+    "AMBULATORIO_RETORNO": "Ambulatório de Retorno / Especialidades",
+    "CENTRO_ONCOLOGICO": "Centro de Oncologia / Protocolos",
+    "REGULACAO_LEITOS": "Central de Regulação de Leitos",
+}
+
+
+def executar_fluxo_agente(
+    documento_id: str,
+    tipo_documento: str,
+    prioridade_str: str,
+    score_classificacao: float,
+    paciente_dict: Dict[str, Any],
+    medico_dict: Dict[str, Any],
+    diagnostico: Optional[str],
+    cid: Optional[str] = None,
+    medicamentos: Optional[List[Any]] = None,
+    exames: Optional[List[Any]] = None,
+    urgencia: Optional[str] = None,
+    limiar: float = 0.85,
+) -> Dict[str, Any]:
+    """Invoca deterministicamente o motor LangGraph para decisão clínica e roteamento."""
+    urgente = "URGENTE" in str(prioridade_str).upper() or urgencia == "SIM"
+
+    # 1. Detecção rigorosa de campos ausentes / ilegíveis
+    campos_ausentes = []
+    p_nome = paciente_dict.get("nome")
+    if not p_nome or "ilegível" in str(p_nome).lower() or "não identificado" in str(p_nome).lower() or str(p_nome).strip() in ("N/I", ""):
+        campos_ausentes.append("paciente.nome")
+        p_nome_clean = None
+    else:
+        p_nome_clean = str(p_nome)
+
+    p_idade = paciente_dict.get("idade")
+    if p_idade is None:
+        campos_ausentes.append("paciente.idade")
+
+    m_nome = medico_dict.get("nome")
+    if not m_nome or "ilegível" in str(m_nome).lower() or "não identificado" in str(m_nome).lower() or str(m_nome).strip() in ("N/I", ""):
+        campos_ausentes.append("medico.nome")
+        m_nome_clean = None
+    else:
+        m_nome_clean = str(m_nome)
+
+    crm_val = medico_dict.get("crm")
+    crm_obj = None
+    if not crm_val or "?" in str(crm_val) or "ilegível" in str(crm_val).lower() or str(crm_val).strip() in ("N/I", ""):
+        campos_ausentes.append("medico.crm")
+    else:
+        crm_str = re.sub(r"(?i)^crm[\s\:\/\.\-]*", "", str(crm_val)).strip()
+        partes = re.split(r"[-/]", crm_str)
+        if len(partes) == 2 and partes[0].isdigit():
+            crm_obj = Crm(numero=partes[0].strip(), uf=partes[1].strip().upper())
+        elif partes[0].isdigit():
+            crm_obj = Crm(numero=partes[0].strip(), uf="SP")
+        else:
+            campos_ausentes.append("medico.crm")
+
+    diag_clean = diagnostico
+    if not diagnostico or "borrada" in str(diagnostico).lower() or str(diagnostico).strip() in ("N/I", ""):
+        tipo_upper = str(tipo_documento).upper()
+        if "LABORATORIAL" not in tipo_upper:
+            campos_ausentes.append("diagnostico")
+            diag_clean = None
+
+    paciente_obj = Paciente(nome=p_nome_clean, idade=p_idade)
+    medico_obj = Medico(nome=m_nome_clean, crm=crm_obj)
+    dados_extraidos = DadosExtraidos(
+        paciente=paciente_obj,
+        medico=medico_obj,
+        diagnostico=diag_clean,
+        cid=cid,
+        medicamentos=medicamentos or [],
+        exames=exames or [],
+        urgencia="SIM" if urgente else "NAO",
+    )
+
+    classificacao = ClassificacaoClinica(
+        tipo_documento=tipo_documento,
+        nivel_prioridade=NivelPrioridade.URGENTE if urgente else NivelPrioridade.ROTINA,
+        score_confianca_classificacao=score_classificacao,
+    )
+
+    entrada = EntradaWorkflow(
+        documento_id=documento_id,
+        classificacao=classificacao,
+        dados_extraidos=dados_extraidos,
+        urgencia="SIM" if urgente else "NAO",
+        campos_ausentes=list(set(campos_ausentes)),
+        campos_incertos=[],
+        conflitos=[],
+        limiar=limiar,
+    )
+
+    grafo = criar_grafo()
+    return grafo.invoke({"entrada": entrada})
+
 
 # ==============================================================================
 # CONFIGURAÇÃO DA PÁGINA (STREAMLIT NATIVO)
@@ -131,6 +238,12 @@ CENARIOS_DEMO = {
 if "auditoria_aprovada" not in st.session_state:
     st.session_state.auditoria_aprovada = False
 
+if "dados_editados" not in st.session_state:
+    st.session_state.dados_editados = None
+
+if "doc_id_atual" not in st.session_state:
+    st.session_state.doc_id_atual = None
+
 if "resultado_ia" not in st.session_state:
     st.session_state.resultado_ia = None
 
@@ -209,6 +322,13 @@ st.markdown("<div class='sub-header'>Pipeline com Ingestão Blindada PyMuPDF · 
 # CORPO PRINCIPAL (VISÃO LADO A LADO)
 # ==============================================================================
 if doc_ingerido is not None:
+    # Reseta estado de auditoria ao trocar de documento
+    if st.session_state.doc_id_atual != doc_ingerido.documento_id:
+        st.session_state.doc_id_atual = doc_ingerido.documento_id
+        st.session_state.auditoria_aprovada = False
+        st.session_state.dados_editados = None
+        st.session_state.resultado_ia = None
+
     col_esquerda, col_direita = st.columns([1, 1], gap="medium")
 
     # -------------------------------------------------------------------------
@@ -242,110 +362,53 @@ if doc_ingerido is not None:
             )
 
     # -------------------------------------------------------------------------
-    # COLUNA DIREITA: RESULTADO DA TRIAGEM CLÍNICA & DECISÃO
+    # COLUNA DIREITA: RESULTADO DA TRIAGEM CLÍNICA & DECISÃO DO AGENTE
     # -------------------------------------------------------------------------
     with col_direita:
         st.subheader("⚖️ Decisão do Agente & Roteamento", anchor=False)
-        
-        # ---------------------------------------------------------------------
-        # MODO 1: CENÁRIOS DEMO DO EDITAL
-        # ---------------------------------------------------------------------
+
+        # 1. PROCESSAMENTO DE DADOS: CENÁRIOS DEMO OU UPLOAD REAL
+        decisao_wf = None
+        qualidade_wf = None
+        tipo_doc_str = ""
+        prioridade_str = ""
+        p_nome = "Não identificado"
+        p_idade = None
+        m_nome = "Não identificado"
+        crm_str = "N/I"
+        diag_str = "N/I"
+        cid_str = "Não informado"
+        medicamentos_lista = []
+        caminho_oci_alvo = f"processados/{doc_ingerido.documento_id}.json"
+
         if dados_mock:
-            prioridade = dados_mock["prioridade"]
-            score_comb = dados_mock["score_combinado"]
-            foi_auditado = st.session_state.auditoria_aprovada
-            
-            # Card de Status Dinâmico Nativo
-            if foi_auditado:
-                with st.container(border=True):
-                    st.success("🟢 PROCESSAMENTO HOMOLOGADO (PÓS-AUDITORIA MÉDICA)", icon=":material/verified:")
-                    st.markdown(f"**Destino:** `Prontuário Eletrônico do Paciente`")
-                    st.markdown(f"**Justificativa:** Documento auditado, corrigido e aprovado pelo Médico Auditor (Human-in-the-Loop).")
-                    st.caption("📦 Backup OCI: `processados/DOC-CLIN-2026-AUDITADO.json`")
-            elif prioridade == "Urgente":
-                with st.container(border=True):
-                    st.error("🚨 CASO CRÍTICO / URGÊNCIA DETECTADA", icon=":material/emergency:")
-                    st.markdown(f"**Destino Hospitalar:** `{dados_mock['destino']}`")
-                    st.markdown(f"**Justificativa:** {dados_mock['justificativa']}")
-                    st.caption(f"📦 Backup OCI: `{dados_mock['pasta_oci']}`")
-                if "alerta" in dados_mock:
-                    st.warning(dados_mock["alerta"], icon=":material/notification_important:", title="Alerta Imediato")
-                    
-            elif "Revisão" in prioridade or score_comb < 0.85:
-                with st.container(border=True):
-                    st.warning("🧑‍⚕️ REQUER REVISÃO HUMANA (Human-in-the-Loop)", icon=":material/assignment_late:")
-                    st.markdown(f"**Destino Hospitalar:** `{dados_mock['destino']}`")
-                    st.markdown(f"**Motivo da Retenção:** {dados_mock['justificativa']}")
-                    st.caption(f"📦 Backup OCI: `{dados_mock['pasta_oci']}`")
-            else:
-                with st.container(border=True):
-                    st.success("🟢 PROCESSAMENTO AUTÔNOMO APROVADO (ROTINA)", icon=":material/verified:")
-                    st.markdown(f"**Destino Hospitalar:** `{dados_mock['destino']}`")
-                    st.markdown(f"**Justificativa:** {dados_mock['justificativa']}")
-                    st.caption(f"📦 Backup OCI: `{dados_mock['pasta_oci']}`")
-
-            # Avaliação de Qualidade e Scores (Fórmula A3)
-            with st.container(border=True):
-                st.markdown("#### 📊 Avaliação de Qualidade (Fórmula Determinística A3)")
-                sc1, sc2, sc3 = st.columns(3)
-                sc1.metric("Score Combinado", f"{score_comb:.2f}", delta="Aprovado (>= 0.85)" if score_comb >= 0.85 else "Retido (< 0.85)", delta_color="normal" if score_comb >= 0.85 else "inverse")
-                sc2.metric("Classificação", f"{dados_mock['score_classif']:.2f}")
-                sc3.metric("Extração", f"{dados_mock['score_extrac']:.2f}")
-
-            # Informações Clínicas Extraídas
-            with st.container(border=True):
-                st.markdown("#### 📋 Dados Clínicos Extraídos:")
-                info_col1, info_col2 = st.columns(2)
-                with info_col1:
-                    st.write(f"**Paciente:** {dados_mock['paciente']}")
-                    st.write(f"**Idade:** {dados_mock['idade']} anos")
-                    st.write(f"**Médico Solicitante:** {dados_mock['medico']}")
-                with info_col2:
-                    st.write(f"**CRM:** {dados_mock['crm']}")
-                    st.write(f"**CID-10:** {dados_mock['cid'] or 'Não informado'}")
-                    st.write(f"**Diagnóstico / Achado:** {dados_mock['diagnostico']}")
-
-            # Painel Human-in-the-Loop (HiTL) para casos em revisão
-            if dados_mock["requer_auditoria"] and not foi_auditado:
-                with st.container(border=True):
-                    st.markdown("#### 🧑‍⚕️ Painel de Intervenção Médica (Human-in-the-Loop)")
-                    st.caption("Revise os campos ilegíveis ou ambíguos antes de homologar a extração no sistema hospitalar.")
-                    
-                    with st.form("form_hitl_auditoria"):
-                        f1, f2 = st.columns(2)
-                        with f1:
-                            novo_nome = st.text_input("Confirmar Nome do Paciente:", value="Maria de Fátima Oliveira")
-                            nova_idade = st.number_input("Idade Confirmada:", min_value=0, max_value=125, value=55)
-                            novo_medico = st.text_input("Confirmar Nome do Médico:", value="Dr. Carlos Eduardo Menezes")
-                        with f2:
-                            novo_crm = st.text_input("CRM Confirmado (com UF):", value="123456-SP")
-                            novo_diag = st.text_input("Diagnóstico Confirmado:", value="Hipertensão Arterial Sistêmica")
-                            novo_cid = st.text_input("CID-10:", value="I10")
-
-                        col_btn1, col_btn2 = st.columns(2)
-                        with col_btn1:
-                            submit_aprovar = st.form_submit_button(
-                                "Aprovar Triagem Pós-Revisão",
-                                type="primary",
-                                width="stretch"
-                            )
-                        with col_btn2:
-                            submit_rejeitar = st.form_submit_button(
-                                "Rejeitar Documento",
-                                width="stretch"
-                            )
-
-                    if submit_aprovar:
-                        st.session_state.auditoria_aprovada = True
-                        st.success("Triagem auditada com sucesso pelo médico! Status atualizado para PROCESSADO.", icon=":material/check_circle:", title="Auditoria Concluída")
-                        st.rerun()
-                    elif submit_rejeitar:
-                        st.warning("Documento devolvido para a recepção clínica para novo escaneamento.", icon=":material/cancel:", title="Documento Devolvido")
-
-        # ---------------------------------------------------------------------
-        # MODO 2: UPLOAD REAL COM GOOGLE GEMINI + LANGGRAPH
-        # ---------------------------------------------------------------------
+            # Caso Demo: executa no LangGraph
+            paciente_d = {"nome": dados_mock["paciente"], "idade": dados_mock["idade"]}
+            medico_d = {"nome": dados_mock["medico"], "crm": dados_mock["crm"]}
+            estado_wf = executar_fluxo_agente(
+                documento_id=doc_ingerido.documento_id,
+                tipo_documento=dados_mock["tipo"],
+                prioridade_str=dados_mock["prioridade"],
+                score_classificacao=dados_mock["score_classif"],
+                paciente_dict=paciente_d,
+                medico_dict=medico_d,
+                diagnostico=dados_mock["diagnostico"],
+                cid=dados_mock["cid"],
+                urgencia="SIM" if "Urgente" in dados_mock["prioridade"] else "NAO",
+            )
+            decisao_wf = estado_wf.get("decisao")
+            qualidade_wf = estado_wf.get("qualidade")
+            tipo_doc_str = dados_mock["tipo"]
+            prioridade_str = dados_mock["prioridade"]
+            p_nome = dados_mock["paciente"]
+            p_idade = dados_mock["idade"]
+            m_nome = dados_mock["medico"]
+            crm_str = dados_mock["crm"]
+            diag_str = dados_mock["diagnostico"]
+            cid_str = dados_mock["cid"] or "Não informado"
+            caminho_oci_alvo = dados_mock["pasta_oci"]
         else:
+            # Modo Upload: botões de execução
             st.info("Arquivo recebido com sucesso na Ingestão! Pronto para análise inteligente com Gemini.", title="Pronto para Análise")
             
             btn_col1, btn_col2 = st.columns([2, 1])
@@ -379,157 +442,323 @@ if doc_ingerido is not None:
                         conteudo_bytes=doc_ingerido.conteudo_bytes,
                         mime_type=mime_tipo
                     )
-                    
-                    # Conecta os sinais estruturados do Gemini com o Grafo LangGraph
-                    grafo = criar_grafo()
-                    entrada_wf = EntradaWorkflow(
+
+                    paciente_obj = getattr(extrac, "paciente", None)
+                    medico_obj = getattr(extrac, "medico_solicitante", getattr(extrac, "medico", None))
+                    crm_raw = getattr(medico_obj, "crm", None)
+                    if hasattr(crm_raw, "numero") and hasattr(crm_raw, "uf"):
+                        crm_txt = f"{crm_raw.numero}-{crm_raw.uf}"
+                    else:
+                        crm_txt = str(crm_raw or "")
+
+                    p_d = {"nome": getattr(paciente_obj, "nome", None), "idade": getattr(paciente_obj, "idade", None)}
+                    m_d = {"nome": getattr(medico_obj, "nome", None), "crm": crm_txt}
+
+                    t_val = getattr(classif, "tipo_documento", "OUTRO")
+                    t_str = t_val.value if hasattr(t_val, "value") else str(t_val)
+                    p_val = getattr(classif, "nivel_prioridade", "ROTINA")
+                    pr_str = p_val.value if hasattr(p_val, "value") else str(p_val)
+
+                    d_val = getattr(extrac, "diagnostico_principal", getattr(extrac, "diagnostico", None))
+                    c_val = getattr(extrac, "cid_extraido", getattr(extrac, "cid", None))
+
+                    estado_wf = executar_fluxo_agente(
                         documento_id=doc_ingerido.documento_id,
-                        classificacao=classif,
-                        dados_extraidos=extrac,
-                        urgencia="SIM" if "URGENTE" in str(getattr(classif, "nivel_prioridade", "")).upper() else "NAO"
+                        tipo_documento=t_str,
+                        prioridade_str=pr_str,
+                        score_classificacao=getattr(classif, "score_confianca_classificacao", 0.95),
+                        paciente_dict=p_d,
+                        medico_dict=m_d,
+                        diagnostico=d_val,
+                        cid=c_val,
+                        medicamentos=getattr(extrac, "medicamentos", []),
+                        exames=getattr(extrac, "exames", []),
+                        urgencia="SIM" if "URGENTE" in pr_str.upper() else "NAO",
                     )
-                    estado_wf = grafo.invoke({"entrada": entrada_wf})
-                    
+
                     st.session_state.resultado_ia = {
-                        "classificacao": classif,
-                        "extracao": extrac,
-                        "qualidade_wf": estado_wf.get("qualidade"),
                         "decisao_wf": estado_wf.get("decisao"),
+                        "qualidade_wf": estado_wf.get("qualidade"),
+                        "tipo_doc_str": t_str,
+                        "prioridade_str": pr_str,
+                        "p_nome": p_d["nome"] or "Não identificado",
+                        "p_idade": p_d["idade"],
+                        "m_nome": m_d["nome"] or "Não identificado",
+                        "crm_str": crm_txt or "N/I",
+                        "diag_str": d_val or "N/I",
+                        "cid_str": c_val or "Não informado",
+                        "medicamentos_lista": getattr(extrac, "medicamentos", []),
                         "chave_ativa": bool(api_key_custom or tem_chave_valida),
                         "simulado": False
                     }
 
             if usar_fallback_teste:
+                # Simulação local com o motor LangGraph
+                estado_wf = executar_fluxo_agente(
+                    documento_id=doc_ingerido.documento_id,
+                    tipo_documento="Receituário Médico",
+                    prioridade_str="Rotina",
+                    score_classificacao=0.95,
+                    paciente_dict={"nome": "Carlos Drummond", "idade": 50},
+                    medico_dict={"nome": "Dr. Fernando Pessoa", "crm": "12345-SP"},
+                    diagnostico="Prescrição de Rotina",
+                    cid=None,
+                    urgencia="NAO",
+                )
                 st.session_state.resultado_ia = {
+                    "decisao_wf": estado_wf.get("decisao"),
+                    "qualidade_wf": estado_wf.get("qualidade"),
+                    "tipo_doc_str": "Receituário Médico",
+                    "prioridade_str": "Rotina",
+                    "p_nome": "Carlos Drummond",
+                    "p_idade": 50,
+                    "m_nome": "Dr. Fernando Pessoa",
+                    "crm_str": "12345-SP",
+                    "diag_str": "Prescrição de Rotina",
+                    "cid_str": "Não informado",
+                    "medicamentos_lista": [],
+                    "chave_ativa": True,
                     "simulado": True
                 }
 
             if st.session_state.resultado_ia:
                 res = st.session_state.resultado_ia
-                if res.get("simulado"):
-                    with st.container(border=True):
-                        st.success("🟢 PROCESSAMENTO AUTÔNOMO (SIMULAÇÃO LOCAL)", icon=":material/bolt:")
-                        st.markdown("**Destino:** `Prontuário Eletrônico do Paciente`")
-                        st.markdown("**Justificativa:** Documento clínico analisado com sucesso em modo de demonstração local.")
-                else:
-                    classif = res["classificacao"]
-                    extrac = res["extracao"]
-                    qualidade_wf = res.get("qualidade_wf")
-                    decisao_wf = res.get("decisao_wf")
+                decisao_wf = res["decisao_wf"]
+                qualidade_wf = res["qualidade_wf"]
+                tipo_doc_str = res["tipo_doc_str"]
+                prioridade_str = res["prioridade_str"]
+                p_nome = res["p_nome"]
+                p_idade = res["p_idade"]
+                m_nome = res["m_nome"]
+                crm_str = res["crm_str"]
+                diag_str = res["diag_str"]
+                cid_str = res["cid_str"]
+                medicamentos_lista = res.get("medicamentos_lista", [])
 
-                    tipo_doc_str = classif.tipo_documento.value if hasattr(classif.tipo_documento, "value") else str(classif.tipo_documento)
-                    prioridade_str = classif.nivel_prioridade.value if hasattr(classif.nivel_prioridade, "value") else str(classif.nivel_prioridade)
-                    
-                    score_classif_val = getattr(classif, "score_confianca_classificacao", 0.95)
-                    score_extrac_val = getattr(qualidade_wf, "score_extracao", getattr(extrac, "score_confianca_extracao", 0.90)) if qualidade_wf else 0.90
-                    score_combinado_val = getattr(qualidade_wf, "score_combinado", min(score_classif_val, score_extrac_val)) if qualidade_wf else min(score_classif_val, score_extrac_val)
-                    
-                    destinos_wf = getattr(decisao_wf, "destinos", ["PRONTUARIO_ELETRONICO"]) if decisao_wf else ["PRONTUARIO_ELETRONICO"]
-                    destinos_str = ", ".join([d.value if hasattr(d, "value") else str(d) for d in destinos_wf])
-                    justificativa_wf = getattr(decisao_wf, "justificativa", "Triagem clínica finalizada.") if decisao_wf else "Triagem clínica finalizada."
-                    status_wf = getattr(decisao_wf, "status", "PROCESSADO") if decisao_wf else "PROCESSADO"
+                if not res.get("chave_ativa") and not res.get("simulado"):
+                    st.warning(
+                        "Chave GEMINI_API_KEY não configurada ou inválida. O serviço operou com o fail-safe resiliente (Seção 12 E.F.), direcionando para revisão humana.",
+                        title="Aviso de Segurança Fail-Safe"
+                    )
 
-                    if not res.get("chave_ativa"):
-                        st.warning(
-                            "Chave GEMINI_API_KEY não configurada ou inválida. O serviço operou com o fail-safe resiliente (Seção 12 E.F.), direcionando para revisão humana.",
-                            title="Aviso de Segurança Fail-Safe"
-                        )
+        # ---------------------------------------------------------------------
+        # 2. RENDERIZAÇÃO UNIFICADA DA DECISÃO DO AGENTE
+        # ---------------------------------------------------------------------
+        if decisao_wf is not None and qualidade_wf is not None:
+            # Aplica dados editados pelo médico se houve auditoria
+            if st.session_state.auditoria_aprovada and st.session_state.dados_editados:
+                ed = st.session_state.dados_editados
+                p_nome = ed.get("paciente", p_nome)
+                p_idade = ed.get("idade", p_idade)
+                m_nome = ed.get("medico", m_nome)
+                crm_str = ed.get("crm", crm_str)
+                diag_str = ed.get("diagnostico", diag_str)
+                cid_str = ed.get("cid", cid_str)
 
-                    # Card de Decisão LangGraph
-                    with st.container(border=True):
-                        if "URGENTE" in prioridade_str.upper() or "URGENCIA" in destinos_str.upper():
-                            st.error("🚨 ACHADO CRÍTICO / URGÊNCIA CLÍNICA", icon=":material/emergency:")
-                            st.markdown(f"**Destino:** `{destinos_str}`")
-                            st.markdown(f"**Justificativa:** {justificativa_wf}")
-                            st.caption("📦 Pasta OCI: `processados/urgentes/`")
-                        elif status_wf == "EM_REVISAO" or score_combinado_val < 0.85 or "NAO_IDENTIFICAD" in tipo_doc_str:
-                            st.warning("🧑‍⚕️ REQUER REVISÃO HUMANA (Auditoria Médica)", icon=":material/assignment_late:")
-                            st.markdown(f"**Destino:** `{destinos_str}`")
-                            st.markdown(f"**Motivo da Retenção:** {justificativa_wf}")
-                            st.caption("📦 Pasta OCI: `auditoria/`")
+            destinos_raw = [d.value if hasattr(d, "value") else str(d) for d in decisao_wf.destinos]
+            destinos_nomes = [MAPA_DESTINOS_ROTULOS.get(d, d) for d in destinos_raw]
+            destinos_str = " + ".join(destinos_nomes)
+
+            requer_auditoria = decisao_wf.requer_auditoria_humana
+            eh_urgente = any("EMERGENCIA" in d.upper() for d in destinos_raw) or "URGENTE" in prioridade_str.upper()
+            foi_auditado = st.session_state.auditoria_aprovada
+
+            # Card Principal de Decisão
+            if foi_auditado:
+                with st.container(border=True):
+                    st.success("🟢 PROCESSAMENTO HOMOLOGADO (PÓS-AUDITORIA MÉDICA)", icon=":material/verified:")
+                    st.markdown("**Destino Hospitalar Homologado:** `Prontuário Eletrônico do Paciente`")
+                    st.markdown("**Justificativa:** Documento auditado, corrigido e aprovado pelo Médico Auditor (Human-in-the-Loop).")
+                    st.caption("📦 Backup OCI: `processados/DOC-CLIN-2026-AUDITADO.json`")
+
+            elif eh_urgente and requer_auditoria:
+                with st.container(border=True):
+                    st.error("🚨 URGÊNCIA CLÍNICA COM REVISÃO HUMANA SIMULTÂNEA", icon=":material/emergency:")
+                    st.markdown(f"**Destinos Hospitalares Simultâneos:**")
+                    st.markdown(f"1. **{destinos_nomes[0]}** (Atendimento Imediato)")
+                    if len(destinos_nomes) > 1:
+                        st.markdown(f"2. **{destinos_nomes[1]}** (Auditoria de Pendências)")
+                    st.markdown(f"**Justificativa do Agente:** {decisao_wf.justificativa}")
+                    st.caption("📦 Encaminhamento simultâneo: `processados/urgentes/` e `auditoria/`")
+
+                if decisao_wf.alerta_simulado:
+                    st.warning("🚨 **ALERTA IMEDIATO AO PLANTÃO**: Notificação crítica disparada! Simultaneamente, o prontuário foi retido para auditoria médica devido a dados incompletos ou borrados.", icon=":material/notification_important:")
+
+            elif eh_urgente and not requer_auditoria:
+                with st.container(border=True):
+                    st.error("🚨 CASO CRÍTICO / URGÊNCIA CLÍNICA IMEDIATA", icon=":material/emergency:")
+                    st.markdown(f"**Destino Hospitalar:** `{destinos_str}`")
+                    st.markdown(f"**Justificativa do Agente:** {decisao_wf.justificativa}")
+                    st.caption("📦 Pasta OCI: `processados/urgentes/`")
+
+                if decisao_wf.alerta_simulado:
+                    st.warning("🚨 **ALERTA IMEDIATO AO PLANTÃO**: Encaminhamento imediato para equipe médica de plantão.", icon=":material/notification_important:")
+
+            elif not eh_urgente and requer_auditoria:
+                with st.container(border=True):
+                    st.warning("🧑‍⚕️ REQUER REVISÃO HUMANA (Auditoria Médica)", icon=":material/assignment_late:")
+                    st.markdown(f"**Destino Hospitalar:** `{destinos_str}`")
+                    st.markdown(f"**Justificativa do Agente:** {decisao_wf.justificativa}")
+                    st.caption("📦 Pasta OCI: `auditoria/`")
+
+            else:
+                with st.container(border=True):
+                    st.success("🟢 PROCESSAMENTO AUTÔNOMO APROVADO (ROTINA)", icon=":material/verified:")
+                    st.markdown(f"**Destino Hospitalar:** `{destinos_str}`")
+                    st.markdown(f"**Justificativa do Agente:** {decisao_wf.justificativa}")
+                    st.caption("📦 Pasta OCI: `processados/`")
+
+            # -----------------------------------------------------------------
+            # 3. MOTIVOS DE RETENÇÃO DO AGENTE (SE HOUVER)
+            # -----------------------------------------------------------------
+            if qualidade_wf.motivos_revisao and not foi_auditado:
+                with st.container(border=True):
+                    st.markdown("#### ⚠️ Motivos da Retenção Calculados pelo Agente:")
+                    for motivo in qualidade_wf.motivos_revisao:
+                        st.markdown(f"- 🔸 **{motivo}**")
+                    if qualidade_wf.campos_ausentes:
+                        st.caption(f"Campos ausentes identificados: `{', '.join(qualidade_wf.campos_ausentes)}`")
+
+            # -----------------------------------------------------------------
+            # 4. AVALIAÇÃO DE QUALIDADE (FÓRMULA A3)
+            # -----------------------------------------------------------------
+            with st.container(border=True):
+                st.markdown("#### 📊 Avaliação de Qualidade (Fórmula Determinística A3)")
+                sc1, sc2, sc3 = st.columns(3)
+                score_c = qualidade_wf.score_combinado
+                sc1.metric(
+                    "Score Combinado",
+                    f"{score_c:.2f}",
+                    delta="Aprovado (>= 0.85)" if score_c >= 0.85 else "Retido (< 0.85)",
+                    delta_color="normal" if score_c >= 0.85 else "inverse"
+                )
+                sc2.metric("Classificação", f"{qualidade_wf.score_classificacao:.2f}")
+                sc3.metric("Extração", f"{qualidade_wf.score_extracao:.2f}")
+
+            # -----------------------------------------------------------------
+            # 5. DADOS CLÍNICOS EXTRAÍDOS
+            # -----------------------------------------------------------------
+            with st.container(border=True):
+                st.markdown("#### 📋 Dados Clínicos Extraídos:")
+                info_col1, info_col2 = st.columns(2)
+                with info_col1:
+                    st.write(f"**Paciente:** {p_nome}")
+                    st.write(f"**Idade:** {p_idade if p_idade is not None else 'N/I'} anos")
+                    st.write(f"**Médico:** {m_nome}")
+                with info_col2:
+                    st.write(f"**CRM:** {crm_str}")
+                    st.write(f"**CID-10:** {cid_str}")
+                    st.write(f"**Diagnóstico:** {diag_str}")
+
+                if medicamentos_lista:
+                    st.markdown("**Medicamentos Prescritos:**")
+                    for med in medicamentos_lista:
+                        if hasattr(med, "nome"):
+                            st.write(f"- 💊 **{med.nome}**: {getattr(med, 'dosagem', '')} ({getattr(med, 'frequencia', 'posologia livre')})")
                         else:
-                            st.success("🟢 PROCESSAMENTO AUTÔNOMO APROVADO", icon=":material/verified:")
-                            st.markdown(f"**Destino:** `{destinos_str}`")
-                            st.markdown(f"**Justificativa:** {justificativa_wf}")
-                            st.caption("📦 Pasta OCI: `processados/`")
+                            st.write(f"- 💊 {str(med)}")
 
-                    # Breakdown de Scores A3
-                    with st.container(border=True):
-                        st.markdown("#### 📊 Avaliação de Qualidade (Fórmula Determinística A3)")
-                        q1, q2, q3 = st.columns(3)
-                        q1.metric("Score Combinado", f"{score_combinado_val:.2f}", delta="Aprovado (>= 0.85)" if score_combinado_val >= 0.85 else "Retido (< 0.85)", delta_color="normal" if score_combinado_val >= 0.85 else "inverse")
-                        q2.metric("Classificação", f"{score_classif_val:.2f}")
-                        q3.metric("Extração", f"{score_extrac_val:.2f}")
+            # -----------------------------------------------------------------
+            # 6. PAINEL DE INTERVENÇÃO MÉDICA (HiTL) UNIVERSAL
+            # -----------------------------------------------------------------
+            if requer_auditoria and not foi_auditado:
+                with st.container(border=True):
+                    st.markdown("#### 🧑‍⚕️ Painel de Intervenção Médica (Human-in-the-Loop)")
+                    st.caption("O agente reteve este documento para revisão médica. Preencha ou confirme os dados ausentes para homologação.")
 
-                    # Entidades Clínicas Extraídas
-                    with st.container(border=True):
-                        st.markdown("#### 📋 Entidades Extraídas:")
-                        col_e1, col_e2 = st.columns(2)
-                        
-                        paciente_obj = getattr(extrac, "paciente", None)
-                        p_nome = getattr(paciente_obj, "nome", None) or "Não identificado"
-                        p_idade = getattr(paciente_obj, "idade", None)
-                        
-                        medico_obj = getattr(extrac, "medico_solicitante", getattr(extrac, "medico", None))
-                        m_nome = getattr(medico_obj, "nome", None) or "Não identificado"
-                        
-                        # Extrai CRM limpo
-                        crm_raw = getattr(medico_obj, "crm", None)
-                        if hasattr(crm_raw, "numero") and hasattr(crm_raw, "uf"):
-                            crm_num = re.sub(r"(?i)^crm[\s\:\/\.\-]*", "", str(crm_raw.numero or "")).strip()
-                            crm_uf = str(crm_raw.uf or "").strip()
-                            crm_str = f"{crm_num}-{crm_uf}" if crm_num and crm_uf else (crm_num or crm_uf or "N/I")
-                        else:
-                            crm_str = re.sub(r"(?i)^crm[\s\:\/\.\-]*", "", str(crm_raw or "")).strip() or "N/I"
-                        
-                        diag_str = getattr(extrac, "diagnostico_principal", getattr(extrac, "diagnostico", None)) or "N/I"
-                        cid_str = getattr(extrac, "cid_extraido", getattr(extrac, "cid", None)) or "Nenhum impresso"
+                    with st.form("form_hitl_auditoria_universal"):
+                        f1, f2 = st.columns(2)
+                        with f1:
+                            novo_nome = st.text_input(
+                                "Confirmar Nome do Paciente:",
+                                value=p_nome if p_nome not in ("Não identificado", "N/I") and "ilegível" not in str(p_nome).lower() else "Maria de Fátima Oliveira"
+                            )
+                            nova_idade = st.number_input(
+                                "Idade Confirmada:",
+                                min_value=0,
+                                max_value=125,
+                                value=int(p_idade) if (p_idade is not None and int(p_idade) > 0) else 55
+                            )
+                            novo_medico = st.text_input(
+                                "Confirmar Nome do Médico:",
+                                value=m_nome if m_nome not in ("Não identificado", "N/I") and "ilegível" not in str(m_nome).lower() else "Dr. Carlos Eduardo Menezes"
+                            )
+                        with f2:
+                            crm_default = crm_str if crm_str not in ("N/I", "") and "ilegível" not in str(crm_str).lower() and "?" not in str(crm_str) else "123456-SP"
+                            novo_crm = st.text_input("CRM Confirmado (com UF):", value=crm_default)
+                            diag_default = diag_str if diag_str not in ("N/I", "") and "borrada" not in str(diag_str).lower() else "Hipertensão Arterial Sistêmica"
+                            novo_diag = st.text_input("Diagnóstico Confirmado:", value=diag_default)
+                            novo_cid = st.text_input("CID-10:", value=cid_str if cid_str not in ("Não informado", "Nenhum impresso") else "I10")
 
-                        with col_e1:
-                            st.write(f"**Paciente:** {p_nome}")
-                            st.write(f"**Idade:** {p_idade if p_idade is not None else 'N/I'} anos")
-                            st.write(f"**Médico:** {m_nome}")
-                        with col_e2:
-                            st.write(f"**CRM:** {crm_str}")
-                            st.write(f"**CID-10:** {cid_str}")
-                            st.write(f"**Diagnóstico:** {diag_str}")
+                        col_btn1, col_btn2 = st.columns(2)
+                        with col_btn1:
+                            submit_aprovar = st.form_submit_button(
+                                "Aprovar Triagem Pós-Revisão",
+                                type="primary",
+                                width="stretch"
+                            )
+                        with col_btn2:
+                            submit_rejeitar = st.form_submit_button(
+                                "Rejeitar Documento",
+                                width="stretch"
+                            )
 
-                        medicamentos_lista = getattr(extrac, "medicamentos", [])
-                        if medicamentos_lista:
-                            st.markdown("**Medicamentos Prescritos:**")
-                            for med in medicamentos_lista:
-                                if hasattr(med, "nome"):
-                                    st.write(f"- 💊 **{med.nome}**: {getattr(med, 'dosagem', '')} ({getattr(med, 'frequencia', 'posologia livre')})")
-                                else:
-                                    st.write(f"- 💊 {str(med)}")
+                    if submit_aprovar:
+                        st.session_state.auditoria_aprovada = True
+                        st.session_state.dados_editados = {
+                            "paciente": novo_nome,
+                            "idade": nova_idade,
+                            "medico": novo_medico,
+                            "crm": novo_crm,
+                            "diagnostico": novo_diag,
+                            "cid": novo_cid,
+                        }
+                        st.success("Triagem auditada com sucesso pelo médico! Status atualizado para PROCESSADO.", icon=":material/check_circle:", title="Auditoria Concluída")
+                        st.rerun()
+                    elif submit_rejeitar:
+                        st.warning("Documento devolvido para a recepção clínica para novo escaneamento.", icon=":material/cancel:", title="Documento Devolvido")
 
-    # -------------------------------------------------------------------------
-    # ABA INFERIOR: PAYLOAD JSON ESTRUTURADO (CONTRATO DE DADOS OCI)
-    # -------------------------------------------------------------------------
-    st.markdown("---")
-    with st.expander("🔍 Ver Payload JSON Estruturado (Contrato de Saída para OCI)", expanded=False):
-        payload_saida = {
-            "status": "PROCESSADO" if (dados_mock and not dados_mock.get("requer_auditoria")) else "EM_REVISAO",
-            "documento_id": doc_ingerido.documento_id,
-            "arquivo_origem": doc_ingerido.nome_arquivo,
-            "classificacao": {
-                "tipo_documento": dados_mock["tipo"] if dados_mock else tipo_doc_str,
-                "prioridade": dados_mock["prioridade"] if dados_mock else prioridade_str,
-                "score_confianca": dados_mock["score_combinado"] if dados_mock else score_combinado_val
-            },
-            "dados_extraidos": {
-                "paciente": dados_mock["paciente"] if dados_mock else p_nome,
-                "medico": dados_mock["medico"] if dados_mock else m_nome,
-                "crm": dados_mock["crm"] if dados_mock else crm_str,
-                "diagnostico": dados_mock["diagnostico"] if dados_mock else diag_str
-            },
-            "armazenamento_oci": {
-                "bucket": os.getenv("OCI_BUCKET_NAME", "mediflow-documentos"),
-                "caminho_objeto": dados_mock["pasta_oci"] if dados_mock else f"processados/{doc_ingerido.documento_id}.json",
-                "status_backup": "sucesso"
-            }
-        }
-        st.json(payload_saida)
+            # -----------------------------------------------------------------
+            # 7. PAYLOAD JSON ESTRUTURADO (CONTRATO OCI)
+            # -----------------------------------------------------------------
+            st.markdown("---")
+            with st.expander("🔍 Ver Payload JSON Estruturado (Contrato de Saída para OCI)", expanded=False):
+                payload_saida = {
+                    "status": "PROCESSADO" if foi_auditado or not requer_auditoria else "EM_REVISAO",
+                    "documento_id": doc_ingerido.documento_id,
+                    "arquivo_origem": doc_ingerido.nome_arquivo,
+                    "classificacao": {
+                        "tipo_documento": tipo_doc_str,
+                        "prioridade": prioridade_str,
+                        "score_confianca": qualidade_wf.score_combinado
+                    },
+                    "dados_extraidos": {
+                        "paciente": p_nome,
+                        "idade": p_idade,
+                        "medico": m_nome,
+                        "crm": crm_str,
+                        "diagnostico": diag_str,
+                        "cid": cid_str
+                    },
+                    "qualidade": {
+                        "score_combinado": qualidade_wf.score_combinado,
+                        "score_classificacao": qualidade_wf.score_classificacao,
+                        "score_extracao": qualidade_wf.score_extracao,
+                        "motivos_revisao": qualidade_wf.motivos_revisao,
+                        "campos_ausentes": qualidade_wf.campos_ausentes
+                    },
+                    "decisao_roteamento": {
+                        "destinos": destinos_raw,
+                        "requer_auditoria_humana": requer_auditoria and not foi_auditado,
+                        "justificativa": decisao_wf.justificativa
+                    },
+                    "armazenamento_oci": {
+                        "bucket": os.getenv("OCI_BUCKET_NAME", "mediflow-documentos"),
+                        "caminho_objeto": "processados/DOC-CLIN-2026-AUDITADO.json" if foi_auditado else caminho_oci_alvo,
+                        "status_backup": "sucesso"
+                    }
+                }
+                st.json(payload_saida)
 
 else:
     st.info("👈 Selecione um cenário de demonstração ou faça upload de um documento clínico na barra lateral para iniciar a triagem.", title="Aguardando Seleção")
