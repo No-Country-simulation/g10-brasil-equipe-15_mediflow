@@ -492,6 +492,7 @@ class TriagemMediFlow(BaseModel):
     decisao_roteamento: Optional[DecisaoRoteamento] = None
     armazenamento_oci: Optional[ArmazenamentoOCI] = None
     erro: Optional[ErroProcessamento] = None
+    versao_esquema: str = Field(default="2.0.0", description="Versão do contrato de dados canônico (CT-043/CT-073)")
 
     @model_validator(mode="after")
     def aplicar_regras(self) -> "TriagemMediFlow":

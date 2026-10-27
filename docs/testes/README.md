@@ -28,13 +28,16 @@ Todos os 79 fixtures do catálogo foram integrados como testes nativos do `pytes
 python -m pytest tests/test_contrato_fixtures.py
 ```
 
-### Para executar a suíte completa da aplicação (149 testes):
+### Para executar a suíte completa da aplicação (208 testes):
 ```powershell
 python -m pytest
 ```
 
-### Distribuição dos 149 Testes Automatizados:
+### Distribuição dos 208 Testes Automatizados:
 * **79 testes de Fixtures Oficiais** (`tests/test_contrato_fixtures.py`): ✅ 100% Aprovados
-* **17 testes de Ingestão e Segurança** (`tests/test_ingestion.py`): ✅ 100% Aprovados (amostras, limites e fixtures físicos reais do William)
+* **73 testes de Roteamento LangGraph** (`tests/test_workflow.py`): ✅ 100% Aprovados
+* **18 testes de Ingestão e Segurança** (`tests/test_ingestion.py`): ✅ 100% Aprovados (amostras, limites e fixtures físicos reais do William)
+* **16 testes de API REST FastAPI** (`tests/test_api.py`): ✅ 100% Aprovados (endpoints assíncronos, status e EPT)
+* **8 testes de Auditoria Técnica e Sanidade** (`tests/test_audit_items.py`): ✅ 100% Aprovados
+* **8 testes de Persistência OCI Object Storage** (`tests/test_oci_storage.py`): ✅ 100% Aprovados
 * **7 testes de Schemas Harmonizados** (`tests/test_schemas.py`): ✅ 100% Aprovados
-* **46 testes de Roteamento LangGraph** (`tests/test_workflow.py`): ✅ 100% Aprovados

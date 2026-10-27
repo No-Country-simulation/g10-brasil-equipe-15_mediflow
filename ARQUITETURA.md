@@ -333,19 +333,20 @@ mediflow-documentos/ (Bucket OCI Always Free - Tenancy izapalomaa)
 
 ---
 
-## 🧪 7. Engenharia de Qualidade e Suíte de Testes (192 Testes)
+## 🧪 7. Engenharia de Qualidade e Suíte de Testes (208 Testes)
 
-A conformidade do MediFlow com os requisitos funcionais e com o edital da Oracle é auditada por uma suíte de 192 testes automatizados no Pytest:
+A conformidade do MediFlow com os requisitos funcionais e com o edital da Oracle é auditada por uma suíte de 208 testes automatizados no Pytest:
 
 | Módulo de Teste | Quantidade | Escopo e Cobertura Técnica |
 | :--- | :---: | :--- |
 | **`tests/test_contrato_fixtures.py`** | **79 testes** | Validação canônica dos 79 fixtures oficiais (William) contra o modelo Pydantic v2 e regras R1 a R8 (consistência de ponto fixo determinístico). |
 | **`tests/test_workflow.py`** | **73 testes** | Grafo LangGraph completo, nós de decisão, arestas condicionais, avaliação de score e roteamento para os 5 destinos. |
 | **`tests/test_ingestion.py`** | **18 testes** | Ingestão robusta, validação de arquivos físicos (.pdf, .jpg, .webp, rejeição de .docx), limites estritos de 10.00MB e 20 páginas, PDFs protegidos e corrompidos. |
+| **`tests/test_api.py`** | **16 testes** | Endpoints REST FastAPI assíncronos (HTTP 202), validações de erro (400, 415, 422), polling de status, histórico e health check (EPT CT-001 a CT-080). |
 | **`tests/test_oci_storage.py`** | **8 testes** | Conector OCI Object Storage simulado (mock), validação de `if-none-match`, preservação de bytes, paginação e propagação de erros. |
 | **`tests/test_audit_items.py`** | **8 testes** | Auditoria clínica de sanidade: descarte de diagnóstico restrito a lab, urgência indeterminada, persistência e sanitização. |
 | **`tests/test_schemas.py`** | **7 testes** | Schemas Pydantic v2, serialização JSON, aliases de retrocompatibilidade e tratamento de erros de Nível 1 e 2. |
-| **Total da Suíte Oficial** | **192 testes** | **100% aprovados em ~2.6s (1 skipped esperado de isolamento legado)** |
+| **Total da Suíte Oficial** | **208 testes** | **100% aprovados em ~8.3s (1 skipped esperado de isolamento legado)** |
 
 ---
 
@@ -369,7 +370,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # Configurar GEMINI_API_KEY e credenciais OCI Always Free
 
-# 5. Executar a suíte completa de 192 testes automatizados
+# 5. Executar a suíte completa de 208 testes automatizados
 python -m pytest
 
 # 6. (Opcional) Executar o teste real no bucket OCI
@@ -410,6 +411,7 @@ g10-brasil-equipe-15_mediflow/
 │
 ├── src/                                        <- Código-fonte da aplicação (Python Backend & IA)
 │   ├── agents/                                 <- Agentes de Inteligência Multimodal (Google Gemini 1.5)
+│   ├── api/                                    <- API REST FastAPI Assíncrona (/api/v1/triagens)
 │   ├── app/                                    <- Interfaces Python (Streamlit HiTL)
 │   │   └── streamlit_app.py                    <- Painel web de auditoria médica e testes rápidos
 │   ├── ingestion/                              <- Camada de Ingestão e Gateway de Segurança
@@ -425,10 +427,11 @@ g10-brasil-equipe-15_mediflow/
 ├── scripts/                                    <- Utilitários de homologação e scripts de diagnóstico
 │   └── testar_oci.py                           <- Validação real ponta a ponta no bucket OCI Always Free
 │
-├── tests/                                      <- Suíte Oficial de Testes Automatizados (192 testes)
+├── tests/                                      <- Suíte Oficial de Testes Automatizados (208 testes)
 │   ├── test_contrato_fixtures.py               <- 79 testes: ponto fixo dos fixtures e regras R1 a R8
 │   ├── test_workflow.py                        <- 73 testes: transições e arestas do LangGraph
 │   ├── test_ingestion.py                       <- 18 testes: arquivos reais, PDF, JPG, WEBP e DOCX (415)
+│   ├── test_api.py                             <- 16 testes: endpoints REST FastAPI e EPT
 │   ├── test_audit_items.py                     <- 8 testes dedicados de auditoria técnica e sanidade
 │   ├── test_oci_storage.py                     <- 8 testes: persistência OCI com SDK simulado (mock)
 │   ├── test_schemas.py                         <- 7 testes: Pydantic v2 e envelopes de erro Nível 1 e 2
