@@ -183,7 +183,7 @@ class GeminiService:
         </documento_clinico>
         """
 
-        modelos_candidatos = list(dict.fromkeys([self.model_name, "gemini-3.8-flash"]))
+        modelos_candidatos = list(dict.fromkeys([self.model_name, "gemini-3.8-flash", "gemini-3.5-flash-lite"]))
 
         for m_name in modelos_candidatos:
             try:
@@ -222,7 +222,7 @@ class GeminiService:
         </documento_clinico>
         """
 
-        modelos_candidatos = list(dict.fromkeys([self.model_name, "gemini-3.8-flash"]))
+        modelos_candidatos = list(dict.fromkeys([self.model_name, "gemini-3.8-flash", "gemini-3.5-flash-lite"]))
 
         for m_name in modelos_candidatos:
             try:
