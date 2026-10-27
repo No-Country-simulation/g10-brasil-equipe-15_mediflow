@@ -40,13 +40,25 @@ logger = logging.getLogger(__name__)
 class TriagemService:
     """Gerenciador de estado em memória e orquestrador do ciclo clínico MediFlow."""
 
-    def __init__(self):
+    def __init__(self, storage: Optional[Any] = None):
         # Repositórios em memória para estado rápido da API
         self._triagens: Dict[str, TriagemMediFlow] = {}
         self._historico: Dict[str, List[EventoHistorico]] = {}
         self._documentos_originais: Dict[str, DocumentoIngerido] = {}
         self._status_em_andamento: Dict[str, str] = {}
         self._grafo = criar_grafo()
+        self._storage = storage
+
+    def _obter_storage(self) -> Optional[Any]:
+        """Obtém cliente OCI Storage configurado ou injetado."""
+        if self._storage is not None:
+            return self._storage
+        try:
+            from src.storage.oci_storage import OCIStorage
+            return OCIStorage.das_configuracoes()
+        except Exception as err:
+            logger.debug("OCI Storage não configurado ou indisponível: %s", err)
+            return None
 
     def gerar_documento_id(self) -> str:
         """Gera um identificador canônico no formato DOC-CLIN-YYYY-XXXX (RN-07)."""
@@ -154,20 +166,27 @@ class TriagemService:
 
         # 1. Tentativa de backup inicial no bucket OCI (se configurado)
         backup_status = "pendente"
-        caminho_oci = f"recebidos/{documento_id}/original.{doc.formato.lower()}"
+        caminho_oci_original = f"recebidos/{documento_id}/original.{doc.formato.lower()}"
         bucket_nome = os.getenv("OCI_BUCKET_NAME", "mediflow-documentos")
+        falha_persistencia: Optional[str] = None
+        storage = self._obter_storage()
 
-        try:
-            from src.storage.oci_storage import OCIStorage
-            storage = OCIStorage.das_configuracoes()
-            storage.enviar_bytes(
-                caminho_oci,
-                doc.conteudo_bytes,
-                tipo_conteudo="application/pdf" if doc.formato == "PDF" else "text/plain"
-            )
-            backup_status = "sucesso"
-        except Exception as err:
-            logger.warning("Persistência OCI não executada ou indisponível: %s", err)
+        if storage is not None:
+            try:
+                storage.enviar_bytes(
+                    caminho_oci_original,
+                    doc.conteudo_bytes,
+                    tipo_conteudo="application/pdf" if doc.formato == "PDF" else "text/plain",
+                )
+                backup_status = "sucesso"
+            except Exception as err:
+                logger.error("Falha ao persistir documento original no OCI: %s", err)
+                backup_status = "falha"
+                falha_persistencia = f"FALHA_GRAVACAO_ORIGINAL: {str(err)}"
+        elif os.getenv("OCI_OBRIGATORIO", "false").lower() in ("true", "1"):
+            falha_persistencia = "OCI_OBRIGATORIO: Conector OCI não configurado"
+            backup_status = "falha"
+        else:
             backup_status = "ignorado_ou_falha"
 
         # 2. Extração de Entidades Clínicas (Heurística Robusta do MVP)
@@ -289,8 +308,73 @@ class TriagemService:
                     )
 
         # 4. Construção do Contrato Oficial TriagemMediFlow com métricas reais do agente
+        pasta_status = "urgentes/" if urgente else ""
+        caminho_oci_resultado = f"processados/{pasta_status}{documento_id}/resultado.json"
+
+        # Se a gravação inicial teve sucesso, tenta persistir o JSON final no OCI
+        if storage is not None and not falha_persistencia:
+            try:
+                triagem_temp = TriagemMediFlow(
+                    status=status_final,
+                    documento_id=documento_id,
+                    classificacao=Classificacao(
+                        tipo_documento=tipo_doc,
+                        especialidade=["Clínica Médica"],
+                        nivel_prioridade="URGENTE" if urgente else "ROTINA",
+                        score_classificacao=score_classif_final,
+                    ),
+                    dados_extraidos=dados_extraidos_obj,
+                    qualidade=Qualidade(
+                        score_extracao=score_extrac_final,
+                        score_combinado=score_combinado_final,
+                        limiar_aplicado=float(os.getenv("LIMIAR_CONFIANCA", "0.85")),
+                        campos_ausentes=campos_ausentes_finais,
+                        campos_incertos=campos_incertos_finais,
+                        conflitos=conflitos_finais,
+                    ),
+                    decisao_roteamento=DecisaoRoteamento(
+                        destinos=destinos_finais,
+                        destino_principal=destinos_finais[0] if destinos_finais else Destino.FILA_REVISAO_HUMANA,
+                        requer_auditoria_humana=(status_final == StatusTriagem.EM_REVISAO),
+                        justificativa_roteamento=justificativa,
+                        notificacao=notificacao,
+                    ),
+                    armazenamento_oci=ArmazenamentoOCI(
+                        bucket=bucket_nome,
+                        caminho_objeto=caminho_oci_resultado,
+                        status_backup="sucesso",
+                    ),
+                    erro=None,
+                )
+                json_bytes = triagem_temp.model_dump_json(indent=2).encode("utf-8")
+                storage.enviar_bytes(
+                    caminho_oci_resultado,
+                    json_bytes,
+                    tipo_conteudo="application/json",
+                )
+                backup_status = "sucesso"
+                caminho_oci_final = caminho_oci_resultado
+            except Exception as err:
+                logger.error("Falha ao persistir JSON do resultado no OCI: %s", err)
+                falha_persistencia = f"FALHA_GRAVACAO_RESULTADO: {str(err)}"
+                backup_status = "falha"
+                caminho_oci_final = caminho_oci_original
+        else:
+            caminho_oci_final = caminho_oci_original
+
+        # 5. Tratamento de Erro de Persistência vs Conclusão Normal
+        if falha_persistencia:
+            status_efetivo = StatusTriagem.ERRO_PERSISTENCIA
+            erro_obj = ErroProcessamento(
+                codigo=CodigoErro.ERRO_PERSISTENCIA,
+                mensagem=f"Falha na persistência OCI ({falha_persistencia}). Decisão clínica e qualidade preservadas para nova tentativa."
+            )
+        else:
+            status_efetivo = status_final
+            erro_obj = None
+
         triagem = TriagemMediFlow(
-            status=status_final,
+            status=status_efetivo,
             documento_id=documento_id,
             classificacao=Classificacao(
                 tipo_documento=tipo_doc,
@@ -324,24 +408,110 @@ class TriagemService:
             ),
             armazenamento_oci=ArmazenamentoOCI(
                 bucket=bucket_nome,
-                caminho_objeto=caminho_oci,
+                caminho_objeto=caminho_oci_final,
                 status_backup=backup_status,
+            ),
+            erro=erro_obj,
+        )
+
+        self._triagens[documento_id] = triagem
+        self._status_em_andamento[documento_id] = status_efetivo
+
+        if falha_persistencia:
+            self.registrar_evento(
+                documento_id=documento_id,
+                tipo_evento="ERRO_PERSISTENCIA",
+                status_anterior=StatusTriagem.PROCESSANDO,
+                status_novo=StatusTriagem.ERRO_PERSISTENCIA,
+                ator="OCI_STORAGE_PERSISTENCE",
+                motivo=f"Falha de gravação durável no OCI: {falha_persistencia}. Decisão clínica e qualidade preservadas.",
+            )
+        else:
+            self.registrar_evento(
+                documento_id=documento_id,
+                tipo_evento="ROTEADO",
+                status_anterior=StatusTriagem.PROCESSANDO,
+                status_novo=status_final,
+                ator="LANGGRAPH_ROUTER",
+                motivo=justificativa,
+            )
+        return triagem
+
+    def reprocessar_persistencia_oci(self, documento_id: str) -> TriagemMediFlow:
+        """
+        Retenta a persistência durável no OCI para triagens com ERRO_PERSISTENCIA (RF-28, RF-30).
+        Preserva rigorosamente a decisão clínica e dados prévios sem reprocessar LLM ou LangGraph.
+        """
+        triagem = self._triagens.get(documento_id)
+        if not triagem:
+            raise ValueError(f"Triagem {documento_id} não encontrada.")
+
+        doc = self._documentos_originais.get(documento_id)
+        if not doc:
+            raise ValueError(f"Documento original {documento_id} não encontrado na fila.")
+
+        if triagem.status not in (StatusTriagem.ERRO_PERSISTENCIA, StatusTriagem.RECEBIDO):
+            return triagem
+
+        storage = self._obter_storage()
+        if not storage:
+            raise RuntimeError("Conector OCI não configurado ou indisponível para nova tentativa.")
+
+        bucket_nome = os.getenv("OCI_BUCKET_NAME", "mediflow-documentos")
+        caminho_original = f"recebidos/{documento_id}/original.{doc.formato.lower()}"
+
+        # 1. Regrava documento original
+        storage.enviar_bytes(
+            caminho_original,
+            doc.conteudo_bytes,
+            tipo_conteudo="application/pdf" if doc.formato == "PDF" else "text/plain",
+        )
+
+        # 2. Determina status final que havia sido calculado
+        requer_revisao = False
+        if triagem.decisao_roteamento and triagem.decisao_roteamento.requer_auditoria_humana:
+            requer_revisao = True
+
+        status_restaurado = StatusTriagem.EM_REVISAO if requer_revisao else StatusTriagem.PROCESSADO
+        pasta_status = "urgentes/" if (triagem.classificacao.nivel_prioridade == "URGENTE") else ""
+        caminho_resultado = f"processados/{pasta_status}{documento_id}/resultado.json"
+
+        # 3. Cria nova instância da triagem com status restaurado e persistência confirmada
+        triagem_atualizada = TriagemMediFlow(
+            status=status_restaurado,
+            documento_id=documento_id,
+            classificacao=triagem.classificacao,
+            dados_extraidos=triagem.dados_extraidos,
+            qualidade=triagem.qualidade,
+            decisao_roteamento=triagem.decisao_roteamento,
+            armazenamento_oci=ArmazenamentoOCI(
+                bucket=bucket_nome,
+                caminho_objeto=caminho_resultado,
+                status_backup="sucesso",
             ),
             erro=None,
         )
 
-        self._triagens[documento_id] = triagem
-        self._status_em_andamento[documento_id] = status_final
+        # 4. Grava JSON do resultado atualizado no OCI
+        json_bytes = triagem_atualizada.model_dump_json(indent=2).encode("utf-8")
+        storage.enviar_bytes(
+            caminho_resultado,
+            json_bytes,
+            tipo_conteudo="application/json",
+        )
+
+        self._triagens[documento_id] = triagem_atualizada
+        self._status_em_andamento[documento_id] = status_restaurado
 
         self.registrar_evento(
             documento_id=documento_id,
-            tipo_evento="ROTEADO",
-            status_anterior=StatusTriagem.PROCESSANDO,
-            status_novo=status_final,
-            ator="LANGGRAPH_ROUTER",
-            motivo=justificativa,
+            tipo_evento="RETRY_PERSISTENCIA_SUCESSO",
+            status_anterior=StatusTriagem.ERRO_PERSISTENCIA,
+            status_novo=status_restaurado,
+            ator="OCI_STORAGE_RETRY",
+            motivo="Persistência durável concluída com sucesso após nova tentativa.",
         )
-        return triagem
+        return triagem_atualizada
 
     def obter_triagem(self, documento_id: str) -> Optional[TriagemMediFlow]:
         return self._triagens.get(documento_id)

@@ -380,3 +380,111 @@ def test_ct079_pdf_protegido_e_corrompido_retornam_codigos_distintos(client):
     assert res_protegido.json()["codigo"] == CodigoErro.PDF_PROTEGIDO.value
 
 
+def test_falha_persistencia_oci_original_preserva_decisao_e_gera_erro_persistencia():
+    """
+    Simulação: Falha de OCI ao gravar o arquivo original.
+    O fluxo NÃO deve terminar como PROCESSADO, mas sim como ERRO_PERSISTENCIA,
+    preservando intactas as entidades clínicas, qualidade e decisão (RF-28, RF-30, §12).
+    """
+    from unittest.mock import MagicMock
+    from src.api.service import TriagemService
+    from src.schemas import StatusTriagem, CodigoErro
+
+    storage_mock = MagicMock()
+    storage_mock.enviar_bytes.side_effect = Exception("Timeout de rede ao conectar com OCI Object Storage")
+
+    service = TriagemService(storage=storage_mock)
+    texto = "Receituário Médico\nPaciente: João Silva\nIdade: 45\nDiagnóstico: Faringite\nMédico: Dr. Lucas\nCRM: 12345/SP"
+    doc_id = service.submeter_texto(texto)
+
+    triagem = service.executar_triagem(doc_id)
+
+    # Verifica se transicionou para ERRO_PERSISTENCIA e não PROCESSADO
+    assert triagem.status == StatusTriagem.ERRO_PERSISTENCIA
+    assert service.obter_status(doc_id) == StatusTriagem.ERRO_PERSISTENCIA
+    assert triagem.erro is not None
+    assert triagem.erro.codigo == CodigoErro.ERRO_PERSISTENCIA
+    assert "FALHA_GRAVACAO_ORIGINAL" in triagem.erro.mensagem
+
+    # Verifica se os dados clínicos e decisão foram preservados para retentativa
+    assert triagem.dados_extraidos.paciente.nome == "João Silva"
+    assert triagem.qualidade is not None
+    assert triagem.decisao_roteamento is not None
+    assert len(triagem.decisao_roteamento.destinos) > 0
+
+
+def test_falha_persistencia_oci_resultado_preserva_decisao_e_gera_erro_persistencia():
+    """
+    Simulação: Gravação do arquivo original tem sucesso, mas a gravação do JSON final do resultado falha.
+    O status deve ser ERRO_PERSISTENCIA (RF-30, §12) com decisão e métricas preservadas.
+    """
+    from unittest.mock import MagicMock
+    from src.api.service import TriagemService
+    from src.schemas import StatusTriagem, CodigoErro
+
+    storage_mock = MagicMock()
+    # 1ª chamada (original): sucesso; 2ª chamada (resultado.json): falha
+    storage_mock.enviar_bytes.side_effect = [
+        {"status_backup": "sucesso"},
+        RuntimeError("OCI rejeitou escrita de resultado.json: Bucket quota exceeded"),
+    ]
+
+    service = TriagemService(storage=storage_mock)
+    texto = "Receituário Médico\nPaciente: Carlos Souza\nIdade: 30\nDiagnóstico: Gripe\nMédico: Dr. Renato\nCRM: 998877/RJ"
+    doc_id = service.submeter_texto(texto)
+
+    triagem = service.executar_triagem(doc_id)
+
+    assert triagem.status == StatusTriagem.ERRO_PERSISTENCIA
+    assert service.obter_status(doc_id) == StatusTriagem.ERRO_PERSISTENCIA
+    assert triagem.erro.codigo == CodigoErro.ERRO_PERSISTENCIA
+    assert "FALHA_GRAVACAO_RESULTADO" in triagem.erro.mensagem
+    assert triagem.dados_extraidos.paciente.nome == "Carlos Souza"
+    assert triagem.decisao_roteamento is not None
+
+
+def test_reprocessar_persistencia_oci_via_api_com_sucesso(client):
+    """
+    Cenário completo de resiliência:
+    1. Gravação falha inicialmente -> documento fica com ERRO_PERSISTENCIA
+    2. Endpoint de retry é acionado após restauração do bucket -> restaura PROCESSADO sem reprocessar LLM.
+    """
+    from unittest.mock import MagicMock
+    from src.api.routes import triagem_service
+    from src.schemas import StatusTriagem
+
+    storage_mock = MagicMock()
+    storage_mock.enviar_bytes.side_effect = Exception("Conexão indisponível")
+    triagem_service._storage = storage_mock
+
+    # 1. Submete documento
+    texto = "Receituário Médico\nPaciente: Maria Clara\nIdade: 28\nDiagnóstico: Cefaleia\nMédico: Dra. Paula\nCRM: 54321/SP"
+    res_envio = client.post("/api/v1/triagens", json={"documento_texto": texto})
+    assert res_envio.status_code == 202
+    doc_id = res_envio.json()["documento_id"]
+
+    # Executa triagem que falhará no OCI
+    triagem = triagem_service.executar_triagem(doc_id)
+    assert triagem.status == StatusTriagem.ERRO_PERSISTENCIA
+
+    # Polling constata ERRO_PERSISTENCIA
+    res_status = client.get(f"/api/v1/triagens/{doc_id}/status")
+    assert res_status.status_code == 200
+    assert res_status.json()["status"] == StatusTriagem.ERRO_PERSISTENCIA.value
+    assert res_status.json()["concluido"] is True
+
+    # 2. Restaura OCI (sem side_effect) e dispara retentativa
+    storage_mock.enviar_bytes.side_effect = None
+    storage_mock.enviar_bytes.return_value = {"status_backup": "sucesso"}
+
+    res_retry = client.post(f"/api/v1/triagens/{doc_id}/reprocessar-persistencia")
+    assert res_retry.status_code == 200
+    data_retry = res_retry.json()
+    assert data_retry["status"] in (StatusTriagem.PROCESSADO.value, StatusTriagem.EM_REVISAO.value)
+    assert data_retry["erro"] is None
+    assert data_retry["armazenamento_oci"]["status_backup"] == "sucesso"
+    assert "resultado.json" in data_retry["armazenamento_oci"]["caminho_objeto"]
+    assert data_retry["dados_extraidos"]["paciente"]["nome"] == "Maria Clara"
+
+
+
