@@ -664,31 +664,52 @@ if doc_ingerido is not None:
             if requer_auditoria and not foi_auditado:
                 with st.container(border=True):
                     st.markdown("#### 🧑‍⚕️ Painel de Intervenção Médica (Human-in-the-Loop)")
-                    st.caption("O agente reteve este documento para revisão médica. Preencha ou confirme os dados ausentes para homologação.")
+                    st.caption("O agente reteve este documento para revisão médica. Preencha os dados ausentes ou confirme as informações para homologação.")
+
+                    # Fidelidade Clínica estrita: sem alucinações ou nomes fictícios pré-preenchidos quando o dado for ausente
+                    nome_inicial = p_nome if p_nome not in ("Não identificado", "N/I") and "ilegível" not in str(p_nome).lower() else ""
+                    idade_inicial = int(p_idade) if (p_idade is not None and int(p_idade) > 0) else 0
+                    medico_inicial = m_nome if m_nome not in ("Não identificado", "N/I") and "ilegível" not in str(m_nome).lower() else ""
+                    crm_inicial = crm_str if crm_str not in ("N/I", "") and "ilegível" not in str(crm_str).lower() and "?" not in str(crm_str) else ""
+                    diag_inicial = diag_str if diag_str not in ("N/I", "") and "borrada" not in str(diag_str).lower() else ""
+                    cid_inicial = cid_str if cid_str not in ("Não informado", "Nenhum impresso", "N/I") else ""
 
                     with st.form("form_hitl_auditoria_universal"):
                         f1, f2 = st.columns(2)
                         with f1:
                             novo_nome = st.text_input(
                                 "Confirmar Nome do Paciente:",
-                                value=p_nome if p_nome not in ("Não identificado", "N/I") and "ilegível" not in str(p_nome).lower() else "Maria de Fátima Oliveira"
+                                value=nome_inicial,
+                                placeholder="Digite o nome completo do paciente..."
                             )
                             nova_idade = st.number_input(
                                 "Idade Confirmada:",
                                 min_value=0,
                                 max_value=125,
-                                value=int(p_idade) if (p_idade is not None and int(p_idade) > 0) else 55
+                                value=idade_inicial,
+                                help="Mantenha 0 se não constar no documento, ou informe a idade correta."
                             )
                             novo_medico = st.text_input(
                                 "Confirmar Nome do Médico:",
-                                value=m_nome if m_nome not in ("Não identificado", "N/I") and "ilegível" not in str(m_nome).lower() else "Dr. Carlos Eduardo Menezes"
+                                value=medico_inicial,
+                                placeholder="Digite o nome do médico solicitante..."
                             )
                         with f2:
-                            crm_default = crm_str if crm_str not in ("N/I", "") and "ilegível" not in str(crm_str).lower() and "?" not in str(crm_str) else "123456-SP"
-                            novo_crm = st.text_input("CRM Confirmado (com UF):", value=crm_default)
-                            diag_default = diag_str if diag_str not in ("N/I", "") and "borrada" not in str(diag_str).lower() else "Hipertensão Arterial Sistêmica"
-                            novo_diag = st.text_input("Diagnóstico Confirmado:", value=diag_default)
-                            novo_cid = st.text_input("CID-10:", value=cid_str if cid_str not in ("Não informado", "Nenhum impresso") else "I10")
+                            novo_crm = st.text_input(
+                                "CRM Confirmado (com UF):",
+                                value=crm_inicial,
+                                placeholder="Ex: 154321-SP"
+                            )
+                            novo_diag = st.text_input(
+                                "Diagnóstico Confirmado:",
+                                value=diag_inicial,
+                                placeholder="Digite o diagnóstico ou hipótese..."
+                            )
+                            novo_cid = st.text_input(
+                                "CID-10:",
+                                value=cid_inicial,
+                                placeholder="Ex: E03.9 (Opcional)"
+                            )
 
                         col_btn1, col_btn2 = st.columns(2)
                         with col_btn1:
@@ -706,12 +727,12 @@ if doc_ingerido is not None:
                     if submit_aprovar:
                         st.session_state.auditoria_aprovada = True
                         st.session_state.dados_editados = {
-                            "paciente": novo_nome,
-                            "idade": nova_idade,
-                            "medico": novo_medico,
-                            "crm": novo_crm,
-                            "diagnostico": novo_diag,
-                            "cid": novo_cid,
+                            "paciente": novo_nome.strip() if novo_nome.strip() else "Não identificado",
+                            "idade": nova_idade if nova_idade > 0 else None,
+                            "medico": novo_medico.strip() if novo_medico.strip() else "Não identificado",
+                            "crm": novo_crm.strip() if novo_crm.strip() else "N/I",
+                            "diagnostico": novo_diag.strip() if novo_diag.strip() else "N/I",
+                            "cid": novo_cid.strip() if novo_cid.strip() else None,
                         }
                         st.success("Triagem auditada com sucesso pelo médico! Status atualizado para PROCESSADO.", icon=":material/check_circle:", title="Auditoria Concluída")
                         st.rerun()
