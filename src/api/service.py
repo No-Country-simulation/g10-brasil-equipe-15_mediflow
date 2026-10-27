@@ -104,7 +104,12 @@ class TriagemService:
 
         doc_id = documento_id.strip() if (documento_id and documento_id.strip()) else self.gerar_documento_id()
         bytes_txt = texto.encode("utf-8")
-        doc = DocumentLoader.carregar_bytes(bytes_txt, nome_arquivo=f"{doc_id}.txt", documento_id=doc_id)
+        nome_arq_informado = (
+            metadados.get("nome_arquivo")
+            if (metadados and isinstance(metadados, dict) and metadados.get("nome_arquivo"))
+            else f"{doc_id}.txt"
+        )
+        doc = DocumentLoader.carregar_bytes(bytes_txt, nome_arquivo=nome_arq_informado, documento_id=doc_id)
 
         self._documentos_originais[doc_id] = doc
         self._status_em_andamento[doc_id] = StatusTriagem.RECEBIDO
@@ -165,13 +170,20 @@ class TriagemService:
         )
 
         # 1. Tentativa de backup inicial no bucket OCI (se configurado)
-        backup_status = "pendente"
-        caminho_oci_original = f"recebidos/{documento_id}/original.{doc.formato.lower()}"
+        storage = self._obter_storage()
         bucket_nome = os.getenv("OCI_BUCKET_NAME", "mediflow-documentos")
         falha_persistencia: Optional[str] = None
-        storage = self._obter_storage()
+        backup_status = "pendente"
+        caminho_oci_original = f"recebidos/{documento_id}/original.{doc.formato.lower()}"
+        # Gatilho de Simulação do Catálogo EPT v1.0 (RF-28, RF-30, §12)
+        nome_arq = (doc.nome_arquivo or "").lower()
+        simular_falha_original = "ocifalhanooriginal" in nome_arq or "falhanooriginal" in nome_arq
 
-        if storage is not None:
+        if simular_falha_original:
+            logger.warning("[Simulação EPT] Forçando falha na gravação do original para documento %s", documento_id)
+            falha_persistencia = "FALHA_GRAVACAO_ORIGINAL: ServiceError 503 (Simulação EPT - Nuvem OCI indisponível)"
+            backup_status = "falha"
+        elif storage is not None:
             try:
                 storage.enviar_bytes(
                     caminho_oci_original,
@@ -312,7 +324,14 @@ class TriagemService:
         caminho_oci_resultado = f"processados/{pasta_status}{documento_id}/resultado.json"
 
         # Se a gravação inicial teve sucesso, tenta persistir o JSON final no OCI
-        if storage is not None and not falha_persistencia:
+        simular_falha_resultado = "ocifalhanoresultado" in nome_arq or "falhanoresultado" in nome_arq
+
+        if simular_falha_resultado:
+            logger.warning("[Simulação EPT] Forçando falha na gravação do resultado para documento %s", documento_id)
+            falha_persistencia = "FALHA_GRAVACAO_RESULTADO: ServiceError 507 (Simulação EPT - Quota do bucket OCI excedida)"
+            backup_status = "falha"
+            caminho_oci_final = caminho_oci_original
+        elif storage is not None and not falha_persistencia:
             try:
                 triagem_temp = TriagemMediFlow(
                     status=status_final,
@@ -454,18 +473,25 @@ class TriagemService:
             return triagem
 
         storage = self._obter_storage()
+        nome_doc = (doc.nome_arquivo or "").lower()
+        eh_simulacao = "simulacao" in nome_doc or "ocifalha" in nome_doc
+
         if not storage:
-            raise RuntimeError("Conector OCI não configurado ou indisponível para nova tentativa.")
+            if eh_simulacao or os.getenv("OCI_OBRIGATORIO", "false").lower() not in ("true", "1"):
+                logger.info("[Simulação EPT] Conector OCI simulado com sucesso na retentativa para documento %s", documento_id)
+            else:
+                raise RuntimeError("Conector OCI não configurado ou indisponível para nova tentativa.")
 
         bucket_nome = os.getenv("OCI_BUCKET_NAME", "mediflow-documentos")
         caminho_original = f"recebidos/{documento_id}/original.{doc.formato.lower()}"
 
-        # 1. Regrava documento original
-        storage.enviar_bytes(
-            caminho_original,
-            doc.conteudo_bytes,
-            tipo_conteudo="application/pdf" if doc.formato == "PDF" else "text/plain",
-        )
+        # 1. Regrava documento original (se houver conector ativo)
+        if storage is not None:
+            storage.enviar_bytes(
+                caminho_original,
+                doc.conteudo_bytes,
+                tipo_conteudo="application/pdf" if doc.formato == "PDF" else "text/plain",
+            )
 
         # 2. Determina status final que havia sido calculado
         requer_revisao = False
@@ -492,13 +518,14 @@ class TriagemService:
             erro=None,
         )
 
-        # 4. Grava JSON do resultado atualizado no OCI
-        json_bytes = triagem_atualizada.model_dump_json(indent=2).encode("utf-8")
-        storage.enviar_bytes(
-            caminho_resultado,
-            json_bytes,
-            tipo_conteudo="application/json",
-        )
+        # 4. Grava JSON do resultado atualizado no OCI (se houver conector ativo)
+        if storage is not None:
+            json_bytes = triagem_atualizada.model_dump_json(indent=2).encode("utf-8")
+            storage.enviar_bytes(
+                caminho_resultado,
+                json_bytes,
+                tipo_conteudo="application/json",
+            )
 
         self._triagens[documento_id] = triagem_atualizada
         self._status_em_andamento[documento_id] = status_restaurado
