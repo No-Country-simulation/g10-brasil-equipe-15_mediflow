@@ -302,6 +302,22 @@ def _tratar_erro_ingestao(erro: Exception) -> HTTPException:
                 "mensagem": "Arquivo excede o limite operacional de 10.00 MB (Regra A6).",
             },
         )
+    if "protegido" in msg.lower() or code == CodigoErro.PDF_PROTEGIDO.value:
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "codigo": CodigoErro.PDF_PROTEGIDO.value,
+                "mensagem": "PDF protegido por senha não pode ser processado.",
+            },
+        )
+    if "corrompido" in msg.lower() or code == CodigoErro.PDF_CORROMPIDO.value:
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "codigo": CodigoErro.PDF_CORROMPIDO.value,
+                "mensagem": "Arquivo PDF corrompido ou truncado.",
+            },
+        )
     return HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         detail={"codigo": CodigoErro.CAMPOS_INVALIDOS.value, "mensagem": msg},

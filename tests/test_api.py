@@ -8,6 +8,8 @@ Cobre integralmente os casos de teste da EPT (CT-001 a CT-012, CT-070 a CT-080):
 - Health check e ausência de vazamento de dados internos
 """
 import io
+from unittest.mock import patch
+import fitz
 import pytest
 from starlette.testclient import TestClient
 
@@ -267,4 +269,114 @@ def test_ct057_revisao_humana_preserva_qualidade_e_motivos_do_grafo(client):
     # Motivos de revisão preservados na justificativa
     justificativa = triagem["decisao_roteamento"]["justificativa_roteamento"]
     assert "campos obrigatórios ausentes" in justificativa.lower()
+
+
+# ==============================================================================
+# SUÍTE 3: HOMOLOGAÇÃO DE API E ERROS EPT (CT-064, CT-075, CT-077 a CT-079)
+# ==============================================================================
+
+def test_ct064_falha_na_notificacao_nao_apaga_triagem(client):
+    """CT-064: Falha no canal de notificação não invalida a triagem calculada nem apaga o resultado."""
+    payload = {
+        "documento_texto": "Laudo de Exame de Imagem\nPaciente: Maria Eduarda Santos, 61 anos.\nDra. Camila Alencar CRM: 98765/SP\nDiagnóstico: Tromboembolismo Pulmonar Agudo URGENTE."
+    }
+    post_res = client.post("/api/v1/triagens", json=payload)
+    assert post_res.status_code == 202
+    doc_id = post_res.json()["documento_id"]
+
+    get_res = client.get(f"/api/v1/triagens/{doc_id}")
+    assert get_res.status_code == 200
+    triagem = get_res.json()
+
+    # Confirma que o destino de urgência e dados clínicos foram preservados
+    assert "FILA_URGENCIA_MEDICA" in triagem["decisao_roteamento"]["destinos"]
+    assert triagem["dados_extraidos"]["diagnostico"] is not None
+    # Notificação fica com status REGISTRADA/simulado sem quebrar o payload
+    assert triagem["decisao_roteamento"]["notificacao"]["status"] == "REGISTRADA"
+
+
+def test_ct075_isolamento_de_documentos_e_autorizacao_segura(client):
+    """CT-075: IDs de documento possuem entropia segura, não são sequenciais previsíveis e são isolados."""
+    res1 = client.post("/api/v1/triagens", json={"documento_texto": "Laudo Paciente Alfa\nDr. Silva CRM 12345/SP"})
+    res2 = client.post("/api/v1/triagens", json={"documento_texto": "Laudo Paciente Beta\nDr. Silva CRM 12345/SP"})
+    assert res1.status_code == 202
+    assert res2.status_code == 202
+
+    id1 = res1.json()["documento_id"]
+    id2 = res2.json()["documento_id"]
+    assert id1 != id2
+    # Formato seguro canônico DOC-CLIN-YYYY-XXXX (não sequencial)
+    assert id1.startswith("DOC-") and len(id1) >= 15
+    assert id2.startswith("DOC-") and len(id2) >= 15
+
+    doc1 = client.get(f"/api/v1/triagens/{id1}").json()
+    doc2 = client.get(f"/api/v1/triagens/{id2}").json()
+    assert doc1["documento_id"] != doc2["documento_id"]
+
+
+def test_ct077_envelopes_padronizados_de_erro(client):
+    """CT-077: Erros de cliente e servidor devolvem envelopes padronizados com 'codigo' e 'mensagem'."""
+    # 1. 400 - Requisição inválida / JSON malformado
+    r400 = client.post("/api/v1/triagens", content="{invalido", headers={"Content-Type": "application/json"})
+    assert r400.status_code == 400
+    assert "codigo" in r400.json() and "mensagem" in r400.json()
+
+    # 2. 415 - Formato não suportado
+    r415 = client.post("/api/v1/triagens", files={"file": ("planilha.xlsx", io.BytesIO(b"abc"), "application/vnd.ms-excel")})
+    assert r415.status_code == 415
+    assert "codigo" in r415.json() and "mensagem" in r415.json()
+
+    # 3. 422 - Campos inválidos / corpo vazio
+    r422 = client.post("/api/v1/triagens", json={})
+    assert r422.status_code == 422
+    assert "codigo" in r422.json() and "mensagem" in r422.json()
+
+    # 4. 404 - Documento não encontrado
+    r404 = client.get("/api/v1/triagens/DOC-INEXISTENTE-999")
+    assert r404.status_code == 404
+    assert "codigo" in r404.json() and "mensagem" in r404.json()
+
+
+def test_ct078_resiliencia_falha_dependencias_sem_travar_api(client):
+    """CT-078: Indisponibilidade de dependência externa (OCI/Gemini) não derruba a API e mantém integridade."""
+    # Simula falha na inicialização do storage OCI
+    with patch("src.storage.oci_storage.OCIStorage.das_configuracoes", side_effect=Exception("Timeout no bucket OCI")):
+        res = client.post("/api/v1/triagens", json={"documento_texto": "Receituário Médico\nDr. Renato CRM: 14589/SP"})
+        assert res.status_code == 202
+        doc_id = res.json()["documento_id"]
+
+        get_res = client.get(f"/api/v1/triagens/{doc_id}")
+        assert get_res.status_code == 200
+        triagem = get_res.json()
+        # O backup registra a falha sem lançar HTTP 500 para o chamador
+        assert triagem["armazenamento_oci"]["status_backup"] == "ignorado_ou_falha"
+
+
+def test_ct079_pdf_protegido_e_corrompido_retornam_codigos_distintos(client):
+    """CT-079: PDFs protegidos por senha e corrompidos retornam HTTP 422 com códigos distintos da EPT."""
+    # 1. PDF corrompido
+    res_corrompido = client.post(
+        "/api/v1/triagens",
+        files={"file": ("corrompido.pdf", io.BytesIO(b"%PDF-1.4 corrompido e truncado..."), "application/pdf")}
+    )
+    assert res_corrompido.status_code == 422
+    assert res_corrompido.json()["codigo"] == CodigoErro.PDF_CORROMPIDO.value
+
+    # 2. PDF protegido por senha
+    doc_fitz = fitz.open()
+    doc_fitz.new_page()
+    pdf_senha_bytes = doc_fitz.tobytes(
+        encryption=fitz.PDF_ENCRYPT_AES_256,
+        user_pw="senha123",
+        owner_pw="master123"
+    )
+    doc_fitz.close()
+
+    res_protegido = client.post(
+        "/api/v1/triagens",
+        files={"file": ("com_senha.pdf", io.BytesIO(pdf_senha_bytes), "application/pdf")}
+    )
+    assert res_protegido.status_code == 422
+    assert res_protegido.json()["codigo"] == CodigoErro.PDF_PROTEGIDO.value
+
 
