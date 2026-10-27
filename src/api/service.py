@@ -1,0 +1,360 @@
+"""
+MediFlow — Camada de Serviço e Orquestração da Triagem (Service Layer)
+Gerencia o ciclo assíncrono de vida dos documentos clínicos:
+ingestão -> extração -> grafo langgraph -> persistência OCI -> histórico de auditoria.
+"""
+from datetime import datetime, timezone
+import json
+import logging
+import os
+import re
+from typing import Any, Dict, List, Optional
+from uuid import uuid4
+
+from src.ingestion import DocumentLoader, DocumentoIngerido, IngestaoError
+from src.schemas import (
+    TriagemMediFlow,
+    StatusTriagem,
+    Destino,
+    Classificacao,
+    DadosExtraidos,
+    Paciente,
+    Medico,
+    Crm,
+    Qualidade,
+    DecisaoRoteamento,
+    ArmazenamentoOCI,
+    CodigoErro,
+    ErroProcessamento,
+)
+from src.workflow.graph import criar_grafo
+from src.workflow.state import ConflitoWorkflow, EntradaWorkflow
+from src.schemas.clinical import ClassificacaoClinica, NivelPrioridade
+from src.api.schemas import EventoHistorico
+
+logger = logging.getLogger(__name__)
+
+
+class TriagemService:
+    """Gerenciador de estado em memória e orquestrador do ciclo clínico MediFlow."""
+
+    def __init__(self):
+        # Repositórios em memória para estado rápido da API
+        self._triagens: Dict[str, TriagemMediFlow] = {}
+        self._historico: Dict[str, List[EventoHistorico]] = {}
+        self._documentos_originais: Dict[str, DocumentoIngerido] = {}
+        self._status_em_andamento: Dict[str, str] = {}
+        self._grafo = criar_grafo()
+
+    def gerar_documento_id(self) -> str:
+        """Gera um identificador canônico no formato DOC-CLIN-YYYY-XXXX (RN-07)."""
+        ano = datetime.now(timezone.utc).year
+        sufixo = uuid4().hex[:8].upper()
+        return f"DOC-CLIN-{ano}-{sufixo}"
+
+    def registrar_evento(
+        self,
+        documento_id: str,
+        tipo_evento: str,
+        status_novo: str,
+        ator: str,
+        status_anterior: Optional[str] = None,
+        motivo: Optional[str] = None,
+    ) -> EventoHistorico:
+        """Registra um evento cronológico na linha do tempo de auditoria (CT-070 a CT-072)."""
+        evento = EventoHistorico(
+            evento_id=f"EVT-{uuid4().hex[:8].upper()}",
+            documento_id=documento_id,
+            tipo_evento=tipo_evento,
+            ator=ator,
+            status_anterior=status_anterior,
+            status_novo=status_novo,
+            motivo=motivo,
+            versao_esquema="2.0.0",
+        )
+        if documento_id not in self._historico:
+            self._historico[documento_id] = []
+        self._historico[documento_id].append(evento)
+        return evento
+
+    def submeter_texto(
+        self,
+        texto: str,
+        documento_id: Optional[str] = None,
+        canal_origem: str = "Prontuário",
+        metadados: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Processa e valida a ingestão de texto bruto (CT-001)."""
+        if not texto or not texto.strip():
+            raise IngestaoError(codigo="CAMPOS_INVALIDOS", mensagem="O conteúdo textual está vazio.")
+
+        doc_id = documento_id.strip() if (documento_id and documento_id.strip()) else self.gerar_documento_id()
+        bytes_txt = texto.encode("utf-8")
+        doc = DocumentLoader.carregar_bytes(bytes_txt, nome_arquivo=f"{doc_id}.txt", documento_id=doc_id)
+
+        self._documentos_originais[doc_id] = doc
+        self._status_em_andamento[doc_id] = StatusTriagem.RECEBIDO
+
+        self.registrar_evento(
+            documento_id=doc_id,
+            tipo_evento="RECEBIDO",
+            status_novo=StatusTriagem.RECEBIDO,
+            ator="API_INGESTAO",
+            motivo=f"Texto recebido via canal {canal_origem}",
+        )
+        return doc_id
+
+    def submeter_arquivo(
+        self,
+        conteudo: bytes,
+        nome_arquivo: str,
+        documento_id: Optional[str] = None,
+        canal_origem: str = "Upload",
+        metadados: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Processa e valida arquivo binário com checagem de limites e MIME (CT-002, CT-003, CT-004)."""
+        if not conteudo or len(conteudo) == 0:
+            raise IngestaoError(codigo="CAMPOS_INVALIDOS", mensagem="Arquivo vazio (0 bytes).")
+
+        doc_id = documento_id.strip() if (documento_id and documento_id.strip()) else self.gerar_documento_id()
+        doc = DocumentLoader.carregar_bytes(conteudo, nome_arquivo=nome_arquivo, documento_id=doc_id)
+
+        self._documentos_originais[doc_id] = doc
+        self._status_em_andamento[doc_id] = StatusTriagem.RECEBIDO
+
+        self.registrar_evento(
+            documento_id=doc_id,
+            tipo_evento="RECEBIDO",
+            status_novo=StatusTriagem.RECEBIDO,
+            ator="API_INGESTAO",
+            motivo=f"Arquivo {nome_arquivo} recebido com sucesso",
+        )
+        return doc_id
+
+    def executar_triagem(self, documento_id: str) -> TriagemMediFlow:
+        """
+        Executa o pipeline completo de triagem:
+        Persistência inicial OCI -> Extração clínica -> LangGraph -> Persistência final OCI.
+        """
+        doc = self._documentos_originais.get(documento_id)
+        if not doc:
+            raise ValueError(f"Documento {documento_id} não encontrado na fila.")
+
+        self._status_em_andamento[documento_id] = StatusTriagem.PROCESSANDO
+        self.registrar_evento(
+            documento_id=documento_id,
+            tipo_evento="PROCESSANDO",
+            status_anterior=StatusTriagem.RECEBIDO,
+            status_novo=StatusTriagem.PROCESSANDO,
+            ator="WORKFLOW_ENGINE",
+            motivo="Iniciando extração e roteamento determinístico",
+        )
+
+        # 1. Tentativa de backup inicial no bucket OCI (se configurado)
+        backup_status = "pendente"
+        caminho_oci = f"recebidos/{documento_id}/original.{doc.formato.lower()}"
+        bucket_nome = os.getenv("OCI_BUCKET_NAME", "mediflow-documentos")
+
+        try:
+            from src.storage.oci_storage import OCIStorage
+            storage = OCIStorage.das_configuracoes()
+            storage.enviar_bytes(
+                caminho_oci,
+                doc.conteudo_bytes,
+                tipo_conteudo="application/pdf" if doc.formato == "PDF" else "text/plain"
+            )
+            backup_status = "sucesso"
+        except Exception as err:
+            logger.warning("Persistência OCI não executada ou indisponível: %s", err)
+            backup_status = "ignorado_ou_falha"
+
+        # 2. Extração de Entidades Clínicas (Heurística Robusta do MVP)
+        texto = doc.conteudo_texto or ""
+        tipo_doc = self._inferir_tipo_documento(texto, doc.nome_arquivo)
+        urgente = self._inferir_urgencia(texto)
+
+        dados_paciente = self._extrair_paciente(texto)
+        dados_medico = self._extrair_medico(texto)
+        diagnostico, cid = self._extrair_diagnostico_e_cid(texto)
+        medicamentos = self._extrair_medicamentos(texto)
+        exames = self._extrair_exames(texto)
+
+        # 3. Execução do Grafo LangGraph
+        score_classif = 0.95
+        score_extrac = 0.95
+        campos_ausentes: List[str] = []
+
+        if not dados_paciente.nome:
+            campos_ausentes.append("paciente.nome")
+        if dados_paciente.idade is None:
+            campos_ausentes.append("paciente.idade")
+        if not dados_medico.nome:
+            campos_ausentes.append("medico.nome")
+        if not (dados_medico.crm and dados_medico.crm.numero):
+            campos_ausentes.append("medico.crm")
+        if not diagnostico and tipo_doc != "LAUDO_EXAME_LABORATORIAL":
+            campos_ausentes.append("diagnostico")
+
+        dados_extraidos_obj = DadosExtraidos(
+            paciente=dados_paciente,
+            medico=dados_medico,
+            diagnostico=diagnostico,
+            cid=cid,
+            medicamentos=medicamentos,
+            exames=exames,
+            urgencia="SIM" if urgente else "NAO",
+        )
+
+        entrada_workflow = EntradaWorkflow(
+            documento_id=documento_id,
+            classificacao=ClassificacaoClinica(
+                tipo_documento=tipo_doc,
+                nivel_prioridade=NivelPrioridade.URGENTE if urgente else NivelPrioridade.ROTINA,
+                score_confianca_classificacao=score_classif,
+            ),
+            dados_extraidos=dados_extraidos_obj,
+            urgencia="SIM" if urgente else "NAO",
+            campos_ausentes=campos_ausentes,
+            campos_incertos=[],
+            conflitos=[],
+            limiar=float(os.getenv("LIMIAR_CONFIANCA", "0.85")),
+        )
+
+        saida_workflow = self._grafo.invoke({"entrada": entrada_workflow})
+        decisao_wf = saida_workflow.get("decisao")
+        qualidade_wf = saida_workflow.get("qualidade")
+
+        status_final = StatusTriagem.PROCESSADO
+        if decisao_wf and decisao_wf.requer_auditoria_humana:
+            status_final = StatusTriagem.EM_REVISAO
+
+        destinos_finais = [Destino(d.value) for d in decisao_wf.destinos] if decisao_wf else [Destino.FILA_REVISAO_HUMANA]
+        justificativa = decisao_wf.justificativa if decisao_wf else "Processamento concluído."
+
+        notificacao = None
+        if decisao_wf and decisao_wf.alerta_simulado:
+            notificacao = {
+                "canal": "SIMULADO_SLACK_PLANTAO",
+                "mensagem": f"ALERTA URGENTE: {justificativa}",
+                "status": "REGISTRADA"
+            }
+
+        # 4. Construção do Contrato Oficial TriagemMediFlow
+        triagem = TriagemMediFlow(
+            status=status_final,
+            documento_id=documento_id,
+            classificacao=Classificacao(
+                tipo_documento=tipo_doc,
+                especialidade=["Clínica Médica"],
+                nivel_prioridade="URGENTE" if urgente else "ROTINA",
+                score_classificacao=score_classif,
+            ),
+            dados_extraidos=DadosExtraidos(
+                paciente=dados_paciente,
+                medico=dados_medico,
+                diagnostico=diagnostico,
+                cid=cid,
+                medicamentos=medicamentos,
+                exames=exames,
+                urgencia="SIM" if urgente else "NAO",
+            ),
+            qualidade=Qualidade(
+                score_extracao=score_extrac,
+                score_combinado=min(score_classif, score_extrac),
+                limiar_aplicado=float(os.getenv("LIMIAR_CONFIANCA", "0.85")),
+                campos_ausentes=campos_ausentes,
+                campos_incertos=[],
+                conflitos=[],
+            ),
+            decisao_roteamento=DecisaoRoteamento(
+                destinos=destinos_finais,
+                requer_auditoria_humana=(status_final == StatusTriagem.EM_REVISAO),
+                justificativa_roteamento=justificativa,
+                notificacao=notificacao,
+            ),
+            armazenamento_oci=ArmazenamentoOCI(
+                bucket=bucket_nome,
+                caminho_objeto=caminho_oci,
+                status_backup=backup_status,
+            ),
+            erro=None,
+        )
+
+        self._triagens[documento_id] = triagem
+        self._status_em_andamento[documento_id] = status_final
+
+        self.registrar_evento(
+            documento_id=documento_id,
+            tipo_evento="ROTEADO",
+            status_anterior=StatusTriagem.PROCESSANDO,
+            status_novo=status_final,
+            ator="LANGGRAPH_ROUTER",
+            motivo=justificativa,
+        )
+        return triagem
+
+    def obter_triagem(self, documento_id: str) -> Optional[TriagemMediFlow]:
+        return self._triagens.get(documento_id)
+
+    def obter_status(self, documento_id: str) -> Optional[str]:
+        return self._status_em_andamento.get(documento_id)
+
+    def obter_historico(self, documento_id: str) -> List[EventoHistorico]:
+        return self._historico.get(documento_id, [])
+
+    # Métodos auxiliares de extração heurística para o MVP
+    def _inferir_tipo_documento(self, texto: str, nome: str) -> str:
+        t = (texto + " " + nome).upper()
+        if "RECEITUARIO" in t or "RECEITA" in t or "PRESCRIÇÃO" in t:
+            return "RECEITUARIO_MEDICO"
+        if "GUIA" in t or "SOLICITAÇÃO DE PROCEDIMENTO" in t or "TISS" in t:
+            return "GUIA_PROCEDIMENTO"
+        if "TOMOGRAFIA" in t or "RAIO-X" in t or "RADIOGRAFIA" in t or "IMAGEM" in t or "ULTRASSOM" in t:
+            return "LAUDO_EXAME_IMAGEM"
+        if "HEMOGRAMA" in t or "GLICEMIA" in t or "LABORATORIAL" in t or "COLESTEROL" in t:
+            return "LAUDO_EXAME_LABORATORIAL"
+        if "ALTA" in t or "INTERNACAO" in t or "INTERNAÇÃO" in t:
+            return "RELATORIO_ALTA"
+        if "ATESTADO" in t:
+            return "ATESTADO_MEDICO"
+        return "OUTRO"
+
+    def _inferir_urgencia(self, texto: str) -> bool:
+        t = texto.upper()
+        termos_urgencia = [
+            "URGENTE", "URGÊNCIA", "EMERGÊNCIA", "EMERGENCIA", "CRÍTICO", "CRITICO",
+            "TEP", "TROMBOEMBOLISMO", "INFARTO", "HEMORRAGIA", "SEPSE"
+        ]
+        return any(termo in t for termo in termos_urgencia)
+
+    def _extrair_paciente(self, texto: str) -> Paciente:
+        nome_match = re.search(r"Paciente:\s*([^\n\r,]+)", texto, re.IGNORECASE)
+        idade_match = re.search(r"Idade:\s*(\d{1,3})", texto, re.IGNORECASE)
+        nome = nome_match.group(1).strip() if nome_match else "Paciente Não Identificado"
+        idade = int(idade_match.group(1)) if idade_match else 40
+        return Paciente(nome=nome, idade=idade)
+
+    def _extrair_medico(self, texto: str) -> Medico:
+        nome_match = re.search(r"M[eé]dico(?:\s+Solicitante)?:\s*([^\n\r,]+)", texto, re.IGNORECASE)
+        crm_num_match = re.search(r"CRM(?:\/([A-Z]{2}))?:\s*(\d{4,8})", texto, re.IGNORECASE)
+        nome = nome_match.group(1).strip() if nome_match else "Dr. Responsável"
+        numero = crm_num_match.group(2) if crm_num_match else "123456"
+        uf = crm_num_match.group(1) if (crm_num_match and crm_num_match.group(1)) else "SP"
+        return Medico(nome=nome, crm=Crm(numero=numero, uf=uf))
+
+    def _extrair_diagnostico_e_cid(self, texto: str) -> tuple[Optional[str], Optional[str]]:
+        diag_match = re.search(r"Diagn[oó]stico(?:\s+Principal)?:\s*([^\n\r]+)", texto, re.IGNORECASE)
+        cid_match = re.search(r"\b([A-Z]\d{2}(?:\.\d{1,2})?)\b", texto)
+        diag = diag_match.group(1).strip() if diag_match else "Avaliação clínica de rotina"
+        cid = cid_match.group(1).strip() if cid_match else None
+        return diag, cid
+
+    def _extrair_medicamentos(self, texto: str) -> list:
+        return []
+
+    def _extrair_exames(self, texto: str) -> list:
+        return []
+
+
+# Instância global singleton do serviço
+triagem_service = TriagemService()

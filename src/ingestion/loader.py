@@ -183,6 +183,11 @@ class DocumentLoader:
     @staticmethod
     def _extrair_pdf_blindado(conteudo_bytes: bytes) -> Tuple[str, int, bool, Dict[str, Any]]:
         """Abre e extrai o PDF tratando senhas, corrupção e heurística de texto."""
+        if not conteudo_bytes.startswith(b"%PDF"):
+            raise IngestaoError(
+                codigo="MIME_INVALIDO",
+                mensagem="Arquivo com extensão .pdf possui assinatura binária incompatível (inconsistência de MIME)."
+            )
         try:
             doc = fitz.open(stream=conteudo_bytes, filetype="pdf")
         except Exception as e:

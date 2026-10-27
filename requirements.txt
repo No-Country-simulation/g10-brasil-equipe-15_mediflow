@@ -20,6 +20,11 @@ oci>=2.120.0
 # Interface do Usuário e Auditoria Clínica
 streamlit>=1.39.0
 
+# API REST e Servidor Web Assíncrono
+fastapi>=0.111.0
+uvicorn>=0.30.0
+python-multipart>=0.0.9
+
 # Utilitários e Testes
 python-dotenv>=1.0.0
 pytest>=8.0.0
