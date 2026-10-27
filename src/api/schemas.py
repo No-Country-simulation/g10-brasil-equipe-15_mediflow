@@ -21,6 +21,10 @@ class CriarTriagemTextoRequest(BaseModel):
         default=None,
         description="Conteúdo em texto clínico do documento."
     )
+    texto: Optional[str] = Field(
+        default=None,
+        description="Alias de conveniência para documento_texto."
+    )
     canal_origem: Optional[str] = Field(
         default="Prontuário",
         description="Canal de entrada ou sistema de origem (CT-005)."

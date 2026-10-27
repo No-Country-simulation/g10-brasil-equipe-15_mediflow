@@ -61,7 +61,11 @@ async def submeter_triagem(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail={"codigo": CodigoErro.CAMPOS_INVALIDOS.value, "mensagem": "Corpo JSON vazio."},
                 )
-            dados = json.loads(body_bytes.decode("utf-8"))
+            try:
+                texto_json = body_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                texto_json = body_bytes.decode("latin-1", errors="replace")
+            dados = json.loads(texto_json)
         except json.JSONDecodeError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -74,7 +78,7 @@ async def submeter_triagem(
                 detail={"codigo": CodigoErro.CAMPOS_INVALIDOS.value, "mensagem": "Envelope JSON vazio."},
             )
 
-        texto = dados.get("documento_texto")
+        texto = dados.get("documento_texto") or dados.get("texto")
         if not texto or not str(texto).strip():
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
