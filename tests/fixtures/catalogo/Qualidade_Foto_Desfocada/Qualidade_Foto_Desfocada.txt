@@ -1,0 +1,27 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RECEITUÁRIO MANUSCRITO
+Foto de receita manuscrita muito desfocada
+
+Fixture: Qualidade_Foto_Desfocada
+Paciente: —
+Idade: —
+Documento: DOC-Q-2026-0042
+Data: 18/10/2026
+Origem: Foto enviada por celular
+
+CONTEÚDO
+Receita manuscrita fotografada com desfoque severo. Apenas o cabeçalho é legível; o corpo da prescrição não permite leitura segura.
+
+ORIENTAÇÃO
+Reenviar imagem nítida ou o documento original para revisão humana.
+
+------------------------------------------------------------------------------
+—
+—
+------------------------------------------------------------------------------
+MediFlow · fixture Qualidade_Foto_Desfocada · dados sintéticos · página 1 de 1

@@ -1,0 +1,39 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RELATÓRIO DE ALTA HOSPITALAR
+Internação clínica — alta por melhora
+
+Fixture: Matriz_RelatorioDeAlta_Pdf
+Paciente: Beatriz Gonçalves Pereira
+Idade: 63 anos
+Documento: DOC-ALT-2026-0007
+Data: 17/10/2026
+Origem: Enfermaria 3B
+
+PERÍODO DE INTERNAÇÃO
+Admissão em 10/10/2026, alta em 17/10/2026.
+
+MOTIVO DA INTERNAÇÃO
+Pneumonia adquirida na comunidade com necessidade de antibioticoterapia intravenosa.
+
+RESUMO DA INTERNAÇÃO
+Paciente internada com tosse produtiva, febre e dispneia. Tomografia de tórax com consolidação em lobo inferior direito. Tratada com ceftriaxona e azitromicina por 7 dias, com melhora clínica e laboratorial.
+
+DIAGNÓSTICO PRINCIPAL
+Pneumonia adquirida na comunidade — CID-10 J18.9.
+
+MEDICAÇÕES DE ALTA
+Amoxicilina + clavulanato 875/125 mg — 1 comprimido por via oral a cada 12 horas, por 5 dias.
+
+ORIENTAÇÕES
+Retorno em 7 dias no ambulatório de clínica médica. Sinais de alarme: febre persistente, dispneia ou piora do estado geral.
+
+------------------------------------------------------------------------------
+Dra. Helena Prado
+CRM 187432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_RelatorioDeAlta_Pdf · dados sintéticos · página 1 de 1

@@ -1,0 +1,84 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Matriz_Receituario_Pdf",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "demo/Matriz_Receituario_Pdf/Matriz_Receituario_Pdf.txt",
+      "pdf": "demo/Matriz_Receituario_Pdf/Matriz_Receituario_Pdf.pdf",
+      "jpg": "demo/Matriz_Receituario_Pdf/Matriz_Receituario_Pdf.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-F43957D4",
+    "classificacao": {
+      "tipo_documento": "RECEITUARIO_MEDICO",
+      "especialidade": [
+        "Cardiologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Rafael Nunes de Souza",
+        "idade": 58
+      },
+      "medico": {
+        "nome": "Dr. Paulo Mendes Rocha",
+        "crm": {
+          "numero": "203114",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Hipertensão arterial sistêmica",
+      "cid": "I10",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Losartana potássica",
+          "dosagem": "50 mg",
+          "frequencia": null
+        },
+        {
+          "nome": "Hidroclorotiazida",
+          "dosagem": "25 mg",
+          "frequencia": null
+        }
+      ],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FARMACIA_HOSPITALAR",
+      "destinos": [
+        "FARMACIA_HOSPITALAR"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: RECEITUARIO_MEDICO encaminhado para FARMACIA_HOSPITALAR.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "PDF digital aceito",
+    "Dois medicamentos extraídos com dose e frequência",
+    "Destino FARMACIA_HOSPITALAR sem revisão"
+  ],
+  "observacoes": ""
+}

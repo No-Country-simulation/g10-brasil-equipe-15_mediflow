@@ -1,0 +1,21 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Validacao_ArquivoZip",
+  "documento_ficticio": true,
+  "tipo_de_teste": "negativo_tecnico",
+  "entrada": {
+    "requisicao": "POST /api/v1/triagens",
+    "arquivo": "Validacao_ArquivoZip.zip"
+  },
+  "resposta_esperada": {
+    "http": 415,
+    "codigo_funcional": "FORMATO_NAO_SUPORTADO",
+    "mensagem": "Arquivo .zip: formato não suportado."
+  },
+  "assercoes": [
+    "Não deve descompactar nem chamar o modelo.",
+    "Nenhuma inferência é executada para entrada inválida",
+    "Mensagem de erro é segura, sem stack trace ou segredo"
+  ],
+  "observacoes": "O expected deste fixture é um envelope de erro, não um JSON de triagem."
+}

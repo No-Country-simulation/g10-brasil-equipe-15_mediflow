@@ -1,0 +1,77 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Ausencia_Diagnostico",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Ausencia_Diagnostico/Ausencia_Diagnostico.txt",
+      "pdf": "catalogo/Ausencia_Diagnostico/Ausencia_Diagnostico.pdf",
+      "jpg": "catalogo/Ausencia_Diagnostico/Ausencia_Diagnostico.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-97D3B4DC",
+    "classificacao": {
+      "tipo_documento": "GUIA_PROCEDIMENTO",
+      "especialidade": [
+        "Dermatologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Heloísa Martins Braga",
+        "idade": 44
+      },
+      "medico": {
+        "nome": "Dra. Helena Prado",
+        "crm": {
+          "numero": "187432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": null,
+      "cid": null,
+      "exames": [
+        "Exérese de lesão cutânea"
+      ],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [
+        "diagnostico"
+      ],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: campos obrigatórios ausentes: diagnostico.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Diagnóstico/hipótese ausente força revisão",
+    "Justificativa clínica não substitui o campo diagnóstico",
+    "Nenhum CID é sugerido"
+  ],
+  "observacoes": ""
+}

@@ -1,0 +1,76 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Qualidade_Pdf_SemTexto",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Qualidade_Pdf_SemTexto/Qualidade_Pdf_SemTexto.txt",
+      "pdf": "catalogo/Qualidade_Pdf_SemTexto/Qualidade_Pdf_SemTexto.pdf",
+      "jpg": "catalogo/Qualidade_Pdf_SemTexto/Qualidade_Pdf_SemTexto.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-BB190F96",
+    "classificacao": {
+      "tipo_documento": "LAUDO_EXAME_IMAGEM",
+      "especialidade": [
+        "Radiologia",
+        "Pneumologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Sérgio Luiz Monteiro",
+        "idade": 54
+      },
+      "medico": {
+        "nome": "Dra. Renata Silveira",
+        "crm": {
+          "numero": "145892",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Nódulo pulmonar sólido de 6 mm",
+      "cid": null,
+      "exames": [
+        "Tomografia de tórax de baixa dose"
+      ],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "PRONTUARIO_ELETRONICO",
+      "destinos": [
+        "PRONTUARIO_ELETRONICO"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: LAUDO_EXAME_IMAGEM encaminhado para PRONTUARIO_ELETRONICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "PDF sem camada de texto é aceito",
+    "Leitura feita pelo caminho multimodal",
+    "Destino PRONTUARIO_ELETRONICO"
+  ],
+  "observacoes": "PDF gerado somente com imagem (0 caracteres extraíveis)."
+}

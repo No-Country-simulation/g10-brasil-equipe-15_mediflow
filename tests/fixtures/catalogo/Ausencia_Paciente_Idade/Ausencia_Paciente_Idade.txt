@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RECEITUÁRIO MÉDICO
+Prescrição sem a idade do paciente
+
+Fixture: Ausencia_Paciente_Idade
+Paciente: Otávio Sampaio Reis
+Idade: não informada
+Documento: DOC-REC-2026-0027
+Data: 18/10/2026
+Origem: Ambulatório de Clínica Médica
+
+HIPÓTESE DIAGNÓSTICA
+Cistite aguda não complicada — CID-10 N30.0.
+
+PRESCRIÇÃO
+Nitrofurantoína 100 mg — 1 cápsula por via oral a cada 6 horas, por 7 dias.
+
+ORIENTAÇÕES
+Aumentar ingestão hídrica e retornar se febre ou dor lombar.
+
+------------------------------------------------------------------------------
+Dra. Camila Ferreira Lopes
+CRM 198765-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Ausencia_Paciente_Idade · dados sintéticos · página 1 de 1

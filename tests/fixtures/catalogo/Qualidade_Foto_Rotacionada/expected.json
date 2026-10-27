@@ -1,0 +1,76 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Qualidade_Foto_Rotacionada",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Qualidade_Foto_Rotacionada/Qualidade_Foto_Rotacionada.txt",
+      "pdf": "catalogo/Qualidade_Foto_Rotacionada/Qualidade_Foto_Rotacionada.pdf",
+      "jpg": "catalogo/Qualidade_Foto_Rotacionada/Qualidade_Foto_Rotacionada.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-C2E9CE3D",
+    "classificacao": {
+      "tipo_documento": "LAUDO_EXAME_IMAGEM",
+      "especialidade": [
+        "Radiologia",
+        "Gastroenterologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Cláudio Roberto Farias",
+        "idade": 48
+      },
+      "medico": {
+        "nome": "Dr. Marcos Vinícius Tavares",
+        "crm": {
+          "numero": "176543",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Colelitíase sem sinais inflamatórios agudos",
+      "cid": null,
+      "exames": [
+        "Ultrassonografia de abdome total"
+      ],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "PRONTUARIO_ELETRONICO",
+      "destinos": [
+        "PRONTUARIO_ELETRONICO"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: LAUDO_EXAME_IMAGEM encaminhado para PRONTUARIO_ELETRONICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Rotação de 90° deve ser tolerada pelo pipeline multimodal",
+    "Extração correta apesar da orientação",
+    "Destino PRONTUARIO_ELETRONICO"
+  ],
+  "observacoes": "A imagem e o PDF estão rotacionados; o texto permanece legível."
+}

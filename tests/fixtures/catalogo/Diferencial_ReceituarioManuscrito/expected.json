@@ -1,0 +1,80 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Diferencial_ReceituarioManuscrito",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Diferencial_ReceituarioManuscrito/Diferencial_ReceituarioManuscrito.txt",
+      "pdf": "catalogo/Diferencial_ReceituarioManuscrito/Diferencial_ReceituarioManuscrito.pdf",
+      "jpg": "catalogo/Diferencial_ReceituarioManuscrito/Diferencial_ReceituarioManuscrito.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-339C0094",
+    "classificacao": {
+      "tipo_documento": "RECEITUARIO_MEDICO",
+      "especialidade": [
+        "Ortopedia",
+        "Clínica Médica"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Vera Lúcia Santana",
+        "idade": 61
+      },
+      "medico": {
+        "nome": "Dra. Helena Prado",
+        "crm": {
+          "numero": "187432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Osteoartrite de joelhos",
+      "cid": "M17.9",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Paracetamol",
+          "dosagem": "750 mg",
+          "frequencia": null
+        }
+      ],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FARMACIA_HOSPITALAR",
+      "destinos": [
+        "FARMACIA_HOSPITALAR"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: RECEITUARIO_MEDICO encaminhado para FARMACIA_HOSPITALAR.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Diferencial opcional: OCR de manuscrito",
+    "Receita legível é classificada",
+    "Destino FARMACIA_HOSPITALAR"
+  ],
+  "observacoes": "Diferencial opcional (OCR/visão). Não é critério de aceite obrigatório do MVP."
+}

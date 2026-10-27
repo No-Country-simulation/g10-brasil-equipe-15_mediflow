@@ -1,0 +1,84 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Conflito_Dados",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Conflito_Dados/Conflito_Dados.txt",
+      "pdf": "catalogo/Conflito_Dados/Conflito_Dados.pdf",
+      "jpg": "catalogo/Conflito_Dados/Conflito_Dados.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-F25B2E14",
+    "classificacao": {
+      "tipo_documento": "RELATORIO_ALTA_INTERNACAO",
+      "especialidade": [
+        "Nefrologia",
+        "Clínica Médica"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Fernando Augusto Reis",
+        "idade": 66
+      },
+      "medico": {
+        "nome": "Dr. André Luiz Barbosa",
+        "crm": {
+          "numero": "165432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Pielonefrite aguda",
+      "cid": "N10",
+      "exames": [],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": [
+        {
+          "tipo": "CONTRADICAO_INTERNA",
+          "campos": [
+            "paciente.nome",
+            "paciente.idade"
+          ],
+          "gravidade": "ALTA",
+          "descricao": "Nome e idade divergem entre cabeçalho e corpo"
+        }
+      ]
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: conflitos impeditivos: CONTRADICAO_INTERNA.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Contradição interna em nome e idade",
+    "Valores originais preservados",
+    "Revisão humana obrigatória"
+  ],
+  "observacoes": ""
+}

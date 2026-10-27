@@ -1,0 +1,33 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+GUIA DE SOLICITAÇÃO DE PROCEDIMENTO
+Colonoscopia — eletiva
+
+Fixture: Matriz_Guia_Texto
+Paciente: Roberto Yukio Tanaka
+Idade: 60 anos
+Documento: DOC-GUI-2026-0018
+Data: 17/10/2026
+Origem: Ambulatório de Gastroenterologia
+
+DIAGNÓSTICO / CID
+Rastreamento de neoplasia colorretal — CID-10 Z12.1.
+
+PROCEDIMENTO SOLICITADO
+Colonoscopia diagnóstica com sedação.
+
+JUSTIFICATIVA CLÍNICA
+História familiar de câncer colorretal em parente de primeiro grau. Paciente assintomático, exame de rastreamento eletivo.
+
+AUTORIZAÇÃO
+Solicitação eletiva, sem caráter de urgência.
+
+------------------------------------------------------------------------------
+Dra. Camila Ferreira Lopes
+CRM 198765-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_Guia_Texto · dados sintéticos · página 1 de 1

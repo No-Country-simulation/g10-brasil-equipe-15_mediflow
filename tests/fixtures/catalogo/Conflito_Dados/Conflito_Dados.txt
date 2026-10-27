@@ -1,0 +1,33 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RELATÓRIO DE ALTA HOSPITALAR
+Identificação do paciente contraditória no documento
+
+Fixture: Conflito_Dados
+Paciente: Fernando Augusto Reis
+Idade: 66 anos
+Documento: DOC-ALT-2026-0038
+Data: 18/10/2026
+Origem: Enfermaria 5A
+
+IDENTIFICAÇÃO
+Paciente: Fernando Augusto Reis, 66 anos, prontuário 448211.
+
+RESUMO DA INTERNAÇÃO
+Paciente do sexo masculino internado por pielonefrite aguda, tratado com antibioticoterapia endovenosa por 7 dias.
+
+CORPO DO RELATÓRIO
+Ao exame, paciente Fernando Augusto dos Reis, 56 anos, prontuário 448211, apresenta melhora clínica e laboratorial.
+
+DIAGNÓSTICO PRINCIPAL
+Pielonefrite aguda — CID-10 N10.
+
+------------------------------------------------------------------------------
+Dr. André Luiz Barbosa
+CRM 165432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Conflito_Dados · dados sintéticos · página 1 de 1

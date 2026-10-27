@@ -1,0 +1,87 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Simultaneo_Urgencia_Ilegivel",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Simultaneo_Urgencia_Ilegivel/Simultaneo_Urgencia_Ilegivel.txt",
+      "pdf": "catalogo/Simultaneo_Urgencia_Ilegivel/Simultaneo_Urgencia_Ilegivel.pdf",
+      "jpg": "catalogo/Simultaneo_Urgencia_Ilegivel/Simultaneo_Urgencia_Ilegivel.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-DB12E34D",
+    "classificacao": {
+      "tipo_documento": "RECEITUARIO_MEDICO",
+      "especialidade": [
+        "Cardiologia"
+      ],
+      "nivel_prioridade": "URGENTE",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Joana Batista Ferraz",
+        "idade": 58
+      },
+      "medico": {
+        "nome": "Dra. Camila Ferreira Lopes",
+        "crm": {
+          "numero": "198765",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Crise hipertensiva",
+      "cid": "I16.9",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Nitroprussiato de sódio",
+          "dosagem": null,
+          "frequencia": null
+        }
+      ],
+      "urgencia": "SIM"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [
+        "medicamentos[0].dosagem"
+      ],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_URGENCIA_MEDICA",
+      "destinos": [
+        "FILA_URGENCIA_MEDICA",
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Urgência com ambiguidade: mantém FILA_URGENCIA_MEDICA e acrescenta FILA_REVISAO_HUMANA. campos incertos: medicamentos[0].dosagem.",
+      "notificacao": {
+        "gerada": true,
+        "canal": "SIMULADO_SLACK_PLANTAO",
+        "status": "REGISTRADA",
+        "mensagem": "ALERTA URGENTE [DOC-DB12E34D]: Crise hipertensiva"
+      }
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Urgência e ilegibilidade simultâneas (§8.2)",
+    "Dois destinos no mesmo payload",
+    "Nunca reduzir a decisão a um destino único"
+  ],
+  "observacoes": "Imagem com desfoque leve: os campos de dose ficam incertos, o restante é legível."
+}

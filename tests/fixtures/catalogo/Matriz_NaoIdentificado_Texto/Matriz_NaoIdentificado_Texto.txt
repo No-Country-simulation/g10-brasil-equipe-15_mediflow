@@ -1,0 +1,27 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+TEXTO SEM CONTEÚDO CLÍNICO
+Lista de compras enviada por engano
+
+Fixture: Matriz_NaoIdentificado_Texto
+Paciente: —
+Idade: —
+Documento: DOC-NID-2026-0026
+Data: 18/10/2026
+Origem: Upload manual
+
+CONTEÚDO
+Lista de compras do mercado: arroz, feijão, óleo, café, açúcar, leite, pão, ovos, frutas da estação e produtos de limpeza.
+
+OBSERVAÇÃO
+Não há qualquer elemento clínico, identificação de paciente ou profissional de saúde no conteúdo.
+
+------------------------------------------------------------------------------
+—
+—
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_NaoIdentificado_Texto · dados sintéticos · página 1 de 1

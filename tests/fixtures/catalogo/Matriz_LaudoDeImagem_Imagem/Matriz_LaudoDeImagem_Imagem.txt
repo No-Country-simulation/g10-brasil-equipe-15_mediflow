@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+LAUDO DE EXAME DE IMAGEM
+Radiografia de tórax — pronto-socorro
+
+Fixture: Matriz_LaudoDeImagem_Imagem
+Paciente: Antônio Carlos Vieira
+Idade: 71 anos
+Documento: DOC-IMG-2026-0015
+Data: 17/10/2026
+Origem: Pronto-Socorro
+
+EXAME REALIZADO
+Radiografia de tórax, incidência PA e perfil.
+
+ACHADOS
+Hipertransparência difusa no hemitórax direito com ausência de trama vascular periférica e desvio contralateral do mediastino.
+
+CONCLUSÃO
+Pneumotórax espontâneo à direita, com sinais de hipertensão. Avaliação médica imediata.
+
+------------------------------------------------------------------------------
+Dra. Renata Silveira
+CRM 145892-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_LaudoDeImagem_Imagem · dados sintéticos · página 1 de 1

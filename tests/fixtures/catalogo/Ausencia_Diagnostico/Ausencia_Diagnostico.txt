@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+GUIA DE SOLICITAÇÃO DE PROCEDIMENTO
+Guia sem diagnóstico ou hipótese diagnóstica
+
+Fixture: Ausencia_Diagnostico
+Paciente: Heloísa Martins Braga
+Idade: 44 anos
+Documento: DOC-GUI-2026-0030
+Data: 18/10/2026
+Origem: Ambulatório de Dermatologia
+
+PROCEDIMENTO SOLICITADO
+Exérese de lesão cutânea em dorso, com estudo anatomopatológico.
+
+JUSTIFICATIVA CLÍNICA
+Lesão pigmentada de crescimento progressivo nos últimos 6 meses, com bordas irregulares.
+
+AUTORIZAÇÃO
+Solicitação eletiva.
+
+------------------------------------------------------------------------------
+Dra. Helena Prado
+CRM 187432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Ausencia_Diagnostico · dados sintéticos · página 1 de 1

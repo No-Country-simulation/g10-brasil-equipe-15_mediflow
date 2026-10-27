@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RECEITUÁRIO MÉDICO
+Prescrição ambulatorial — teste de limiar de confiança
+
+Fixture: Borda_Score_084
+Paciente: Fernanda Lima Rocha
+Idade: 37 anos
+Documento: DOC-REC-2026-0012
+Data: 18/10/2026
+Origem: Ambulatório de Clínica Médica
+
+HIPÓTESE DIAGNÓSTICA
+Lombalgia aguda — CID-10 M54.5.
+
+PRESCRIÇÃO
+Ibuprofeno 400 mg — 1 comprimido por via oral a cada 8 horas, por 5 dias, após as refeições.
+
+ORIENTAÇÕES
+Evitar esforço físico por 5 dias. Retorno se dor intensa ou déficit neurológico.
+
+------------------------------------------------------------------------------
+Dr. André Luiz Barbosa
+CRM 165432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Borda_Score_084 · dados sintéticos · página 1 de 1

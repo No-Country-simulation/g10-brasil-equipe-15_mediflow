@@ -1,0 +1,80 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Matriz_Receituario_Texto",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "demo/Matriz_Receituario_Texto/Matriz_Receituario_Texto.txt",
+      "pdf": "demo/Matriz_Receituario_Texto/Matriz_Receituario_Texto.pdf",
+      "jpg": "demo/Matriz_Receituario_Texto/Matriz_Receituario_Texto.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-89D631AA",
+    "classificacao": {
+      "tipo_documento": "RECEITUARIO_MEDICO",
+      "especialidade": [
+        "Clínica Médica"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Marina Alves Ferreira",
+        "idade": 34
+      },
+      "medico": {
+        "nome": "Dra. Helena Prado",
+        "crm": {
+          "numero": "187432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Cefaleia tensional",
+      "cid": "G44.2",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Dipirona sódica",
+          "dosagem": "500 mg",
+          "frequencia": null
+        }
+      ],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FARMACIA_HOSPITALAR",
+      "destinos": [
+        "FARMACIA_HOSPITALAR"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: RECEITUARIO_MEDICO encaminhado para FARMACIA_HOSPITALAR.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Texto aceito e classificado como receituário",
+    "Prioridade ROTINA e destino FARMACIA_HOSPITALAR",
+    "Nenhum campo obrigatório ausente",
+    "Sem revisão humana e sem alerta"
+  ],
+  "observacoes": ""
+}

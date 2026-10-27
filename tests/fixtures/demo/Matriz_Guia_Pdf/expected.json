@@ -1,0 +1,76 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Matriz_Guia_Pdf",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "demo/Matriz_Guia_Pdf/Matriz_Guia_Pdf.txt",
+      "pdf": "demo/Matriz_Guia_Pdf/Matriz_Guia_Pdf.pdf",
+      "jpg": "demo/Matriz_Guia_Pdf/Matriz_Guia_Pdf.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-A36472A8",
+    "classificacao": {
+      "tipo_documento": "GUIA_PROCEDIMENTO",
+      "especialidade": [
+        "Ortopedia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Luciana Martins Costa",
+        "idade": 46
+      },
+      "medico": {
+        "nome": "Dr. André Luiz Barbosa",
+        "crm": {
+          "numero": "165432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Lombalgia crônica com radiculopatia",
+      "cid": "M54.5",
+      "exames": [
+        "Ressonância magnética de coluna lombar"
+      ],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "AUDITORIA_AUTORIZACOES",
+      "destinos": [
+        "AUDITORIA_AUTORIZACOES"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: GUIA_PROCEDIMENTO encaminhado para AUDITORIA_AUTORIZACOES.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Guia de procedimento eletivo",
+    "Destino AUDITORIA_AUTORIZACOES",
+    "CID e justificativa extraídos",
+    "Sem revisão"
+  ],
+  "observacoes": ""
+}

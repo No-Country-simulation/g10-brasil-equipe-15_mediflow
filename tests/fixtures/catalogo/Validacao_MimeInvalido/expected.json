@@ -1,0 +1,21 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Validacao_MimeInvalido",
+  "documento_ficticio": true,
+  "tipo_de_teste": "negativo_tecnico",
+  "entrada": {
+    "requisicao": "POST /api/v1/triagens",
+    "arquivo": "Validacao_MimeInvalido.pdf"
+  },
+  "resposta_esperada": {
+    "http": 415,
+    "codigo_funcional": "MIME_INVALIDO",
+    "mensagem": "Extensão .pdf com conteúdo real de PNG: inconsistência extensão × MIME."
+  },
+  "assercoes": [
+    "Validar o conteúdo, não apenas a extensão.",
+    "Nenhuma inferência é executada para entrada inválida",
+    "Mensagem de erro é segura, sem stack trace ou segredo"
+  ],
+  "observacoes": "O expected deste fixture é um envelope de erro, não um JSON de triagem."
+}

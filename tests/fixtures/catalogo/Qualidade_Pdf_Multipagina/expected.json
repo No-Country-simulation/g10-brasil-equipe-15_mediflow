@@ -1,0 +1,80 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Qualidade_Pdf_Multipagina",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Qualidade_Pdf_Multipagina/Qualidade_Pdf_Multipagina.txt",
+      "pdf": "catalogo/Qualidade_Pdf_Multipagina/Qualidade_Pdf_Multipagina.pdf",
+      "jpg": "catalogo/Qualidade_Pdf_Multipagina/Qualidade_Pdf_Multipagina.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-3F5EE43A",
+    "classificacao": {
+      "tipo_documento": "RELATORIO_ALTA_INTERNACAO",
+      "especialidade": [
+        "Infectologia",
+        "Pneumologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Iracema Barbosa Teixeira",
+        "idade": 74
+      },
+      "medico": {
+        "nome": "Dr. Paulo Mendes Rocha",
+        "crm": {
+          "numero": "203114",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Sepse de foco pulmonar",
+      "cid": "A41.9",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Amoxicilina + clavulanato",
+          "dosagem": "875/125 mg",
+          "frequencia": null
+        }
+      ],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "PRONTUARIO_ELETRONICO",
+      "destinos": [
+        "PRONTUARIO_ELETRONICO"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: RELATORIO_ALTA_INTERNACAO encaminhado para PRONTUARIO_ELETRONICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "PDF com 7 páginas é aceito: está dentro do limite de 20 páginas (A6)",
+    "Conteúdo completo é considerado na extração",
+    "Destino PRONTUARIO_ELETRONICO, sem revisão"
+  ],
+  "observacoes": ""
+}

@@ -1,0 +1,76 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Ausencia_Medico_Crm",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Ausencia_Medico_Crm/Ausencia_Medico_Crm.txt",
+      "pdf": "catalogo/Ausencia_Medico_Crm/Ausencia_Medico_Crm.pdf",
+      "jpg": "catalogo/Ausencia_Medico_Crm/Ausencia_Medico_Crm.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-71C7F229",
+    "classificacao": {
+      "tipo_documento": "LAUDO_EXAME_LABORATORIAL",
+      "especialidade": [
+        "Endocrinologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Gustavo Henrique Barros",
+        "idade": 52
+      },
+      "medico": {
+        "nome": "Dr. Marcos Vinícius Tavares",
+        "crm": null
+      },
+      "diagnostico": "Diabetes mellitus tipo 2",
+      "cid": "E11.9",
+      "exames": [
+        "Glicemia de jejum",
+        "Hemoglobina glicada",
+        "Creatinina"
+      ],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [
+        "medico.crm"
+      ],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: campos obrigatórios ausentes: medico.crm.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "CRM ausente força revisão",
+    "Nome do médico preservado",
+    "CRM não é inventado"
+  ],
+  "observacoes": ""
+}

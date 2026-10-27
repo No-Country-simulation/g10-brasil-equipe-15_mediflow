@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+LAUDO DE EXAME DE IMAGEM
+Ultrassonografia de abdome total — rotina
+
+Fixture: Matriz_LaudoDeImagem_Texto
+Paciente: Patrícia Nogueira Alves
+Idade: 38 anos
+Documento: DOC-IMG-2026-0016
+Data: 17/10/2026
+Origem: Ambulatório de Gastroenterologia
+
+EXAME REALIZADO
+Ultrassonografia de abdome total.
+
+ACHADOS
+Fígado de dimensões normais, ecotextura homogênea. Vesícula biliar sem cálculos. Vias biliares de calibre normal. Rins de dimensões e ecogenicidade preservadas. Ausência de líquido livre.
+
+CONCLUSÃO
+Exame ultrassonográfico dentro da normalidade.
+
+------------------------------------------------------------------------------
+Dr. André Luiz Barbosa
+CRM 165432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_LaudoDeImagem_Texto · dados sintéticos · página 1 de 1

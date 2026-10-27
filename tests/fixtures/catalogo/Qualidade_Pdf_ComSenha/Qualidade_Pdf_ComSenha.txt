@@ -1,0 +1,27 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RECEITUÁRIO MÉDICO
+PDF protegido por senha
+
+Fixture: Qualidade_Pdf_ComSenha
+Paciente: —
+Idade: —
+Documento: DOC-Q-2026-0048
+Data: 18/10/2026
+Origem: Upload manual
+
+CONTEÚDO
+Documento protegido por senha. O conteúdo não pode ser lido sem a credencial fornecida pelo emissor.
+
+OBSERVAÇÃO
+O contrato de erro deve definir se o documento é rejeitado (415/422) ou encaminhado para revisão humana.
+
+------------------------------------------------------------------------------
+—
+—
+------------------------------------------------------------------------------
+MediFlow · fixture Qualidade_Pdf_ComSenha · dados sintéticos · página 1 de 1

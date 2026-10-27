@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+LAUDO DE EXAME DE IMAGEM
+Laudo de imagem enviado como WEBP
+
+Fixture: Limite_Formato_Webp
+Paciente: Rafael Coutinho Bessa
+Idade: 41 anos
+Documento: DOC-LDI-2026-0058
+Data: 18/10/2026
+Origem: Foto enviada por celular
+
+EXAME REALIZADO
+Radiografia de tórax em duas incidências.
+
+ACHADOS
+Campos pulmonares livres, sem infiltrados. Silhueta cardíaca de dimensões normais. Sem derrame pleural.
+
+CONCLUSÃO
+Radiografia de tórax sem alterações relevantes.
+
+------------------------------------------------------------------------------
+Dra. Renata Silveira
+CRM 145892-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Limite_Formato_Webp · dados sintéticos · página 1 de 1

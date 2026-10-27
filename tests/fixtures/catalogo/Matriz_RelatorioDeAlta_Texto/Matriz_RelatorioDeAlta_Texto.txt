@@ -1,0 +1,33 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RELATÓRIO DE ALTA HOSPITALAR
+Resumo de internação truncado — sem diagnóstico
+
+Fixture: Matriz_RelatorioDeAlta_Texto
+Paciente: Vanessa Cristina Lopes
+Idade: 33 anos
+Documento: DOC-ALT-2026-0020
+Data: 18/10/2026
+Origem: Enfermaria 4C
+
+PERÍODO DE INTERNAÇÃO
+Admissão em 15/10/2026, alta em 18/10/2026.
+
+RESUMO
+Paciente internada para investigação de quadro álgico abdominal. Realizados exames laboratoriais e de imagem durante a internação.
+
+EVOLUÇÃO
+Houve melhora parcial dos sintomas. A equipe assistente optou pela alta hospitalar com orientação de retorno ambulatorial.
+
+PENDÊNCIAS
+Laudo anatomopatológico pendente. Retorno em 15 dias.
+
+------------------------------------------------------------------------------
+Dr. André Luiz Barbosa
+CRM 165432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_RelatorioDeAlta_Texto · dados sintéticos · página 1 de 1

@@ -1,0 +1,27 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RECEITUÁRIO MÉDICO
+Receita manuscrita legível
+
+Fixture: Diferencial_ReceituarioManuscrito
+Paciente: Vera Lúcia Santana
+Idade: 61 anos
+Documento: DOC-D-2026-0056
+Data: 18/10/2026
+Origem: Ambulatório de Clínica Médica
+
+HIPÓTESE DIAGNÓSTICA
+Osteoartrite de joelhos — CID-10 M17.9.
+
+PRESCRIÇÃO
+Paracetamol 750 mg — 1 comprimido por via oral a cada 8 horas, por 7 dias.
+
+------------------------------------------------------------------------------
+Dra. Helena Prado
+CRM 187432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Diferencial_ReceituarioManuscrito · dados sintéticos · página 1 de 1

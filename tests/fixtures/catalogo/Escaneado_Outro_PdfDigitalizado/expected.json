@@ -1,0 +1,74 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Escaneado_Outro_PdfDigitalizado",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Escaneado_Outro_PdfDigitalizado/Escaneado_Outro_PdfDigitalizado.txt",
+      "pdf": "catalogo/Escaneado_Outro_PdfDigitalizado/Escaneado_Outro_PdfDigitalizado.pdf",
+      "jpg": "catalogo/Escaneado_Outro_PdfDigitalizado/Escaneado_Outro_PdfDigitalizado.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-00034844",
+    "classificacao": {
+      "tipo_documento": "OUTRO",
+      "especialidade": [],
+      "nivel_prioridade": "NAO_IDENTIFICADA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": null,
+        "idade": null
+      },
+      "medico": {
+        "nome": null,
+        "crm": null
+      },
+      "diagnostico": null,
+      "cid": null,
+      "exames": [],
+      "medicamentos": [],
+      "urgencia": "INDETERMINADO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [
+        "paciente.nome",
+        "paciente.idade",
+        "medico.nome",
+        "medico.crm",
+        "diagnostico"
+      ],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: campos obrigatórios ausentes: diagnostico, medico.crm, medico.nome, paciente.idade, paciente.nome; tipo fora da taxonomia: OUTRO; prioridade não identificada; urgência indeterminada (conta como campo incerto).",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Termo administrativo escaneado fora da taxonomia",
+    "Classificação OUTRO",
+    "Revisão humana obrigatória"
+  ],
+  "observacoes": ""
+}

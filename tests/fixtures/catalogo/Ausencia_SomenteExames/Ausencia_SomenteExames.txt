@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+ATESTADO MÉDICO
+Atestado sem exames solicitados ou realizados
+
+Fixture: Ausencia_SomenteExames
+Paciente: Igor Nascimento Prado
+Idade: 24 anos
+Documento: DOC-ATE-2026-0033
+Data: 18/10/2026
+Origem: Ambulatório de Clínica Médica
+
+FINALIDADE
+Atestado de comparecimento.
+
+TEXTO DO ATESTADO
+Atesto que o paciente compareceu a consulta médica nesta data, no período das 14h00 às 15h10.
+
+DIAGNÓSTICO / CID
+Dermatite de contato — CID-10 L23.9.
+
+------------------------------------------------------------------------------
+Dr. Paulo Mendes Rocha
+CRM 203114-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Ausencia_SomenteExames · dados sintéticos · página 1 de 1

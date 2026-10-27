@@ -1,0 +1,90 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Matriz_Receituario_Imagem",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "demo/Matriz_Receituario_Imagem/Matriz_Receituario_Imagem.txt",
+      "pdf": "demo/Matriz_Receituario_Imagem/Matriz_Receituario_Imagem.pdf",
+      "jpg": "demo/Matriz_Receituario_Imagem/Matriz_Receituario_Imagem.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-291D9643",
+    "classificacao": {
+      "tipo_documento": "RECEITUARIO_MEDICO",
+      "especialidade": [
+        "Clínica Médica"
+      ],
+      "nivel_prioridade": "URGENTE",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "João Batista Nogueira",
+        "idade": 67
+      },
+      "medico": {
+        "nome": "Dra. Camila Ferreira Lopes",
+        "crm": {
+          "numero": "198765",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Dor pós-operatória aguda intensa",
+      "cid": "R52.1",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Morfina 10 mg/mL",
+          "dosagem": null,
+          "frequencia": null
+        },
+        {
+          "nome": "Dipirona",
+          "dosagem": "1 g",
+          "frequencia": null
+        }
+      ],
+      "urgencia": "SIM"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_URGENCIA_MEDICA",
+      "destinos": [
+        "FILA_URGENCIA_MEDICA"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Urgência clínica: FILA_URGENCIA_MEDICA com alerta registrado. Sem ambiguidade, segue sem revisão humana.",
+      "notificacao": {
+        "gerada": true,
+        "canal": "SIMULADO_SLACK_PLANTAO",
+        "status": "REGISTRADA",
+        "mensagem": "ALERTA URGENTE [DOC-291D9643]: Dor pós-operatória aguda intensa"
+      }
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Imagem aceita",
+    "Sinal textual de urgência detectado",
+    "Destino FILA_URGENCIA_MEDICA com alerta simulado",
+    "Nunca encaminhado como rotina"
+  ],
+  "observacoes": "Prescrição de alto risco (opioide) com urgência explícita: dispara RN-03 pelo texto, sem depender do dicionário de alto risco."
+}

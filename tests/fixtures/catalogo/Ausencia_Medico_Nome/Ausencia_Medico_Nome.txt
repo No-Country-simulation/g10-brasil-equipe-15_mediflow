@@ -1,0 +1,31 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+LAUDO DE EXAME LABORATORIAL
+Laudo com CRM preenchido e nome do médico ausente
+
+Fixture: Ausencia_Medico_Nome
+Paciente: Simone Aparecida Rocha
+Idade: 47 anos
+Documento: DOC-LAB-2026-0028
+Data: 18/10/2026
+Origem: Laboratório Central
+
+HIPÓTESE DIAGNÓSTICA
+Hipotireoidismo primário — CID-10 E03.9.
+
+RESULTADOS
+TSH: 8,9 mUI/L (referência 0,4–4,0)
+T4 livre: 0,72 ng/dL (referência 0,8–1,8)
+
+CONCLUSÃO
+Perfil compatível com hipotireoidismo primário. Correlacionar clinicamente.
+
+------------------------------------------------------------------------------
+
+CRM 154321-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Ausencia_Medico_Nome · dados sintéticos · página 1 de 1
