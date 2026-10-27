@@ -197,6 +197,7 @@ class CodigoErro(str, Enum):
     MIME_INVALIDO = "MIME_INVALIDO"
     PDF_PROTEGIDO = "PDF_PROTEGIDO"
     PDF_CORROMPIDO = "PDF_CORROMPIDO"
+    ERRO_PERSISTENCIA = "ERRO_PERSISTENCIA"
 
 
 DESTINO_POR_TIPO: Dict[TipoDocumento, Destino] = {
@@ -497,9 +498,8 @@ class TriagemMediFlow(BaseModel):
         """
         Regras de Negócio Oficiais MediFlow (R1 a R8 - Especificação Funcional v1.0).
         """
-        # 1. Tratamento de Erro de Leitura
-        em_erro = self.status in (StatusTriagem.ERRO_PROCESSAMENTO, StatusTriagem.ERRO_PERSISTENCIA)
-        if em_erro:
+        # 1. Tratamento de Erro de Leitura ou Persistência
+        if self.status == StatusTriagem.ERRO_PROCESSAMENTO:
             if self.erro is None:
                 self.erro = ErroProcessamento(
                     codigo=CodigoErro.PDF_CORROMPIDO,
@@ -508,6 +508,15 @@ class TriagemMediFlow(BaseModel):
             self.decisao_roteamento = None
             self.qualidade = None
             return self
+
+        if self.status == StatusTriagem.ERRO_PERSISTENCIA:
+            if self.erro is None:
+                self.erro = ErroProcessamento(
+                    codigo=CodigoErro.ERRO_PERSISTENCIA,
+                    mensagem="Erro na persistência do documento clínico no OCI Object Storage."
+                )
+            if self.classificacao is None or self.dados_extraidos is None:
+                return self
 
         if self.classificacao is None or self.dados_extraidos is None:
             return self
@@ -538,13 +547,36 @@ class TriagemMediFlow(BaseModel):
             ausentes.add("medico.nome")
         if not d.medico or not d.medico.crm or (isinstance(d.medico.crm, Crm) and not d.medico.crm.numero):
             ausentes.add("medico.crm")
-        if not d.diagnostico and not d.exames:
+
+        is_lab = c.tipo_documento in (
+            TipoDocumento.LAUDO_EXAME_LABORATORIAL,
+            "LAUDO_EXAME_LABORATORIAL",
+            "LAUDO LABORATORIAL",
+            "Laudo Laboratorial"
+        )
+        dispensa_diagnostico = is_lab and bool(d.exames or d.exames_laboratoriais)
+        if not d.diagnostico and not dispensa_diagnostico:
             ausentes.add("diagnostico")
         q.campos_ausentes = sorted(list(ausentes))
 
         # 4. Avaliação de Ambiguidade e Regras
         urgente = (c.nivel_prioridade == NivelPrioridade.URGENTE) or (d.urgencia == Urgencia.SIM)
-        fora_da_taxonomia = c.tipo_documento in (TipoDocumento.OUTRO, TipoDocumento.NAO_IDENTIFICADO)
+
+        dest_tipo = DESTINO_POR_TIPO.get(c.tipo_documento)
+        if dest_tipo is None and isinstance(c.tipo_documento, str):
+            try:
+                dest_tipo = DESTINO_POR_TIPO.get(TipoDocumento(c.tipo_documento))
+            except Exception:
+                dest_tipo = None
+
+        fora_da_taxonomia = (
+            dest_tipo is None
+            or c.tipo_documento in (TipoDocumento.OUTRO, TipoDocumento.NAO_IDENTIFICADO, "OUTRO", "NAO_IDENTIFICADO")
+        )
+        urgencia_str = str(getattr(d.urgencia, "value", d.urgencia)).upper()
+        urgencia_indeterminada = (
+            "urgencia" in d.model_fields_set and urgencia_str == "INDETERMINADO"
+        )
         abaixo_do_limiar = q.score_combinado < limiar
         falta_obrigatorio = bool(set(q.campos_ausentes) & CAMPOS_OBRIGATORIOS)
         impeditivos = [x for x in q.conflitos if getattr(x.gravidade, "value", x.gravidade) in GRAVIDADES_IMPEDITIVAS]
@@ -552,7 +584,7 @@ class TriagemMediFlow(BaseModel):
 
         ambiguidade = bool(
             falta_obrigatorio or q.campos_incertos or impeditivos or abaixo_do_limiar
-            or fora_da_taxonomia or prioridade_indefinida
+            or fora_da_taxonomia or prioridade_indefinida or urgencia_indeterminada
         )
 
         # 5. Destinos (R1, R3, R4)
@@ -560,8 +592,8 @@ class TriagemMediFlow(BaseModel):
         if urgente:
             destinos.append(Destino.FILA_URGENCIA_MEDICA)
         elif not ambiguidade:
-            dest_tipo = DESTINO_POR_TIPO.get(c.tipo_documento, Destino.PRONTUARIO_ELETRONICO)
-            destinos.append(dest_tipo)
+            dest_tipo_final = dest_tipo or Destino.PRONTUARIO_ELETRONICO
+            destinos.append(dest_tipo_final)
 
         if ambiguidade:
             if urgente:
@@ -589,6 +621,8 @@ class TriagemMediFlow(BaseModel):
             motivos.append("conflitos impeditivos: " + ", ".join(x.tipo for x in impeditivos))
         if fora_da_taxonomia:
             motivos.append(f"tipo fora da taxonomia: {getattr(c.tipo_documento, 'value', c.tipo_documento)}")
+        if urgencia_indeterminada:
+            motivos.append("urgência clínica indeterminada (decisão A5/R2)")
 
         if urgente and ambiguidade:
             self.decisao_roteamento.justificativa_roteamento = (
@@ -618,13 +652,14 @@ class TriagemMediFlow(BaseModel):
             )
 
         # 7. Status Final
-        if self.status != StatusTriagem.ERRO_PROCESSAMENTO:
+        if self.status not in (StatusTriagem.ERRO_PROCESSAMENTO, StatusTriagem.ERRO_PERSISTENCIA):
             if self.decisao_roteamento.requer_auditoria_humana:
                 self.status = StatusTriagem.EM_REVISAO
             else:
                 self.status = StatusTriagem.PROCESSADO
 
         return self
+
 
 
 # Alias de compatibilidade

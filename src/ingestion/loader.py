@@ -137,6 +137,8 @@ class DocumentLoader:
             raise ValueError(f"Formato não suportado: '{extensao}'. Suportados: {cls.FORMATOS_SUPORTADOS}")
 
         tamanho_bytes = len(conteudo_bytes)
+        if tamanho_bytes == 0:
+            raise IngestaoError(codigo="ARQUIVO_VAZIO", mensagem="O arquivo enviado está vazio (0 bytes).")
         cls.validar_limite_tamanho(tamanho_bytes)
         doc_id = documento_id or cls.gerar_documento_id()
 
@@ -145,7 +147,8 @@ class DocumentLoader:
         elif extensao == ".txt":
             texto, total_paginas, requer_ocr, meta = cls._extrair_txt_blindado(conteudo_bytes)
         else:
-            # Imagens (PNG/JPG/JPEG): Texto vazio, requer visão multimodal, bytes preservados
+            # Imagens (PNG/JPG/JPEG/WEBP): Validação de assinatura/magic bytes e preparação multimodal
+            cls._validar_imagem_blindada(conteudo_bytes, extensao)
             texto, total_paginas, requer_ocr, meta = "", 1, True, {"tipo": "imagem", "mime": f"image/{extensao.replace('.', '')}"}
 
         return DocumentoIngerido(
@@ -159,6 +162,23 @@ class DocumentLoader:
             conteudo_bytes=conteudo_bytes,
             metadados=meta
         )
+
+    @staticmethod
+    def _validar_imagem_blindada(conteudo_bytes: bytes, extensao: str) -> None:
+        """Valida assinaturas de imagem (magic bytes) para barrar injeção de arquivos comuns mascarados."""
+        ext = extensao.lower()
+        valido = False
+        if ext == ".png" and conteudo_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+            valido = True
+        elif ext in {".jpg", ".jpeg"} and conteudo_bytes.startswith(b"\xff\xd8\xff"):
+            valido = True
+        elif ext == ".webp" and conteudo_bytes.startswith(b"RIFF") and b"WEBP" in conteudo_bytes[:16]:
+            valido = True
+
+        if not valido:
+            raise DocumentoCorrompidoError(
+                f"IMAGEM_CORROMPIDA: O arquivo com extensão '{ext}' não possui assinatura binária válida de imagem."
+            )
 
     @staticmethod
     def _extrair_pdf_blindado(conteudo_bytes: bytes) -> Tuple[str, int, bool, Dict[str, Any]]:
@@ -194,9 +214,9 @@ class DocumentLoader:
 
             texto_completo = "\n\n--- Quebra de Página ---\n\n".join(textos_paginas) if total_paginas > 1 else "".join(textos_paginas)
             
-            # Heurística precisa: só requer OCR se todas as páginas forem vazias ou se não há texto legível
+            # Heurística precisa: requer OCR se o texto limpo for vazio ou se alguma página não contiver texto nativo
             texto_limpo = texto_completo.strip()
-            requer_ocr = (len(texto_limpo) == 0) or (paginas_vazias == total_paginas)
+            requer_ocr = (len(texto_limpo) == 0) or (paginas_vazias > 0)
 
             metadados = {
                 "autor": doc.metadata.get("author", "") if doc.metadata else "",
@@ -227,8 +247,12 @@ class DocumentLoader:
             texto_decodificado = conteudo_bytes.decode("utf-8", errors="replace")
             encoding_usado = "utf-8 (fallback replace)"
 
+        if not texto_decodificado.strip():
+            raise IngestaoError(codigo="CONTEUDO_TXT_VAZIO", mensagem="O arquivo TXT não possui conteúdo textual legível.")
+
         metadados = {
             "encoding_detectado": encoding_usado,
             "total_caracteres": len(texto_decodificado)
         }
         return texto_decodificado, 1, False, metadados
+

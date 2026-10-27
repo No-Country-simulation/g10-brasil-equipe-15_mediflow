@@ -305,10 +305,16 @@ Abaixo está o payload canônico oficial gerado pelo MediFlow, modelado a partir
 
 ## ☁️ 6. Topologia de Armazenamento OCI (Always Free)
 
-A segregação dos documentos no OCI Object Storage obedece à hierarquia abaixo:
+A persistência em nuvem é operada pelo conector [`src/storage/oci_storage.py`](src/storage/oci_storage.py), construído sobre o SDK oficial da Oracle Cloud (`oci.object_storage.ObjectStorageClient`). O conector aplica:
+- **Proteção contra sobrescrita:** Header `if-none-match: *` em `enviar_bytes()` para garantir idempotência e impedir perda de dados.
+- **Validação de tipos e tamanho:** Tratamento de buffers binários com `content_type` apropriado.
+- **Paginação de listagem:** Itera todas as páginas usando cursor (`next_start_with`).
+- **Resiliência a falhas (`ERRO_PERSISTENCIA`):** Se a chamada OCI falhar por indisponibilidade, o sistema registra `CodigoErro.ERRO_PERSISTENCIA` sem anular a decisão de triagem clínica prévia.
+
+A segregação dos documentos no bucket `mediflow-documentos` obedece à hierarquia abaixo:
 
 ```text
-mediflow-documentos-clinicos/ (Bucket OCI Always Free)
+mediflow-documentos/ (Bucket OCI Always Free - Tenancy izapalomaa)
 │
 ├── recebidos/                                  <- Mídia original no momento do upload (PDF/JPG/TXT)
 │   ├── DOC-CLIN-2026-8942.pdf
@@ -327,17 +333,19 @@ mediflow-documentos-clinicos/ (Bucket OCI Always Free)
 
 ---
 
-## 🧪 7. Engenharia de Qualidade e Suíte de Testes (150 Testes)
+## 🧪 7. Engenharia de Qualidade e Suíte de Testes (192 Testes)
 
-A conformidade do MediFlow com os requisitos funcionais e com o edital da Oracle é auditada por uma suíte de 150 testes automatizados no Pytest:
+A conformidade do MediFlow com os requisitos funcionais e com o edital da Oracle é auditada por uma suíte de 192 testes automatizados no Pytest:
 
 | Módulo de Teste | Quantidade | Escopo e Cobertura Técnica |
 | :--- | :---: | :--- |
 | **`tests/test_contrato_fixtures.py`** | **79 testes** | Validação canônica dos 79 fixtures oficiais (William) contra o modelo Pydantic v2 e regras R1 a R8 (consistência de ponto fixo determinístico). |
-| **`tests/test_workflow.py`** | **46 testes** | Grafo LangGraph completo, nós de decisão, arestas condicionais, avaliação de score e roteamento para os 5 destinos. |
+| **`tests/test_workflow.py`** | **73 testes** | Grafo LangGraph completo, nós de decisão, arestas condicionais, avaliação de score e roteamento para os 5 destinos. |
 | **`tests/test_ingestion.py`** | **18 testes** | Ingestão robusta, validação de arquivos físicos (.pdf, .jpg, .webp, rejeição de .docx), limites estritos de 10.00MB e 20 páginas, PDFs protegidos e corrompidos. |
+| **`tests/test_oci_storage.py`** | **8 testes** | Conector OCI Object Storage simulado (mock), validação de `if-none-match`, preservação de bytes, paginação e propagação de erros. |
+| **`tests/test_audit_items.py`** | **8 testes** | Auditoria clínica de sanidade: descarte de diagnóstico restrito a lab, urgência indeterminada, persistência e sanitização. |
 | **`tests/test_schemas.py`** | **7 testes** | Schemas Pydantic v2, serialização JSON, aliases de retrocompatibilidade e tratamento de erros de Nível 1 e 2. |
-| **Total da Suíte Oficial** | **150 testes** | **100% aprovados em ~1.1s** |
+| **Total da Suíte Oficial** | **192 testes** | **100% aprovados em ~2.6s (1 skipped esperado de isolamento legado)** |
 
 ---
 
@@ -361,13 +369,16 @@ pip install -r requirements.txt
 cp .env.example .env
 # Configurar GEMINI_API_KEY e credenciais OCI Always Free
 
-# 5. Executar a suíte completa de 150 testes automatizados
+# 5. Executar a suíte completa de 192 testes automatizados
 python -m pytest
 
-# 6. Opção A: Iniciar o Servidor FastAPI (Backend REST para React e API)
+# 6. (Opcional) Executar o teste real no bucket OCI
+python -m scripts.testar_oci
+
+# 7. Opção A: Iniciar o Servidor FastAPI (Backend REST para React e API)
 uvicorn src.api.main:app --reload --port 8000
 
-# 7. Opção B: Iniciar a Bancada Streamlit (Auditoria Rápida & HiTL)
+# 8. Opção B: Iniciar a Bancada Streamlit (Auditoria Rápida & HiTL)
 streamlit run src/app/streamlit_app.py
 ```
 
@@ -392,6 +403,7 @@ g10-brasil-equipe-15_mediflow/
 │   │   ├── CONTRATO_DE_DADOS.md                <- Contrato canônico unificado (fonte da verdade)
 │   │   ├── CATALOGO_DE_DOCUMENTOS_DE_TESTE.md  <- Catálogo completo dos 79 fixtures
 │   │   ├── AUDITORIA_2026-10-20.md             <- Histórico de resolução de pendências
+│   │   ├── VISUAL_SCHEMAS.md                   <- Guia visual com diagramas Mermaid autoritativos
 │   │   ├── Mapa_de_Documentos_de_Teste_MediFlow.pdf <- Matriz visual de rastreabilidade (PDF)
 │   │   └── README.md                           <- Guia de navegação de testes e QA
 │   └── GUIA_INTEGRACAO_LLM.md                  <- Guia de consumo do Ingestion Loader para IA
@@ -401,19 +413,24 @@ g10-brasil-equipe-15_mediflow/
 │   ├── app/                                    <- Interfaces Python (Streamlit HiTL)
 │   │   └── streamlit_app.py                    <- Painel web de auditoria médica e testes rápidos
 │   ├── ingestion/                              <- Camada de Ingestão e Gateway de Segurança
-│   │   └── loader.py                           <- Carregador blindado (10MB, 20 págs, MIME, sanitização)
+│   │   └── loader.py                           <- Carregador blindado (10MB, 20 págs, MIME, magic bytes)
 │   ├── schemas/                                <- Modelos de Dados Pydantic v2
 │   │   └── clinical.py                         <- Schemas canônicos (TriagemMediFlow, ErroResposta, etc.)
-│   ├── storage/                                <- Integração com Oracle Cloud Infrastructure (OCI)
+│   ├── storage/                                <- Conector OCI Object Storage Always Free (oci_storage.py)
 │   ├── workflow/                               <- Motor de Orquestração Determinística (LangGraph)
 │   │   ├── graph.py                            <- Grafo de estados, nós e cálculo de regras
 │   │   └── state.py                            <- Estrutura do GraphState compartilhado
 │   └── config.py                               <- Configurações globais e variáveis de ambiente
 │
-├── tests/                                      <- Suíte Oficial de Testes Automatizados (150 testes)
+├── scripts/                                    <- Utilitários de homologação e scripts de diagnóstico
+│   └── testar_oci.py                           <- Validação real ponta a ponta no bucket OCI Always Free
+│
+├── tests/                                      <- Suíte Oficial de Testes Automatizados (192 testes)
 │   ├── test_contrato_fixtures.py               <- 79 testes: ponto fixo dos fixtures e regras R1 a R8
-│   ├── test_workflow.py                        <- 46 testes: transições e arestas do LangGraph
+│   ├── test_workflow.py                        <- 73 testes: transições e arestas do LangGraph
 │   ├── test_ingestion.py                       <- 18 testes: arquivos reais, PDF, JPG, WEBP e DOCX (415)
+│   ├── test_audit_items.py                     <- 8 testes dedicados de auditoria técnica e sanidade
+│   ├── test_oci_storage.py                     <- 8 testes: persistência OCI com SDK simulado (mock)
 │   ├── test_schemas.py                         <- 7 testes: Pydantic v2 e envelopes de erro Nível 1 e 2
 │   └── fixtures/                               <- Base de 79 fixtures canônicos
 │       ├── demo/                               <- 12 casos essenciais para o pitch (TXT, PDF, JPG, JSON)
