@@ -645,22 +645,23 @@ class TriagemMediFlow(BaseModel):
         if urgencia_indeterminada:
             motivos.append("urgência clínica indeterminada (decisão A5/R2)")
 
-        if urgente and ambiguidade:
-            self.decisao_roteamento.justificativa_roteamento = (
-                "Urgência com ambiguidade: mantém FILA_URGENCIA_MEDICA e acrescenta FILA_REVISAO_HUMANA. " + "; ".join(motivos) + "."
-            )
-        elif urgente:
-            self.decisao_roteamento.justificativa_roteamento = (
-                "Urgência clínica: FILA_URGENCIA_MEDICA com alerta registrado. Sem ambiguidade, segue sem revisão humana."
-            )
-        elif ambiguidade:
-            self.decisao_roteamento.justificativa_roteamento = "Revisão humana obrigatória: " + "; ".join(motivos) + "."
-        else:
-            tipo_txt = getattr(c.tipo_documento, "value", c.tipo_documento)
-            dest_txt = getattr(self.decisao_roteamento.destino_principal, "value", self.decisao_roteamento.destino_principal)
-            self.decisao_roteamento.justificativa_roteamento = (
-                f"Classificação de rotina: {tipo_txt} encaminhado para {dest_txt}."
-            )
+        if not self.decisao_roteamento.justificativa_roteamento:
+            if urgente and ambiguidade:
+                self.decisao_roteamento.justificativa_roteamento = (
+                    "Urgência com ambiguidade: mantém FILA_URGENCIA_MEDICA e acrescenta FILA_REVISAO_HUMANA. " + "; ".join(motivos) + "."
+                )
+            elif urgente:
+                self.decisao_roteamento.justificativa_roteamento = (
+                    "Urgência clínica: FILA_URGENCIA_MEDICA com alerta registrado. Sem ambiguidade, segue sem revisão humana."
+                )
+            elif ambiguidade:
+                self.decisao_roteamento.justificativa_roteamento = "Revisão humana obrigatória: " + "; ".join(motivos) + "."
+            else:
+                tipo_txt = getattr(c.tipo_documento, "value", c.tipo_documento)
+                dest_txt = getattr(self.decisao_roteamento.destino_principal, "value", self.decisao_roteamento.destino_principal)
+                self.decisao_roteamento.justificativa_roteamento = (
+                    f"Classificação de rotina: {tipo_txt} encaminhado para {dest_txt}."
+                )
 
         # 6. Notificação Automática de Urgência
         if urgente and not self.decisao_roteamento.notificacao:

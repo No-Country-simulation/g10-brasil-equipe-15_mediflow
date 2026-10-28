@@ -53,6 +53,9 @@ class TriagemService:
         """Obtém cliente OCI Storage configurado ou injetado."""
         if self._storage is not None:
             return self._storage
+        # Em ambiente de teste automatizado, evita conexões reais externas a menos que explicitamente injetado
+        if os.getenv("TESTING", "").lower() in ("1", "true") or os.getenv("PYTEST_CURRENT_TEST"):
+            return None
         try:
             from src.storage.oci_storage import OCIStorage
             return OCIStorage.das_configuracoes()
@@ -472,71 +475,116 @@ class TriagemService:
         if triagem.status not in (StatusTriagem.ERRO_PERSISTENCIA, StatusTriagem.RECEBIDO):
             return triagem
 
-        storage = self._obter_storage()
         nome_doc = (doc.nome_arquivo or "").lower()
         eh_simulacao = "simulacao" in nome_doc or "ocifalha" in nome_doc
 
-        if not storage:
-            if eh_simulacao or os.getenv("OCI_OBRIGATORIO", "false").lower() not in ("true", "1"):
-                logger.info("[Simulação EPT] Conector OCI simulado com sucesso na retentativa para documento %s", documento_id)
-            else:
-                raise RuntimeError("Conector OCI não configurado ou indisponível para nova tentativa.")
-
         bucket_nome = os.getenv("OCI_BUCKET_NAME", "mediflow-documentos")
         caminho_original = f"recebidos/{documento_id}/original.{doc.formato.lower()}"
-
-        # 1. Regrava documento original (se houver conector ativo)
-        if storage is not None:
-            storage.enviar_bytes(
-                caminho_original,
-                doc.conteudo_bytes,
-                tipo_conteudo="application/pdf" if doc.formato == "PDF" else "text/plain",
-            )
-
-        # 2. Determina status final que havia sido calculado
-        requer_revisao = False
-        if triagem.decisao_roteamento and triagem.decisao_roteamento.requer_auditoria_humana:
-            requer_revisao = True
-
+        requer_revisao = bool(triagem.decisao_roteamento and triagem.decisao_roteamento.requer_auditoria_humana)
         status_restaurado = StatusTriagem.EM_REVISAO if requer_revisao else StatusTriagem.PROCESSADO
         pasta_status = "urgentes/" if (triagem.classificacao.nivel_prioridade == "URGENTE") else ""
         caminho_resultado = f"processados/{pasta_status}{documento_id}/resultado.json"
 
-        # 3. Cria nova instância da triagem com status restaurado e persistência confirmada
-        triagem_atualizada = TriagemMediFlow(
-            status=status_restaurado,
-            documento_id=documento_id,
-            classificacao=triagem.classificacao,
-            dados_extraidos=triagem.dados_extraidos,
-            qualidade=triagem.qualidade,
-            decisao_roteamento=triagem.decisao_roteamento,
-            armazenamento_oci=ArmazenamentoOCI(
-                bucket=bucket_nome,
-                caminho_objeto=caminho_resultado,
-                status_backup="sucesso",
-            ),
-            erro=None,
-        )
+        # -------------------------------------------------------------
+        # CASO 1: SIMULAÇÃO EXPLÍCITA DO CATÁLOGO EPT v1.0 (§12)
+        # -------------------------------------------------------------
+        if eh_simulacao:
+            logger.info("[Simulação EPT] Conector OCI simulado com sucesso na retentativa para documento %s", documento_id)
+            triagem_atualizada = TriagemMediFlow(
+                status=status_restaurado,
+                documento_id=documento_id,
+                classificacao=triagem.classificacao,
+                dados_extraidos=triagem.dados_extraidos,
+                qualidade=triagem.qualidade,
+                decisao_roteamento=triagem.decisao_roteamento,
+                armazenamento_oci=ArmazenamentoOCI(
+                    bucket=bucket_nome,
+                    caminho_objeto=caminho_resultado,
+                    status_backup="sucesso",
+                ),
+                erro=None,
+            )
+            self._triagens[documento_id] = triagem_atualizada
+            self._status_em_andamento[documento_id] = status_restaurado
+            self.registrar_evento(
+                documento_id=documento_id,
+                tipo_evento="RETRY_PERSISTENCIA_SUCESSO",
+                status_anterior=StatusTriagem.ERRO_PERSISTENCIA,
+                status_novo=status_restaurado,
+                ator="SIMULACAO_EPT_RETRY",
+                motivo="Simulação EPT: Persistência no bucket OCI simulada com sucesso",
+            )
+            return triagem_atualizada
 
-        # 4. Grava JSON do resultado atualizado no OCI (se houver conector ativo)
-        if storage is not None:
+        # -------------------------------------------------------------
+        # CASO 2: DOCUMENTO REAL — PERSISTÊNCIA DURÁVEL OBRIGATÓRIA
+        # -------------------------------------------------------------
+        storage = self._obter_storage()
+        if not storage:
+            # BLOQUEIO DE FALSO SUCESSO: Conector ausente NUNCA pode fingir sucesso!
+            logger.error("Tentativa de retry sem conector OCI configurado para documento %s", documento_id)
+            raise RuntimeError("Conector OCI não configurado ou indisponível. A persistência durável não pode ser confirmada.")
+
+        try:
+            # 1. Regravação do documento original no OCI (se já existir, preserva e avança)
+            try:
+                storage.enviar_bytes(
+                    caminho_original,
+                    doc.conteudo_bytes,
+                    tipo_conteudo="application/pdf" if doc.formato == "PDF" else "text/plain",
+                )
+            except Exception as err_orig:
+                status_cod = getattr(err_orig, "status", None)
+                msg_err = str(err_orig)
+                if status_cod == 412 or "412" in msg_err or "PreconditionFailed" in msg_err:
+                    logger.info("Objeto original já existe no OCI; prosseguindo para o JSON do resultado.")
+                else:
+                    raise
+
+            # 2. Monta o contrato atualizado com persistência confirmada
+            triagem_atualizada = TriagemMediFlow(
+                status=status_restaurado,
+                documento_id=documento_id,
+                classificacao=triagem.classificacao,
+                dados_extraidos=triagem.dados_extraidos,
+                qualidade=triagem.qualidade,
+                decisao_roteamento=triagem.decisao_roteamento,
+                armazenamento_oci=ArmazenamentoOCI(
+                    bucket=bucket_nome,
+                    caminho_objeto=caminho_resultado,
+                    status_backup="sucesso",
+                ),
+                erro=None,
+            )
+
+            # 3. Regravação do JSON do resultado no OCI
             json_bytes = triagem_atualizada.model_dump_json(indent=2).encode("utf-8")
             storage.enviar_bytes(
                 caminho_resultado,
                 json_bytes,
                 tipo_conteudo="application/json",
             )
+        except Exception as err:
+            logger.error("Falha física durante gravação OCI na retentativa para documento %s: %s", documento_id, err)
+            self.registrar_evento(
+                documento_id=documento_id,
+                tipo_evento="RETRY_PERSISTENCIA_FALHA",
+                status_anterior=StatusTriagem.ERRO_PERSISTENCIA,
+                status_novo=StatusTriagem.ERRO_PERSISTENCIA,
+                ator="OCI_STORAGE_RETRY",
+                motivo=f"Falha na nova tentativa de gravação OCI: {str(err)}",
+            )
+            raise RuntimeError(f"Falha na gravação dos objetos no bucket OCI: {str(err)}")
 
         self._triagens[documento_id] = triagem_atualizada
         self._status_em_andamento[documento_id] = status_restaurado
-
         self.registrar_evento(
             documento_id=documento_id,
             tipo_evento="RETRY_PERSISTENCIA_SUCESSO",
             status_anterior=StatusTriagem.ERRO_PERSISTENCIA,
             status_novo=status_restaurado,
             ator="OCI_STORAGE_RETRY",
-            motivo="Persistência durável concluída com sucesso após nova tentativa.",
+            motivo=f"Objetos gravados com sucesso no bucket {bucket_nome}",
         )
         return triagem_atualizada
 
