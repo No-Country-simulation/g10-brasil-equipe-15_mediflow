@@ -650,3 +650,269 @@ def test_ausencia_opcional_isolada(montar_entrada, campo_ausente):
     assert outro_campo not in qualidade.campos_ausentes
     assert qualidade.score_extracao == 1.0
     assert not resultado["decisao"].requer_auditoria_humana
+
+
+import json
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import oci
+
+from src.storage.oci_storage import OCIStorage
+
+
+def _json_workflow_para_teste(resultado):
+    """Snapshot interno de teste; não é a resposta final da API."""
+    payload = {
+        "documento_id": resultado["entrada"].documento_id,
+        "qualidade": resultado["qualidade"].model_dump(mode="json"),
+        "decisao": resultado["decisao"].model_dump(mode="json"),
+    }
+
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+@pytest.fixture
+def oci_workflow_simulado():
+    """Substitui o cliente OCI por armazenamento em memória."""
+    cliente = Mock()
+    objetos = {}
+
+    def enviar(**argumentos):
+        nome = argumentos["object_name"]
+
+        if (
+            nome in objetos
+            and argumentos.get("if_none_match") == "*"
+        ):
+            raise oci.exceptions.ServiceError(
+                status=412,
+                code="PreconditionFailed",
+                headers={},
+                message="Objeto fictício já existe",
+            )
+
+        objetos[nome] = argumentos["put_object_body"]
+
+        return SimpleNamespace(
+            status=200,
+            headers={"etag": "etag-ficticio"},
+        )
+
+    def ler(**argumentos):
+        nome = argumentos["object_name"]
+        corpo = Mock()
+        corpo.content = objetos[nome]
+        return SimpleNamespace(data=corpo)
+
+    cliente.put_object.side_effect = enviar
+    cliente.get_object.side_effect = ler
+
+    storage = OCIStorage(
+        cliente,
+        "namespace-ficticio",
+        "mediflow-documentos",
+    )
+
+    return storage, cliente, objetos
+
+
+@pytest.mark.parametrize(
+    "cenario",
+    [
+        "rotina",
+        "baixa_confianca",
+        "urgencia_ambigua",
+        "conflito_baixo",
+    ],
+)
+def test_workflow_json_oci_simulado_preserva_saida(
+    executar,
+    oci_workflow_simulado,
+    cenario,
+):
+    parametros = {}
+    destinos_esperados = [
+        DestinoRoteamento.PRONTUARIO.value,
+    ]
+    revisao_esperada = False
+
+    if cenario == "baixa_confianca":
+        parametros = {"score": 0.84}
+        destinos_esperados = [
+            DestinoRoteamento.REVISAO_HUMANA.value,
+        ]
+        revisao_esperada = True
+
+    elif cenario == "urgencia_ambigua":
+        parametros = {
+            "prioridade": NivelPrioridade.URGENTE,
+            "urgencia": "SIM",
+            "incertos": ["paciente.nome"],
+        }
+        destinos_esperados = [
+            DestinoRoteamento.EMERGENCIA.value,
+            DestinoRoteamento.REVISAO_HUMANA.value,
+        ]
+        revisao_esperada = True
+
+    elif cenario == "conflito_baixo":
+        parametros = {
+            "conflitos": [
+                ConflitoWorkflow(
+                    tipo="OBS_TESTE",
+                    gravidade="BAIXA",
+                    descricao="Observação fictícia preservada",
+                )
+            ]
+        }
+
+    # Executa o agente real, usando a fixture existente.
+    resultado = executar(**parametros)
+
+    # Converte a saída interna para JSON em UTF-8.
+    conteudo = _json_workflow_para_teste(resultado)
+    esperado = json.loads(conteudo)
+
+    storage, cliente, objetos = oci_workflow_simulado
+
+    # Caminho exclusivo do teste em memória.
+    nome = f"testes-workflow/{cenario}/resultado.json"
+
+    # Usa o conector real com o cliente OCI simulado.
+    confirmacao = storage.enviar_bytes(
+        nome,
+        conteudo,
+        "application/json; charset=utf-8",
+    )
+
+    baixado = storage.ler_bytes(nome)
+    recuperado = json.loads(baixado)
+
+    assert confirmacao["status_backup"] == "sucesso"
+    assert confirmacao["caminho_objeto"] == nome
+
+    # Compara os bytes e todos os campos do JSON.
+    assert objetos[nome] == conteudo == baixado
+    assert recuperado == esperado
+
+    assert (
+        recuperado["decisao"]["destinos"]
+        == destinos_esperados
+    )
+    assert (
+        recuperado["decisao"]["requer_auditoria_humana"]
+        is revisao_esperada
+    )
+    assert (
+        recuperado["decisao"]["etapa"]
+        == "DECISAO_CALCULADA"
+    )
+
+    # O armazenamento não deve alterar a saída do agente.
+    assert _json_workflow_para_teste(resultado) == conteudo
+
+    if cenario == "conflito_baixo":
+        assert (
+            recuperado["qualidade"]["conflitos"][0]["gravidade"]
+            == "BAIXA"
+        )
+
+    argumentos = cliente.put_object.call_args.kwargs
+
+    assert (
+        argumentos["content_type"]
+        == "application/json; charset=utf-8"
+    )
+    assert argumentos["content_length"] == len(conteudo)
+    assert argumentos["if_none_match"] == "*"
+
+    cliente.put_object.assert_called_once()
+    cliente.get_object.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "falha",
+    [403, 412, 503, "timeout"],
+)
+def test_workflow_falha_oci_preserva_decisao(
+    montar_entrada,
+    oci_workflow_simulado,
+    falha,
+):
+    # Envolve o grafo real para contar suas execuções.
+    grafo = Mock(wraps=criar_grafo())
+
+    entrada = montar_entrada(
+        prioridade=NivelPrioridade.URGENTE,
+        urgencia="SIM",
+        incertos=["paciente.nome"],
+    )
+
+    # A decisão é calculada antes da tentativa de gravação.
+    resultado = grafo.invoke({"entrada": entrada})
+    conteudo = _json_workflow_para_teste(resultado)
+
+    storage, cliente, objetos = oci_workflow_simulado
+    nome = "testes-workflow/falha/resultado.json"
+
+    if falha == 412:
+        # Simula objeto existente: deve impedir sobrescrita.
+        objetos[nome] = b'{"anterior": true}'
+        tipo_erro = oci.exceptions.ServiceError
+
+    elif falha == "timeout":
+        cliente.put_object.side_effect = TimeoutError(
+            "Timeout simulado"
+        )
+        tipo_erro = TimeoutError
+
+    else:
+        cliente.put_object.side_effect = (
+            oci.exceptions.ServiceError(
+                status=falha,
+                code="ErroFicticio",
+                headers={},
+                message="Falha simulada de armazenamento",
+            )
+        )
+        tipo_erro = oci.exceptions.ServiceError
+
+    confirmacao = None
+
+    with pytest.raises(tipo_erro) as erro:
+        confirmacao = storage.enviar_bytes(
+            nome,
+            conteudo,
+            "application/json; charset=utf-8",
+        )
+
+    # A falha não pode produzir confirmação de sucesso.
+    assert confirmacao is None
+
+    if falha != "timeout":
+        assert erro.value.status == falha
+
+    # Qualidade, conflitos e decisão continuam intactos.
+    assert _json_workflow_para_teste(resultado) == conteudo
+
+    assert resultado["decisao"].destinos == [
+        DestinoRoteamento.EMERGENCIA,
+        DestinoRoteamento.REVISAO_HUMANA,
+    ]
+    assert resultado["decisao"].requer_auditoria_humana
+    assert resultado["decisao"].etapa == "DECISAO_CALCULADA"
+
+    # Neste fluxo de teste, a falha não reexecuta o agente.
+    grafo.invoke.assert_called_once()
+    cliente.put_object.assert_called_once()
+    cliente.get_object.assert_not_called()
+
+    if falha == 412:
+        assert objetos[nome] == b'{"anterior": true}'
+    else:
+        assert nome not in objetos
