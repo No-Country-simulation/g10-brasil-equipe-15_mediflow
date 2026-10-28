@@ -182,3 +182,47 @@ class TestGeminiService:
             assert resultado.tipo_documento == TipoDocumentoEnum.RECEITUARIO_MEDICO
             assert resultado.nivel_prioridade == NivelPrioridadeEnum.ROTINA
             assert resultado.score_confianca_classificacao == 0.92
+
+    def test_classificacao_multimodal_com_bytes_de_imagem(self):
+        """Verifica se a classificação aceita imagem binária (conteudo_bytes) e monta partes multimodais."""
+        payload_mock = {
+            "tipo_documento": "ATESTADO_MEDICO",
+            "especialidade": "Clínica Geral",
+            "nivel_prioridade": "Rotina",
+            "score_confianca_classificacao": 0.97,
+        }
+        mock_response = MagicMock()
+        mock_response.text = json.dumps(payload_mock)
+
+        mock_model = MagicMock()
+        mock_model.generate_content.return_value = mock_response
+
+        with patch("src.services.gemini_service.genai.GenerativeModel", return_value=mock_model):
+            service = GeminiService(api_key="chave_teste")
+            bytes_imagem = b"\xff\xd8\xff\xe0\x00\x10JFIF"  # Magic bytes JPG
+            resultado = service.classificar_documento(
+                conteudo_texto="",
+                conteudo_bytes=bytes_imagem,
+                mime_type="image/jpeg"
+            )
+
+            assert resultado.tipo_documento == TipoDocumentoEnum.ATESTADO_MEDICO
+            assert resultado.score_confianca_classificacao == 0.97
+            
+            # Garante que generate_content foi chamado com a parte de imagem
+            chamada_args = mock_model.generate_content.call_args[0][0]
+            assert isinstance(chamada_args, list)
+            assert any(isinstance(p, dict) and p.get("mime_type") == "image/jpeg" for p in chamada_args)
+
+    def test_documento_vazio_sem_texto_nem_bytes_aciona_fallback_imediato(self):
+        """Verifica que documento completamente vazio não executa chamada na API e retorna fallback seguro."""
+        with patch("src.services.gemini_service.genai.GenerativeModel") as mock_gen_model:
+            service = GeminiService(api_key="chave_teste")
+            resultado_classif = service.classificar_documento(conteudo_texto="", conteudo_bytes=None)
+            resultado_extrac = service.extrair_dados_clinicos(conteudo_texto="   ", conteudo_bytes=None)
+
+            assert resultado_classif.tipo_documento == TipoDocumentoEnum.NAO_IDENTIFICADO
+            assert resultado_extrac.score_confianca_extracao == 0.0
+            # Nenhuma chamada à API foi gasta desnecessariamente
+            mock_gen_model.assert_not_called()
+

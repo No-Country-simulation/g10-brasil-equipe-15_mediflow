@@ -228,8 +228,32 @@ def obter_status_triagem(documento_id: str):
         status=status_atual,
         destinos=destinos,
         requer_auditoria_humana=requer_auditoria,
-        concluido=(status_atual in ("PROCESSADO", "EM_REVISAO", "ERRO_PROCESSAMENTO")),
+        concluido=(status_atual in ("PROCESSADO", "EM_REVISAO", "ERRO_PROCESSAMENTO", "ERRO_PERSISTENCIA")),
     )
+
+
+@router.post(
+    "/triagens/{documento_id}/reprocessar-persistencia",
+    summary="Retenta a persistência OCI preservando a decisão prévia (RF-28, RF-30)",
+)
+def reprocessar_persistencia_triagem(documento_id: str):
+    """
+    Quando ocorre ERRO_PERSISTENCIA, permite reenviar os artefatos ao OCI
+    sem reexecutar o fluxo cognitivo ou gastar novos tokens de LLM.
+    """
+    try:
+        triagem = triagem_service.reprocessar_persistencia_oci(documento_id)
+        return triagem.model_dump(mode="json")
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"codigo": CodigoErro.REQUISICAO_INVALIDA.value, "mensagem": str(e)},
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"codigo": CodigoErro.ERRO_PERSISTENCIA.value, "mensagem": f"Falha na retentativa OCI: {str(e)}"},
+        )
 
 
 @router.get(
@@ -300,6 +324,22 @@ def _tratar_erro_ingestao(erro: Exception) -> HTTPException:
             detail={
                 "codigo": CodigoErro.ARQUIVO_MAIOR_QUE_LIMITE.value,
                 "mensagem": "Arquivo excede o limite operacional de 10.00 MB (Regra A6).",
+            },
+        )
+    if "protegido" in msg.lower() or code == CodigoErro.PDF_PROTEGIDO.value:
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "codigo": CodigoErro.PDF_PROTEGIDO.value,
+                "mensagem": "PDF protegido por senha não pode ser processado.",
+            },
+        )
+    if "corrompido" in msg.lower() or code == CodigoErro.PDF_CORROMPIDO.value:
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "codigo": CodigoErro.PDF_CORROMPIDO.value,
+                "mensagem": "Arquivo PDF corrompido ou truncado.",
             },
         )
     return HTTPException(

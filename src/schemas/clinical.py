@@ -238,6 +238,24 @@ class Crm(BaseModel):
     numero: Optional[str] = Field(None, description="Número do CRM normalizado")
     uf: Optional[str] = Field("SP", description="UF do CRM (padrão SP)")
 
+    @field_validator("numero", mode="before")
+    @classmethod
+    def limpar_numero(cls, v):
+        if isinstance(v, str):
+            import re
+            return re.sub(r"(?i)^crm[\s\:\/\.\-]*", "", v.strip()).strip()
+        return v
+
+    def __str__(self) -> str:
+        import re
+        num = re.sub(r"(?i)^crm[\s\:\/\.\-]*", "", (self.numero or "").strip()).strip()
+        if num and self.uf:
+            return f"{num}-{self.uf}"
+        return num or self.uf or "N/I"
+
+    def formatado(self) -> str:
+        return self.__str__()
+
 
 # Alias
 CrmEstruturado = Crm
@@ -253,7 +271,9 @@ class Medico(BaseModel):
     @classmethod
     def normalizar_crm(cls, v):
         if isinstance(v, str):
-            partes = v.strip().replace("/", "-").split("-")
+            import re
+            v_limpo = re.sub(r"(?i)^crm[\s\:\/\.\-]*", "", v.strip()).strip()
+            partes = v_limpo.replace("/", "-").split("-")
             num = partes[0].strip()
             uf = partes[1].strip().upper() if len(partes) > 1 else "SP"
             return Crm(numero=num, uf=uf)

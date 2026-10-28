@@ -3,9 +3,9 @@
 > **Hackathon ONE G10 — Oracle Next Education & Alura**  
 > **Projeto 2:** Agente Autônomo para Triagem, Extração e Roteamento de Documentos Clínicos  
 > **Manual de Referência:** `34aa946f-2883-4917-aec1-aae0df0f43d1.pdf`  
-> **Status da Aplicação:** 208 testes automatizados via Pytest  
+> **Status da Aplicação:** 217 testes automatizados via Pytest  
 
-Bem-vindo ao guia oficial de contribuição do **MediFlow**! Este documento foi desenhado para orientar os 9 integrantes da equipe no fluxo de trabalho diário com GitFlow, organização de pastas, responsabilidades por módulo e padrões de qualidade inegociáveis.
+Bem-vindo ao guia oficial de contribuição do **MediFlow**! Este documento foi desenhado para orientar os 5 integrantes da equipe no fluxo de trabalho diário com GitFlow, organização de pastas, responsabilidades por módulo e padrões de qualidade inegociáveis.
 
 ---
 
@@ -52,7 +52,7 @@ g10-brasil-equipe-15_mediflow/
 │   └── GUIA_INTEGRACAO_LLM.md                  <- Guia de consumo do Ingestion Loader para IA
 │
 ├── src/                                        <- Código-fonte principal da aplicação Python
-│   ├── agents/                                 <- Agentes LLM Multimodais (Google Gemini 1.5 e Prompts)
+│   ├── agents/                                 <- Agentes e Prompts de Inteligência Multimodal
 │   ├── api/                                    <- API REST FastAPI assíncrona (rotas, schemas, service)
 │   ├── app/                                    <- Bancada Streamlit de testes rápidos e auditoria médica (HiTL)
 │   │   └── streamlit_app.py                    <- Painel web visual interativo
@@ -60,6 +60,8 @@ g10-brasil-equipe-15_mediflow/
 │   │   └── loader.py                           <- Carregador blindado (10MB, 20 págs, sanitização, magic bytes)
 │   ├── schemas/                                <- Modelos Canônicos Pydantic v2
 │   │   └── clinical.py                         <- Contrato oficial (TriagemMediFlow, ErroResposta, etc.)
+│   ├── services/                               <- Serviços de Integração Multimodal
+│   │   └── gemini_service.py                   <- GeminiService (REST, timeout 15s, Pydantic v2, duplo fallback)
 │   ├── storage/                                <- Conector OCI Object Storage Always Free (oci_storage.py)
 │   ├── workflow/                               <- Motor de Orquestração Determinística (LangGraph)
 │   │   ├── graph.py                            <- Grafo de estados, nós e cálculo de regras R1 a R8
@@ -69,16 +71,18 @@ g10-brasil-equipe-15_mediflow/
 ├── scripts/                                    <- Utilitários de homologação e scripts de diagnóstico
 │   └── testar_oci.py                           <- Validação real ponta a ponta no bucket OCI Always Free
 │
-├── tests/                                      <- Suíte Oficial Pytest com 208 testes automatizados
+├── tests/                                      <- Suíte Oficial Pytest com 217 testes automatizados
 │   ├── fixtures/                               <- Base de 79 fixtures canônicos (demo, catalogo, manifest.csv)
 │   ├── test_contrato_fixtures.py               <- 79 testes: ponto fixo dos fixtures e regras R1 a R8
 │   ├── test_workflow.py                        <- 73 testes: transições e arestas do LangGraph
 │   ├── test_ingestion.py                       <- 18 testes: arquivos físicos reais e limites
 │   ├── test_api.py                             <- 16 testes: endpoints assíncronos e validações EPT
+│   ├── test_gemini_service.py                  <- 9 testes unitários do GeminiService (REST, timeout 15s e fallback)
 │   ├── test_audit_items.py                     <- 8 testes dedicados de auditoria técnica e sanidade
 │   ├── test_oci_storage.py                     <- 8 testes: persistência OCI com SDK simulado (mock)
 │   └── test_schemas.py                         <- 7 testes: Pydantic v2 e envelopes de erro
 │
+├── testar_gemini.py                            <- Script de validação manual da IA com Google Gemini
 ├── frontend/                                   <- Portal Web Corporativo em React SPA (Vite + TypeScript)
 ├── ARQUITETURA.md                              <- Especificação Técnica Oficial da Arquitetura
 ├── CONTRIBUTING.md                             <- Este Guia de Colaboração e GitFlow
@@ -101,9 +105,9 @@ Esta tabela mapeia o que já está homologado no projeto e o que ainda precisa s
 | **Bancada de Auditoria Médica Streamlit** | [`src/app/streamlit_app.py`](src/app/streamlit_app.py) | **Cristiano Oliveira e Time** | <mark>🟢 CONCLUÍDO</mark> | Painel funcional em Python para testes rápidos de laboratório e auditoria HiTL (atende ao diferencial do edital). |
 | **Persistência OCI Object Storage Always Free** | [`src/storage/`](src/storage/) & [`scripts/`](scripts/) | **Iza Paloma M. Coelho** | <mark>🟢 CONCLUÍDO</mark> | Conector OCI em Python implementado (`oci_storage.py`), com teste real (`scripts/testar_oci.py`) e 8 testes com mock. |
 | **API REST FastAPI Assíncrona** | [`src/api/`](src/api/) | **Cristiano Oliveira** | <mark>🟢 CONCLUÍDO</mark> | Endpoints assíncronos `/api/v1/triagens` (HTTP 202), status, histórico e health integrados com LangGraph e OCI. 16 testes unitários e de integração. |
-| **Agente Gemini Multimodal (Extração IA)** | [`src/agents/`](src/agents/) | **Luciana e Iza** | <mark>🟡 EM ANDAMENTO</mark> | **A fazer:** Implementar chamadas à API Gemini 1.5 com *Structured Outputs* orientadas por `src/schemas/clinical.py`. |
-| **Portal Web Corporativo em React SPA** | `frontend/` | **Giovane Brandino e Victor Marcelo** | <mark>⚪ PENDENTE</mark> | **A fazer:** Criar projeto Vite + React + TypeScript + Tailwind consumindo os endpoints da API FastAPI. |
-| **Gravação do Pitch e Demonstração Final** | Raiz / Docs | **Luciana e Toda a Equipe** | <mark>⚪ PENDENTE</mark> | **A fazer:** Gravar vídeo de até 5 min demonstrando os 3 cenários clínicos do edital e gerar links de entrega. |
+| **Agente Gemini Multimodal (Extração IA)** | [`src/services/gemini_service.py`](src/services/gemini_service.py) | **Luciana Freitag** | <mark>🟢 CONCLUÍDO</mark> | Implementado com Saídas Estruturadas Pydantic v2, transporte REST, timeout de 15s, modelos `gemini-3.8-flash` e `3.5-flash-lite`, duplo fallback seguro e 9 testes unitários. |
+| **Portal Web Corporativo em React SPA** | `frontend/` | **Giovane Brandino** | <mark>⚪ PENDENTE</mark> | **A fazer:** Criar projeto Vite + React + TypeScript + Tailwind consumindo os endpoints da API FastAPI. |
+| **Gravação do Pitch e Demonstração Final** | Raiz / Docs | **Toda a Equipe** | <mark>⚪ PENDENTE</mark> | **A fazer:** Gravar vídeo de até 5 min demonstrando os 3 cenários clínicos do edital e gerar links de entrega. |
 
 ---
 
