@@ -916,3 +916,187 @@ def test_workflow_falha_oci_preserva_decisao(
         assert objetos[nome] == b'{"anterior": true}'
     else:
         assert nome not in objetos
+
+@pytest.fixture
+def servico_pr13_isolado(monkeypatch):
+    """Bloqueia a criação de cliente OCI real nestas regressões."""
+    from src.api.service import TriagemService
+
+    monkeypatch.setenv("OCI_BUCKET_NAME", "mediflow-documentos")
+    monkeypatch.setenv("LIMIAR_CONFIANCA", "0.85")
+    monkeypatch.setenv("OCI_OBRIGATORIO", "false")
+
+    fabrica = Mock(side_effect=RuntimeError("OCI real desativado no teste"))
+    cliente_real = Mock(side_effect=AssertionError("Cliente OCI real bloqueado"))
+    monkeypatch.setattr(OCIStorage, "das_configuracoes", fabrica)
+    monkeypatch.setattr(oci.object_storage, "ObjectStorageClient", cliente_real)
+
+    yield TriagemService
+
+    cliente_real.assert_not_called()
+
+
+def _texto_ficticio_regressao_pr13():
+    return (
+        "Laudo de Exame de Imagem\n"
+        "Paciente: Paciente Fictício\n"
+        "Idade: 40\n"
+        "Médico: Profissional Fictício\n"
+        "CRM/SP: 000000\n"
+        "Diagnóstico: Conclusão fictícia explícita"
+    )
+
+
+def test_pr13_sem_conector_nao_confirma_persistencia(
+    servico_pr13_isolado, oci_workflow_simulado, monkeypatch
+):
+    storage, cliente, _ = oci_workflow_simulado
+    cliente.put_object.side_effect = oci.exceptions.ServiceError(
+        status=503, code="Unavailable", headers={}, message="Falha simulada"
+    )
+    servico = servico_pr13_isolado(storage=storage)
+    documento_id = servico.submeter_texto(_texto_ficticio_regressao_pr13())
+    inicial = servico.executar_triagem(documento_id)
+    assert inicial.status.value == "ERRO_PERSISTENCIA"
+    qualidade_antes = inicial.qualidade.model_dump(mode="json")
+    decisao_antes = inicial.decisao_roteamento.model_dump(mode="json")
+
+    # Na tentativa seguinte, o conector fica indisponível.
+    monkeypatch.setattr(servico, "_storage", None)
+    try:
+        final = servico.reprocessar_persistencia_oci(documento_id)
+    except (RuntimeError, oci.exceptions.ServiceError):
+        final = servico.obter_triagem(documento_id)
+
+    assert final.status.value == "ERRO_PERSISTENCIA", (
+        "Sem conector real, a retentativa não pode confirmar persistência. "
+        f"Recebido: {final.status.value}, "
+        f"backup={final.armazenamento_oci.status_backup}"
+    )
+    assert final.armazenamento_oci.status_backup != "sucesso"
+    assert final.erro is not None
+    assert final.qualidade.model_dump(mode="json") == qualidade_antes
+    assert final.decisao_roteamento.model_dump(mode="json") == decisao_antes
+
+
+def test_pr13_retry_json_preserva_original_existente(
+    servico_pr13_isolado, oci_workflow_simulado
+):
+    storage, cliente, objetos = oci_workflow_simulado
+    enviar_normal = cliente.put_object.side_effect
+    pendente = {"falhar_json": True}
+
+    def enviar_com_falha_unica(**argumentos):
+        nome = argumentos["object_name"]
+        if nome.endswith(".json") and pendente["falhar_json"]:
+            pendente["falhar_json"] = False
+            raise oci.exceptions.ServiceError(
+                status=503, code="Unavailable", headers={},
+                message="Falha única no JSON; original já foi salvo",
+            )
+        return enviar_normal(**argumentos)
+
+    cliente.put_object.side_effect = enviar_com_falha_unica
+    servico = servico_pr13_isolado(storage=storage)
+    servico._grafo = Mock(wraps=servico._grafo)
+    documento_id = servico.submeter_texto(_texto_ficticio_regressao_pr13())
+    inicial = servico.executar_triagem(documento_id)
+    assert inicial.status.value == "ERRO_PERSISTENCIA"
+
+    caminho_original = f"recebidos/{documento_id}/original.txt"
+    assert caminho_original in objetos
+    original_antes = objetos[caminho_original]
+    qualidade_antes = inicial.qualidade.model_dump(mode="json")
+    decisao_antes = inicial.decisao_roteamento.model_dump(mode="json")
+    execucoes_antes = servico._grafo.invoke.call_count
+
+    try:
+        final = servico.reprocessar_persistencia_oci(documento_id)
+    except oci.exceptions.ServiceError as erro:
+        pytest.fail(
+            "A recuperação deveria salvar o JSON pendente sem bloquear "
+            f"no original existente. Recebido HTTP {erro.status}: {erro.code}"
+        )
+
+    assert final.status.value in {"PROCESSADO", "EM_REVISAO"}
+    assert final.armazenamento_oci.status_backup == "sucesso"
+    assert final.erro is None
+    assert objetos[caminho_original] == original_antes
+    caminho_json = final.armazenamento_oci.caminho_objeto
+    assert caminho_json in objetos
+    assert json.loads(objetos[caminho_json])["documento_id"] == documento_id
+    assert final.qualidade.model_dump(mode="json") == qualidade_antes
+    assert final.decisao_roteamento.model_dump(mode="json") == decisao_antes
+    assert servico._grafo.invoke.call_count == execucoes_antes
+
+
+def test_pr13_retry_json_com_original_divergente_rejeita_recuperacao(
+    servico_pr13_isolado, oci_workflow_simulado
+):
+    """
+    Valida a conferência de integridade antes de ignorar o HTTP 412:
+    Se o objeto já existente no bucket tiver conteúdo divergente do documento atual,
+    a recuperação DEVE abortar com erro de integridade e NÃO salvar o resultado.json.
+    """
+    from src.schemas import StatusTriagem
+    storage, cliente, objetos = oci_workflow_simulado
+    servico = servico_pr13_isolado(storage=storage)
+
+    # 1. Submete o documento clínico
+    documento_id = servico.submeter_texto(_texto_ficticio_regressao_pr13())
+    caminho_original = f"recebidos/{documento_id}/original.txt"
+
+    # 2. Simula colisão no OCI: objeto já existe lá, mas com conteúdo divergente!
+    objetos[caminho_original] = b"CONTEUDO_DIVERGENTE_DE_OUTRO_PACIENTE_12345"
+
+    # Marca inicialmente em ERRO_PERSISTENCIA para permitir retry
+    servico._status_em_andamento[documento_id] = StatusTriagem.ERRO_PERSISTENCIA
+    inicial = servico.executar_triagem(documento_id)
+    assert inicial.status.value == "ERRO_PERSISTENCIA"
+
+    # 3. Dispara retentativa de persistência
+    with pytest.raises(RuntimeError) as exc_info:
+        servico.reprocessar_persistencia_oci(documento_id)
+
+    assert "Conflito de integridade OCI" in str(exc_info.value)
+    assert "conteúdo divergente" in str(exc_info.value)
+
+    # 4. Confirma que o JSON NÃO foi gravado e o estado não confirmou sucesso
+    caminho_json = f"processados/{documento_id}/resultado.json"
+    caminho_json_urgente = f"processados/urgentes/{documento_id}/resultado.json"
+    assert caminho_json not in objetos
+    assert caminho_json_urgente not in objetos
+
+    final = servico.obter_triagem(documento_id)
+    assert final.status.value == "ERRO_PERSISTENCIA" 
+
+
+def test_pr13_resposta_preserva_justificativa_do_workflow(
+    servico_pr13_isolado, oci_workflow_simulado, montar_entrada
+):
+    storage, _, _ = oci_workflow_simulado
+    servico = servico_pr13_isolado(storage=storage)
+    documento_id = servico.submeter_texto(_texto_ficticio_regressao_pr13())
+    entrada = montar_entrada(
+        documento_id=documento_id,
+        conflitos=[ConflitoWorkflow(
+            tipo="OBS_TESTE", gravidade="BAIXA",
+            descricao="Observação fictícia para preservar",
+        )],
+    )
+    saida = criar_grafo().invoke({"entrada": entrada})
+    qualidade_esperada = saida["qualidade"].model_dump(mode="json")
+    decisao_esperada = saida["decisao"].model_dump(mode="json")
+    servico._grafo = Mock()
+    servico._grafo.invoke.return_value = saida
+
+    final = servico.executar_triagem(documento_id)
+
+    assert final.qualidade.score_extracao == qualidade_esperada["score_extracao"]
+    assert final.qualidade.score_combinado == qualidade_esperada["score_combinado"]
+    assert [c.model_dump(mode="json") for c in final.qualidade.conflitos] == qualidade_esperada["conflitos"]
+    assert [d.value for d in final.decisao_roteamento.destinos] == decisao_esperada["destinos"]
+    assert final.decisao_roteamento.requer_auditoria_humana == decisao_esperada["requer_auditoria_humana"]
+    assert final.decisao_roteamento.justificativa_roteamento == decisao_esperada["justificativa"], (
+        "A resposta final substituiu a justificativa calculada pelo workflow."
+    )

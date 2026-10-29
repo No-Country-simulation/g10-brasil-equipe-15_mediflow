@@ -12,7 +12,7 @@
     <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/Pydantic-v2-E92063?style=for-the-badge&logo=pydantic&logoColor=white" alt="Pydantic v2"></a>
     <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/Google%20Gemini-AI-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Google Gemini"></a>
     <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/OCI-Always%20Free-F80000?style=for-the-badge&logo=oracle&logoColor=white" alt="OCI Always Free"></a>
-    <a href="#2%EF%B8%8F%E2%83%A3-executar-a-bateria-de-208-testes-automatizados"><img src="https://img.shields.io/badge/Pytest-208%20passed-brightgreen?style=for-the-badge&logo=pytest&logoColor=white" alt="208 Testes Pytest"></a>
+    <a href="#2%EF%B8%8F%E2%83%A3-executar-a-bateria-de-245-testes-automatizados"><img src="https://img.shields.io/badge/Pytest-245%20passed-brightgreen?style=for-the-badge&logo=pytest&logoColor=white" alt="245 Testes Pytest"></a>
     <a href="#-status-do-projeto"><img src="https://img.shields.io/badge/Status-Em%20Desenvolvimento-yellow?style=for-the-badge&logo=github&logoColor=white" alt="Status"></a>
   </p>
 
@@ -57,10 +57,10 @@ O **MediFlow** atua como um **Agente Autônomo Multimodal** que lê documentos c
 | 🛑 | **Trava Human-in-the-Loop (HITL)** | Retenção automática em `EM_REVISAO` se o score combinado for `< 0.85`, se houver rasura ou ausência de dado vital. |
 | 🚨 | **Gerenciamento de Casos Mistos** | Atribuição dupla e síncrona para casos de urgência com ambiguidade (`FILA_URGENCIA_MEDICA` + `FILA_REVISAO_HUMANA`). |
 | ☁️ | **Persistência Segura OCI** | Armazenamento automático segregado nas pastas `/recebidos`, `/processados` e `/auditoria_humana` na nuvem Oracle Always Free. |
-| 🖥️ | **Estratégia Dual de Frontend** | **Portal Corporativo em React SPA (Giovane & Victor)** para produção + **Bancada Streamlit (HiTL)** para testes rápidos e auditoria médica. |
+| 🖥️ | **Estratégia Dual de Frontend** | **Portal Corporativo em React SPA (Giovane Brandino)** para produção + **Bancada Streamlit (HiTL)** para testes rápidos e auditoria médica. |
 
 > [!IMPORTANT]
-> **Regra do Limiar de Confiança (\\(0.85\\)):** O score de confiança combinado é calculado por \\(\min(\text{score\_classificacao}, \text{score\_extracao})\\). Qualquer documento abaixo de **0.85** é travado para revisão humana.
+> **Regra do Limiar de Confiança (0.85):** O score de confiança combinado é calculado por `min(score_classificacao, score_extracao)`. Qualquer documento com score abaixo de **0.85** é retido compulsoriamente para revisão humana.
 
 ---
 
@@ -79,27 +79,30 @@ flowchart TD
         B -->|Salva Mídia Original| C[("☁️ OCI Storage<br/>/recebidos")]
     end
 
-    subgraph AI_ENGINE["3. Inteligência Multimodal"]
-        B -->|Background Task| D["🧠 Google Gemini Multimodal"]
+    subgraph AI_ENGINE["3. Inteligência Multimodal (GeminiService)"]
+        B -->|Background Task| D["🧠 Google Gemini Multimodal<br/>(3.8 Flash & 3.5 Flash-Lite)"]
         D -->|Extração de Entidades| E["📋 Pydantic v2 Contract<br/>(src/schemas/clinical.py)"]
     end
 
-    subgraph ROUTING["4. Orquestrador LangGraph"]
-        E --> F{"Score Combinado >= 0.85<br/>E Campos Vitais Presentes?"}
+    subgraph ROUTING["4. Orquestrador LangGraph (5 Filas Hospitalares)"]
+        E --> F{"Score Combinado >= 0.85<br/>E 5 Campos Vitais OK?"}
         
-        F -- ❌ NÃO (Score < 0.85) --> G1["🟡 Fila Revisão Humana<br/>(Status: EM_REVISAO)"]
-        F -- 🟢 SIM & Urgente --> G2["🔴 Fila Emergência Médica<br/>(Alerta em Tempo Real)"]
-        F -- 🟢 SIM & Rotina --> G3["🟢 Prontuário / Farmácia<br/>(Status: PROCESSADO)"]
+        F -- ❌ NÃO & Não Urgente --> G1["🟡 Fila Revisão Humana<br/>(Status: EM_REVISAO)"]
+        F -- ❌ NÃO & Urgente --> GM["⚠️ Caso Misto (Dupla Atribuição)<br/>(Fila Urgência + Fila Revisão)"]
+        F -- 🟢 SIM & Urgente --> G2["🔴 Fila Urgência Médica<br/>(Alerta Plantão + PROCESSADO)"]
+        F -- 🟢 SIM & Rotina --> G3["🟢 Farmácia / Auditoria / Prontuário<br/>(Roteamento por Tipo Documental)"]
     end
 
     subgraph OCI_OUT["5. Persistência Final OCI"]
         G1 --> H1[("☁️ OCI Storage<br/>/auditoria_humana")]
-        G2 --> H2[("☁️ OCI Storage<br/>/processados")]
-        G3 --> H2
+        GM --> H1
+        G2 --> H2[("☁️ OCI Storage<br/>/processados/urgentes")]
+        G3 --> H3[("☁️ OCI Storage<br/>/processados/rotina")]
     end
 
     style F fill:#FFF3CD,stroke:#FFE8A1,stroke-width:2px
     style G2 fill:#F8D7DA,stroke:#F5C6CB,stroke-width:2px
+    style GM fill:#FCE8E6,stroke:#EA4335,stroke-width:2px
     style G1 fill:#E2E3E5,stroke:#D6D8DB,stroke-width:2px
     style G3 fill:#D4EDDA,stroke:#C3E6CB,stroke-width:2px
 ```
@@ -170,26 +173,31 @@ g10-brasil-equipe-15_mediflow/
 ├── docs/                                       # Governança de testes, contratos de dados e guias
 │   └── testes/                                 # Contrato Canônico, Catálogo dos 79 Fixtures e Auditorias
 ├── src/                                        # Código-fonte da aplicação (Python Backend & IA)
-│   ├── agents/                                 # Agentes de Inteligência Multimodal (Google Gemini 1.5)
+│   ├── agents/                                 # Agentes e Prompts de Inteligência Multimodal
 │   ├── api/                                    # API REST FastAPI Assíncrona (/api/v1/triagens)
-│   ├── app/                                    # Bancada Streamlit de testes rápidos e auditoria médica
+│   ├── app/                                    # Bancada Streamlit de testes rápidos e auditoria médica (HiTL)
 │   ├── ingestion/                              # Ingestão blindada (10MB, 20 págs, sanitização de PDF/TXT/Imagens)
 │   ├── schemas/                                # Contrato Canônico Pydantic v2 (clinical.py)
+│   ├── services/                               # Serviços de Integração (GeminiService com REST e timeout 15s)
+│   │   └── gemini_service.py                   # Integração estruturada Pydantic com duplo fallback (3.8 Flash + 3.5 Lite)
 │   ├── storage/                                # Conector OCI Object Storage Always Free (oci_storage.py)
 │   ├── workflow/                               # Grafo de Decisão Clínica LangGraph (StateGraph)
 │   └── config.py                               # Configurações globais e variáveis de ambiente
 ├── scripts/                                    # Utilitários de homologação e scripts de diagnóstico
+│   ├── testar_simulacao_oci.py                 # Validação da simulação de falhas OCI do catálogo EPT v1.0 (§12)
 │   └── testar_oci.py                           # Validação real ponta a ponta no bucket OCI Always Free
-├── tests/                                      # Suíte Oficial Pytest com 208 testes automatizados
+├── tests/                                      # Suíte Oficial Pytest com 245 testes automatizados (100% verde)
 │   ├── fixtures/                               # 79 fixtures canônicos (demo, catalogo, manifest.csv)
 │   ├── test_contrato_fixtures.py               # 79 testes de regras R1 a R8 e ponto fixo
-│   ├── test_workflow.py                        # 73 testes de roteamento e arestas LangGraph
+│   ├── test_workflow.py                        # 84 testes de roteamento e arestas LangGraph
 │   ├── test_ingestion.py                       # 18 testes de arquivos físicos e limites de segurança
-│   ├── test_api.py                             # 16 testes de endpoints REST FastAPI e EPT
+│   ├── test_api.py                             # 31 testes de endpoints REST FastAPI e EPT
+│   ├── test_gemini_service.py                  # 9 testes unitários do GeminiService (REST, timeout 15s e fallback)
 │   ├── test_audit_items.py                     # 8 testes dedicados de auditoria técnica e sanidade
 │   ├── test_oci_storage.py                     # 8 testes de persistência OCI com SDK simulado (mock)
 │   └── test_schemas.py                         # 7 testes de validação Pydantic v2
-├── frontend/                                   # (Recomendado) Portal Web Corporativo (React SPA - Giovane & Victor)
+├── testar_gemini.py                            # Script de validação manual da IA com Google Gemini
+├── frontend/                                   # (Recomendado) Portal Web Corporativo (React SPA - Giovane Brandino)
 ├── ARQUITETURA.md                              # Especificação Técnica Oficial da Arquitetura
 ├── README.md                                   # Documentação Principal do Repositório
 ├── pytest.ini                                  # Configuração corporativa do Pytest
@@ -205,15 +213,11 @@ g10-brasil-equipe-15_mediflow/
 
 | Integrante | Função / Papel no Projeto | Especialidade & Atuação |
 | :--- | :--- | :--- |
-| **Luciana Freitag** | 👑 AI Engineer (Líder) | Pydantic Schema, System Prompts & Pitch |
-| **Giovane Brandino** | 🤖 AI Agent Engineer | LangGraph, Grafo Condicional & Regras de Score |
-| **Iza Paloma M. Coelho** | ☁️ Cloud & Infra Lead | OCI Object Storage, SDK Python & Buckets |
-| **Marcelo Petitot Rezende** | ⚙️ Backend Architect | API REST FastAPI Assíncrona & Docker |
-| **Cristiano Oliveira** | 🔌 Backend Developer | Endpoints de Ingestão & Notificações |
-| **Victor Marcelo** | 🎨 Frontend Developer | React Interface, Figma Wireframes & UX |
-| **William** | 🧪 QA & Requirements Lead | Especificação Funcional v1.0 & Suíte de 208 Testes Pytest |
-| **Gisele Oliveira** | 🧠 AI & Data Support | Suporte em Arquitetura & Suíte de Dados |
-| **Alexander Lin** | 🔄 Integration Support | Suporte em APIs, Automações & Pitch Support |
+| **Luciana Freitag** | 👑 AI Engineer (Líder) | Pydantic Schemas, System Prompts & GeminiService |
+| **Giovane Brandino** | 🎨 Frontend Lead & Developer | Portal Web Corporativo em React SPA, Wireframes & UX |
+| **Iza Paloma M. Coelho** | ☁️ Cloud & AI Agent Lead | OCI Object Storage Always Free, LangGraph & Grafo Condicional |
+| **Cristiano Oliveira** | ⚙️ Backend Architect & Developer | API REST FastAPI Assíncrona, Ingestão & Notificações |
+| **William** | 🧪 QA & Requirements Lead | Especificação Funcional v1.0 & Suíte de 245 Testes Pytest |
 
 </div>
 
@@ -235,14 +239,18 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-### 2️⃣ Executar a Bateria de 208 Testes Automatizados
+### 2️⃣ Executar a Bateria de 245 Testes Automatizados
 ```bash
 python -m pytest
 ```
 
-### 3️⃣ (Opcional) Testar Conexão Real ao Bucket OCI
+### 3️⃣ Testes Manuais Opcionais (Cloud OCI e IA Gemini)
 ```bash
+# Validar conexão ao bucket OCI Always Free
 python -m scripts.testar_oci
+
+# Validar integração e fallback do Google Gemini
+python testar_gemini.py
 ```
 
 ### 4️⃣ Iniciar as Aplicações
