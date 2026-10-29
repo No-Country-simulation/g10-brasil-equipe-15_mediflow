@@ -1030,6 +1030,47 @@ def test_pr13_retry_json_preserva_original_existente(
     assert servico._grafo.invoke.call_count == execucoes_antes
 
 
+def test_pr13_retry_json_com_original_divergente_rejeita_recuperacao(
+    servico_pr13_isolado, oci_workflow_simulado
+):
+    """
+    Valida a conferência de integridade antes de ignorar o HTTP 412:
+    Se o objeto já existente no bucket tiver conteúdo divergente do documento atual,
+    a recuperação DEVE abortar com erro de integridade e NÃO salvar o resultado.json.
+    """
+    from src.schemas import StatusTriagem
+    storage, cliente, objetos = oci_workflow_simulado
+    servico = servico_pr13_isolado(storage=storage)
+
+    # 1. Submete o documento clínico
+    documento_id = servico.submeter_texto(_texto_ficticio_regressao_pr13())
+    caminho_original = f"recebidos/{documento_id}/original.txt"
+
+    # 2. Simula colisão no OCI: objeto já existe lá, mas com conteúdo divergente!
+    objetos[caminho_original] = b"CONTEUDO_DIVERGENTE_DE_OUTRO_PACIENTE_12345"
+
+    # Marca inicialmente em ERRO_PERSISTENCIA para permitir retry
+    servico._status_em_andamento[documento_id] = StatusTriagem.ERRO_PERSISTENCIA
+    inicial = servico.executar_triagem(documento_id)
+    assert inicial.status.value == "ERRO_PERSISTENCIA"
+
+    # 3. Dispara retentativa de persistência
+    with pytest.raises(RuntimeError) as exc_info:
+        servico.reprocessar_persistencia_oci(documento_id)
+
+    assert "Conflito de integridade OCI" in str(exc_info.value)
+    assert "conteúdo divergente" in str(exc_info.value)
+
+    # 4. Confirma que o JSON NÃO foi gravado e o estado não confirmou sucesso
+    caminho_json = f"processados/{documento_id}/resultado.json"
+    caminho_json_urgente = f"processados/urgentes/{documento_id}/resultado.json"
+    assert caminho_json not in objetos
+    assert caminho_json_urgente not in objetos
+
+    final = servico.obter_triagem(documento_id)
+    assert final.status.value == "ERRO_PERSISTENCIA" 
+
+
 def test_pr13_resposta_preserva_justificativa_do_workflow(
     servico_pr13_isolado, oci_workflow_simulado, montar_entrada
 ):

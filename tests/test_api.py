@@ -788,3 +788,44 @@ def test_simulacao_via_header_http_explicito(client):
     res_retry = client.post(f"/api/v1/triagens/{doc_id}/reprocessar-persistencia")
     assert res_retry.status_code == 200
     assert res_retry.json()["armazenamento_oci"]["modo_simulacao"] is True
+
+
+def test_retry_com_original_existente_divergente_retorna_502_conflito(client):
+    """
+    Valida que a API REST devolve HTTP 502 Bad Gateway com erro de integridade
+    quando o objeto existente no OCI tiver conteúdo divergente do arquivo enviado.
+    """
+    from unittest.mock import MagicMock
+    from src.api.routes import triagem_service
+    import oci
+
+    storage_mock = MagicMock()
+    # Ao reenviar o original, o OCI lança 412 PreconditionFailed
+    storage_mock.enviar_bytes.side_effect = oci.exceptions.ServiceError(
+        status=412, code="PreconditionFailed", headers={}, message="Objeto já existe"
+    )
+    # Ao conferir com ler_bytes(), os bytes existentes são de outro documento
+    storage_mock.ler_bytes.return_value = b"CONTEUDO_DIFERENTE_CORROMPIDO"
+    triagem_service._storage = storage_mock
+
+    try:
+        conteudo = "Receituário Médico\nPaciente: Maria da Silva\nIdade: 35\nDipirona 500mg".encode("utf-8")
+        files = {"file": ("receituario_maria.txt", io.BytesIO(conteudo), "text/plain")}
+        res_envio = client.post("/api/v1/triagens", files=files)
+        assert res_envio.status_code == 202
+        doc_id = res_envio.json()["documento_id"]
+
+        # Triagem falha inicialmente na persistência
+        triagem = triagem_service.obter_triagem(doc_id)
+        assert triagem.status.value == "ERRO_PERSISTENCIA"
+
+        # Dispara retentativa via API
+        res_retry = client.post(f"/api/v1/triagens/{doc_id}/reprocessar-persistencia")
+        assert res_retry.status_code == 502
+        assert "Conflito de integridade OCI" in res_retry.json()["mensagem"]
+
+        # Confirma que manteve o status de erro
+        triagem_final = triagem_service.obter_triagem(doc_id)
+        assert triagem_final.status.value == "ERRO_PERSISTENCIA"
+    finally:
+        triagem_service._storage = None

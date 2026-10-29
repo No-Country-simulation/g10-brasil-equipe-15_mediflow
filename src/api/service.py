@@ -578,7 +578,31 @@ class TriagemService:
                 status_cod = getattr(err_orig, "status", None)
                 msg_err = str(err_orig)
                 if status_cod == 412 or "412" in msg_err or "PreconditionFailed" in msg_err:
-                    logger.info("Objeto original já existe no OCI; prosseguindo para o JSON do resultado.")
+                    # Conferência estrita de integridade: antes de ignorar o 412, confere se o original gravado no OCI é idêntico
+                    try:
+                        bytes_existentes = storage.ler_bytes(caminho_original) if hasattr(storage, "ler_bytes") else None
+                    except Exception as err_ler:
+                        logger.error("Falha ao ler objeto existente no OCI para conferência (%s): %s", caminho_original, err_ler)
+                        raise RuntimeError(f"Falha ao validar integridade do objeto existente no OCI: {str(err_ler)}")
+
+                    if bytes_existentes is not None and bytes_existentes != doc.conteudo_bytes:
+                        logger.error(
+                            "Conflito de integridade OCI: Objeto existente em %s possui conteúdo divergente do documento atual (%s bytes vs %s bytes).",
+                            caminho_original, len(bytes_existentes), len(doc.conteudo_bytes)
+                        )
+                        self.registrar_evento(
+                            documento_id=documento_id,
+                            tipo_evento="RETRY_PERSISTENCIA_CONFLITO",
+                            status_anterior=StatusTriagem.ERRO_PERSISTENCIA,
+                            status_novo=StatusTriagem.ERRO_PERSISTENCIA,
+                            ator="OCI_STORAGE_INTEGRITY",
+                            motivo=f"Conflito de integridade: Objeto existente em {caminho_original} possui conteúdo divergente.",
+                        )
+                        raise RuntimeError(
+                            f"Conflito de integridade OCI: O objeto existente em {caminho_original} possui conteúdo divergente do documento atual."
+                        )
+
+                    logger.info("Objeto original já existe no OCI com integridade confirmada (%s); prosseguindo para o JSON do resultado.", caminho_original)
                 else:
                     raise
 
