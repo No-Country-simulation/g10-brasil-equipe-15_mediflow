@@ -3,7 +3,7 @@
 > **Hackathon ONE G10 — Oracle Next Education & Alura**  
 > **Projeto 2:** Agente Autônomo para Triagem, Extração e Roteamento de Documentos Clínicos  
 > **Manual de Referência:** `34aa946f-2883-4917-aec1-aae0df0f43d1.pdf`  
-> **Status da Aplicação:** 217 testes automatizados via Pytest  
+> **Status da Aplicação:** 245 testes automatizados via Pytest (100% verde)  
 
 Bem-vindo ao guia oficial de contribuição do **MediFlow**! Este documento foi desenhado para orientar os 5 integrantes da equipe no fluxo de trabalho diário com GitFlow, organização de pastas, responsabilidades por módulo e padrões de qualidade inegociáveis.
 

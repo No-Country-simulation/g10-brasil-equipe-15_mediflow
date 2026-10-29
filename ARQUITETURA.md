@@ -4,7 +4,7 @@
 > **Projeto 2:** Agente Autônomo para Triagem, Extração e Roteamento de Documentos Clínicos  
 > **Equipe 15:** MediFlow  
 > **Manual Oficial de Referência:** `34aa946f-2883-4917-aec1-aae0df0f43d1.pdf`  
-> **Implementação Central:** [`src/schemas/clinical.py`](src/schemas/clinical.py) | **Suíte de Testes:** 217 testes automatizados via Pytest  
+> **Implementação Central:** [`src/schemas/clinical.py`](src/schemas/clinical.py) | **Suíte de Testes:** 245 testes automatizados via Pytest (100% verde)  
 
 ---
 
@@ -326,7 +326,11 @@ A persistência em nuvem é operada pelo conector [`src/storage/oci_storage.py`]
 - **Proteção contra sobrescrita:** Header `if-none-match: *` em `enviar_bytes()` para garantir idempotência e impedir perda de dados.
 - **Validação de tipos e tamanho:** Tratamento de buffers binários com `content_type` apropriado.
 - **Paginação de listagem:** Itera todas as páginas usando cursor (`next_start_with`).
-- **Resiliência a falhas (`ERRO_PERSISTENCIA`):** Se a chamada OCI falhar por indisponibilidade, o sistema registra `CodigoErro.ERRO_PERSISTENCIA` sem anular a decisão de triagem clínica prévia.
+- **Resiliência a falhas (`ERRO_PERSISTENCIA`):** Se a chamada OCI falhar por indisponibilidade temporária de rede ou quota, o sistema registra `CodigoErro.ERRO_PERSISTENCIA` preservando integralmente em memória a decisão clínica e as métricas calculadas pelo LangGraph (RF-28 / RF-30).
+- **Simulação do Catálogo EPT v1.0 (§12):** Gatilhos controlados via nome de arquivo ou metadado (`Simulacao_OciFalhaNoOriginal` -> ServiceError 503; `Simulacao_OciFalhaNoResultado` -> ServiceError 507) permitem homologar a resiliência em pipelines fechados de CI/CD sem depender de conectividade real com a nuvem da Oracle.
+- **Tratamento de 412 na Retentativa (Preservação do Original):** Quando a falha ocorre apenas na Etapa 2 (resultado JSON) e a Etapa 1 (original) já havia sido salva, a retentativa via `/reprocessar-persistencia` recebe HTTP 412 (*PreconditionFailed* do `if_none_match="*"`). O sistema identifica que o arquivo original está seguro e avança diretamente para gravar o JSON pendente, sem sobrescrever o original.
+- **Bloqueio Estrito de Falso Sucesso:** Em documentos reais (fora do modo de simulação), o sistema só confirma `PROCESSADO` e `status_backup="sucesso"` se o conector OCI estiver de fato configurado e a gravação for confirmada pelo bucket. Sem conector, a retentativa falha com erro seguro 502/ERRO_PERSISTENCIA, evitando falsos positivos no prontuário.
+- **Preservação Soberana da Justificativa do LangGraph:** A justificativa clínica gerada pelo agente analítico é mantida integralmente no contrato Pydantic `TriagemMediFlow`, prevenindo que validações pós-construção substituam o raciocínio clínico por mensagens genéricas.
 
 A segregação dos documentos no bucket `mediflow-documentos` obedece à hierarquia abaixo:
 
@@ -350,9 +354,9 @@ mediflow-documentos/ (Bucket OCI Always Free - Tenancy izapalomaa)
 
 ---
 
-## 🧪 7. Engenharia de Qualidade e Suíte de Testes (217 Testes)
+## 🧪 7. Engenharia de Qualidade e Suíte de Testes (245 Testes)
 
-A conformidade do MediFlow com os requisitos funcionais e com o edital da Oracle é auditada por uma suíte de 217 testes automatizados no Pytest:
+A conformidade do MediFlow com os requisitos funcionais e com o edital da Oracle é auditada por uma suíte de 245 testes automatizados no Pytest (100% verde):
 
 | Módulo de Teste | Quantidade | Escopo e Cobertura Técnica |
 | :--- | :---: | :--- |
@@ -364,7 +368,7 @@ A conformidade do MediFlow com os requisitos funcionais e com o edital da Oracle
 | **`tests/test_oci_storage.py`** | **8 testes** | Conector OCI Object Storage simulado (mock), validação de `if-none-match`, preservação de bytes, paginação e propagação de erros. |
 | **`tests/test_audit_items.py`** | **8 testes** | Auditoria clínica de sanidade: descarte de diagnóstico restrito a lab, urgência indeterminada, persistência e sanitização. |
 | **`tests/test_schemas.py`** | **7 testes** | Schemas Pydantic v2, serialização JSON, aliases de retrocompatibilidade e tratamento de erros de Nível 1 e 2. |
-| **Total da Suíte Oficial** | **217 testes** | **100% aprovados em ~5.7s (1 skipped esperado de isolamento legado)** |
+| **Total da Suíte Oficial** | **245 testes** | **100% aprovados em ~7.1s (1 skipped esperado de isolamento legado)** |
 
 ---
 
@@ -388,11 +392,12 @@ pip install -r requirements.txt
 cp .env.example .env
 # Configurar GEMINI_API_KEY e credenciais OCI Always Free
 
-# 5. Executar a suíte completa de 217 testes automatizados
+# 5. Executar a suíte completa de 245 testes automatizados
 python -m pytest
 
 # 6. Testes Manuais Opcionais (Cloud OCI e IA Gemini)
 python -m scripts.testar_oci
+python scripts/testar_simulacao_oci.py
 python testar_gemini.py
 
 # 7. Opção A: Iniciar o Servidor FastAPI (Backend REST para React e API)
@@ -446,9 +451,10 @@ g10-brasil-equipe-15_mediflow/
 │   └── config.py                               <- Configurações globais e variáveis de ambiente
 │
 ├── scripts/                                    <- Utilitários de homologação e scripts de diagnóstico
+│   ├── testar_simulacao_oci.py                 <- Validação da simulação de falhas OCI do catálogo EPT v1.0 (§12)
 │   └── testar_oci.py                           <- Validação real ponta a ponta no bucket OCI Always Free
 │
-├── tests/                                      <- Suíte Oficial de Testes Automatizados (217 testes)
+├── tests/                                      <- Suíte Oficial de Testes Automatizados (245 testes)
 │   ├── test_contrato_fixtures.py               <- 79 testes: ponto fixo dos fixtures e regras R1 a R8
 │   ├── test_workflow.py                        <- 73 testes: transições e arestas do LangGraph
 │   ├── test_ingestion.py                       <- 18 testes: arquivos reais, PDF, JPG, WEBP e DOCX (415)

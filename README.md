@@ -12,7 +12,7 @@
     <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/Pydantic-v2-E92063?style=for-the-badge&logo=pydantic&logoColor=white" alt="Pydantic v2"></a>
     <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/Google%20Gemini-AI-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Google Gemini"></a>
     <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/OCI-Always%20Free-F80000?style=for-the-badge&logo=oracle&logoColor=white" alt="OCI Always Free"></a>
-    <a href="#2%EF%B8%8F%E2%83%A3-executar-a-bateria-de-217-testes-automatizados"><img src="https://img.shields.io/badge/Pytest-217%20passed-brightgreen?style=for-the-badge&logo=pytest&logoColor=white" alt="217 Testes Pytest"></a>
+    <a href="#2%EF%B8%8F%E2%83%A3-executar-a-bateria-de-245-testes-automatizados"><img src="https://img.shields.io/badge/Pytest-245%20passed-brightgreen?style=for-the-badge&logo=pytest&logoColor=white" alt="245 Testes Pytest"></a>
     <a href="#-status-do-projeto"><img src="https://img.shields.io/badge/Status-Em%20Desenvolvimento-yellow?style=for-the-badge&logo=github&logoColor=white" alt="Status"></a>
   </p>
 
@@ -184,13 +184,14 @@ g10-brasil-equipe-15_mediflow/
 │   ├── workflow/                               # Grafo de Decisão Clínica LangGraph (StateGraph)
 │   └── config.py                               # Configurações globais e variáveis de ambiente
 ├── scripts/                                    # Utilitários de homologação e scripts de diagnóstico
+│   ├── testar_simulacao_oci.py                 # Validação da simulação de falhas OCI do catálogo EPT v1.0 (§12)
 │   └── testar_oci.py                           # Validação real ponta a ponta no bucket OCI Always Free
-├── tests/                                      # Suíte Oficial Pytest com 217 testes automatizados
+├── tests/                                      # Suíte Oficial Pytest com 245 testes automatizados (100% verde)
 │   ├── fixtures/                               # 79 fixtures canônicos (demo, catalogo, manifest.csv)
 │   ├── test_contrato_fixtures.py               # 79 testes de regras R1 a R8 e ponto fixo
-│   ├── test_workflow.py                        # 73 testes de roteamento e arestas LangGraph
+│   ├── test_workflow.py                        # 84 testes de roteamento e arestas LangGraph
 │   ├── test_ingestion.py                       # 18 testes de arquivos físicos e limites de segurança
-│   ├── test_api.py                             # 16 testes de endpoints REST FastAPI e EPT
+│   ├── test_api.py                             # 31 testes de endpoints REST FastAPI e EPT
 │   ├── test_gemini_service.py                  # 9 testes unitários do GeminiService (REST, timeout 15s e fallback)
 │   ├── test_audit_items.py                     # 8 testes dedicados de auditoria técnica e sanidade
 │   ├── test_oci_storage.py                     # 8 testes de persistência OCI com SDK simulado (mock)
@@ -216,7 +217,7 @@ g10-brasil-equipe-15_mediflow/
 | **Giovane Brandino** | 🎨 Frontend Lead & Developer | Portal Web Corporativo em React SPA, Wireframes & UX |
 | **Iza Paloma M. Coelho** | ☁️ Cloud & AI Agent Lead | OCI Object Storage Always Free, LangGraph & Grafo Condicional |
 | **Cristiano Oliveira** | ⚙️ Backend Architect & Developer | API REST FastAPI Assíncrona, Ingestão & Notificações |
-| **William** | 🧪 QA & Requirements Lead | Especificação Funcional v1.0 & Suíte de 217 Testes Pytest |
+| **William** | 🧪 QA & Requirements Lead | Especificação Funcional v1.0 & Suíte de 245 Testes Pytest |
 
 </div>
 
@@ -238,7 +239,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-### 2️⃣ Executar a Bateria de 217 Testes Automatizados
+### 2️⃣ Executar a Bateria de 245 Testes Automatizados
 ```bash
 python -m pytest
 ```
