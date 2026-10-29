@@ -576,8 +576,10 @@ class TriagemService:
                 )
             except Exception as err_orig:
                 status_cod = getattr(err_orig, "status", None)
-                msg_err = str(err_orig)
-                if status_cod == 412 or "412" in msg_err or "PreconditionFailed" in msg_err:
+                code_cod = getattr(err_orig, "code", None)
+                # Identifica 412 pelo status/código estruturado da exceção (evitando depender puramente de texto)
+                eh_412 = (status_cod == 412) or (code_cod == "PreconditionFailed") or (str(status_cod) == "412")
+                if eh_412:
                     # Conferência estrita de integridade: antes de ignorar o 412, confere se o original gravado no OCI é idêntico
                     try:
                         bytes_existentes = storage.ler_bytes(caminho_original) if hasattr(storage, "ler_bytes") else None
@@ -585,7 +587,13 @@ class TriagemService:
                         logger.error("Falha ao ler objeto existente no OCI para conferência (%s): %s", caminho_original, err_ler)
                         raise RuntimeError(f"Falha ao validar integridade do objeto existente no OCI: {str(err_ler)}")
 
-                    if bytes_existentes is not None and bytes_existentes != doc.conteudo_bytes:
+                    if bytes_existentes is None:
+                        logger.error("Falha na conferência de integridade: Não foi possível obter o conteúdo de %s para verificação.", caminho_original)
+                        raise RuntimeError(
+                            f"Falha na conferência de integridade: Leitura do objeto existente em {caminho_original} não retornou dados."
+                        )
+
+                    if bytes_existentes != doc.conteudo_bytes:
                         logger.error(
                             "Conflito de integridade OCI: Objeto existente em %s possui conteúdo divergente do documento atual (%s bytes vs %s bytes).",
                             caminho_original, len(bytes_existentes), len(doc.conteudo_bytes)
