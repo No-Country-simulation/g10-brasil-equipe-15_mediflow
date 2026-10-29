@@ -478,6 +478,7 @@ class ArmazenamentoOCI(BaseModel):
     bucket: str = Field(default="mediflow-documentos-clinicos")
     caminho_objeto: Optional[str] = Field(None, description="Caminho do objeto no bucket OCI")
     status_backup: str = Field(default="sucesso", description="Status da persistência na nuvem")
+    modo_simulacao: bool = Field(default=False, description="Indica se a persistência é simulada para homologação (EPT §12)")
 
 
 class ErroProcessamento(BaseModel):

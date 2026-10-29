@@ -46,6 +46,7 @@ class TriagemService:
         self._historico: Dict[str, List[EventoHistorico]] = {}
         self._documentos_originais: Dict[str, DocumentoIngerido] = {}
         self._status_em_andamento: Dict[str, str] = {}
+        self._metadados: Dict[str, Dict[str, Any]] = {}
         self._grafo = criar_grafo()
         self._storage = storage
 
@@ -116,6 +117,7 @@ class TriagemService:
 
         self._documentos_originais[doc_id] = doc
         self._status_em_andamento[doc_id] = StatusTriagem.RECEBIDO
+        self._metadados[doc_id] = dict(metadados) if (metadados and isinstance(metadados, dict)) else {}
 
         self.registrar_evento(
             documento_id=doc_id,
@@ -143,6 +145,7 @@ class TriagemService:
 
         self._documentos_originais[doc_id] = doc
         self._status_em_andamento[doc_id] = StatusTriagem.RECEBIDO
+        self._metadados[doc_id] = dict(metadados) if (metadados and isinstance(metadados, dict)) else {}
 
         self.registrar_evento(
             documento_id=doc_id,
@@ -152,6 +155,45 @@ class TriagemService:
             motivo=f"Arquivo {nome_arquivo} recebido com sucesso",
         )
         return doc_id
+
+    def _detectar_simulacao_oci(self, doc: DocumentoIngerido) -> tuple[bool, Optional[str]]:
+        """
+        Determina se o documento está em modo de simulação controlada da EPT v1.0 (§12).
+        Retorna (eh_simulacao: bool, falha_simulada: Optional[str]).
+        falha_simulada pode ser: 'ORIGINAL', 'RESULTADO' ou None.
+        
+        Regras Estritas de Ativação:
+        1. Se OCI_SIMULACAO_HABILITADA for 'false', simulação é sumariamente desativada.
+        2. Ativação explícita via metadados ou header:
+           - metadados['simular_falha_oci'] in ('ORIGINAL', 'RESULTADO')
+           - metadados['modo_simulacao'] is True
+        3. Ativação por nome estrito do catálogo EPT v1.0 (§12):
+           - Apenas nomes canônicos contendo 'ocifalhanooriginal' ou 'ocifalhanoresultado'.
+           Nomes genéricos (ex: 'simulacao_exame.txt') NÃO ativam simulação e são tratados como documentos reais.
+        """
+        if os.getenv("OCI_SIMULACAO_HABILITADA", "true").lower() in ("false", "0"):
+            return False, None
+
+        doc_id = getattr(doc, "documento_id", "")
+        meta = self._metadados.get(doc_id, {})
+
+        # 1. Verificação explícita por metadados / header
+        sim_val = str(meta.get("simular_falha_oci") or "").upper()
+        if "ORIGINAL" in sim_val:
+            return True, "ORIGINAL"
+        if "RESULTADO" in sim_val:
+            return True, "RESULTADO"
+        if meta.get("modo_simulacao") is True or sim_val in ("TRUE", "1", "SIMULADO"):
+            return True, None
+
+        # 2. Verificação por nome canônico estrito do catálogo EPT §12
+        nome_arq = (doc.nome_arquivo or "").lower().replace("_", "").replace("-", "").replace(" ", "")
+        if "ocifalhanooriginal" in nome_arq:
+            return True, "ORIGINAL"
+        if "ocifalhanoresultado" in nome_arq:
+            return True, "RESULTADO"
+
+        return False, None
 
     def executar_triagem(self, documento_id: str) -> TriagemMediFlow:
         """
@@ -178,11 +220,10 @@ class TriagemService:
         falha_persistencia: Optional[str] = None
         backup_status = "pendente"
         caminho_oci_original = f"recebidos/{documento_id}/original.{doc.formato.lower()}"
-        # Gatilho de Simulação do Catálogo EPT v1.0 (RF-28, RF-30, §12)
-        nome_arq = (doc.nome_arquivo or "").lower()
-        simular_falha_original = "ocifalhanooriginal" in nome_arq or "falhanooriginal" in nome_arq
+        # Gatilho de Simulação Controlada da EPT v1.0 (RF-28, RF-30, §12)
+        eh_simulacao, falha_simulada = self._detectar_simulacao_oci(doc)
 
-        if simular_falha_original:
+        if falha_simulada == "ORIGINAL":
             logger.warning("[Simulação EPT] Forçando falha na gravação do original para documento %s", documento_id)
             falha_persistencia = "FALHA_GRAVACAO_ORIGINAL: ServiceError 503 (Simulação EPT - Nuvem OCI indisponível)"
             backup_status = "falha"
@@ -327,9 +368,7 @@ class TriagemService:
         caminho_oci_resultado = f"processados/{pasta_status}{documento_id}/resultado.json"
 
         # Se a gravação inicial teve sucesso, tenta persistir o JSON final no OCI
-        simular_falha_resultado = "ocifalhanoresultado" in nome_arq or "falhanoresultado" in nome_arq
-
-        if simular_falha_resultado:
+        if falha_simulada == "RESULTADO":
             logger.warning("[Simulação EPT] Forçando falha na gravação do resultado para documento %s", documento_id)
             falha_persistencia = "FALHA_GRAVACAO_RESULTADO: ServiceError 507 (Simulação EPT - Quota do bucket OCI excedida)"
             backup_status = "falha"
@@ -365,6 +404,7 @@ class TriagemService:
                         bucket=bucket_nome,
                         caminho_objeto=caminho_oci_resultado,
                         status_backup="sucesso",
+                        modo_simulacao=eh_simulacao,
                     ),
                     erro=None,
                 )
@@ -432,6 +472,7 @@ class TriagemService:
                 bucket=bucket_nome,
                 caminho_objeto=caminho_oci_final,
                 status_backup=backup_status,
+                modo_simulacao=eh_simulacao,
             ),
             erro=erro_obj,
         )
@@ -475,8 +516,7 @@ class TriagemService:
         if triagem.status not in (StatusTriagem.ERRO_PERSISTENCIA, StatusTriagem.RECEBIDO):
             return triagem
 
-        nome_doc = (doc.nome_arquivo or "").lower()
-        eh_simulacao = "simulacao" in nome_doc or "ocifalha" in nome_doc
+        eh_simulacao, _ = self._detectar_simulacao_oci(doc)
 
         bucket_nome = os.getenv("OCI_BUCKET_NAME", "mediflow-documentos")
         caminho_original = f"recebidos/{documento_id}/original.{doc.formato.lower()}"
@@ -501,6 +541,7 @@ class TriagemService:
                     bucket=bucket_nome,
                     caminho_objeto=caminho_resultado,
                     status_backup="sucesso",
+                    modo_simulacao=True,
                 ),
                 erro=None,
             )
@@ -553,6 +594,7 @@ class TriagemService:
                     bucket=bucket_nome,
                     caminho_objeto=caminho_resultado,
                     status_backup="sucesso",
+                    modo_simulacao=False,
                 ),
                 erro=None,
             )

@@ -1,3 +1,4 @@
+import os
 """
 MediFlow — Script de Teste e Demonstração da Simulação de Erros do OCI (EPT §12, RF-28, RF-30).
 
@@ -72,10 +73,12 @@ def testar_cenario_falha_original():
     triagem_recuperada = service.reprocessar_persistencia_oci(doc_id)
     print(f"  Status Restaurado: {triagem_recuperada.status.value}")
     print(f"  Status Backup OCI: {triagem_recuperada.armazenamento_oci.status_backup}")
+    print(f"  Modo Simulação Identificado na Resposta: {triagem_recuperada.armazenamento_oci.modo_simulacao}")
     print(f"  Erro: {triagem_recuperada.erro}")
     assert triagem_recuperada.status in (StatusTriagem.PROCESSADO, StatusTriagem.EM_REVISAO)
     assert triagem_recuperada.armazenamento_oci.status_backup == "sucesso"
-    print("[OK] RETENTATIVA APROVADA: Estado restaurado para PROCESSADO com backup confirmado!")
+    assert triagem_recuperada.armazenamento_oci.modo_simulacao is True
+    print("[OK] RETENTATIVA APROVADA: Estado restaurado com backup simulado transparente!")
 
 
 def testar_cenario_falha_resultado():
@@ -116,9 +119,44 @@ def testar_cenario_falha_resultado():
     triagem_recuperada = service.reprocessar_persistencia_oci(doc_id)
     print(f"  Status Restaurado: {triagem_recuperada.status.value}")
     print(f"  Status Backup OCI: {triagem_recuperada.armazenamento_oci.status_backup}")
+    print(f"  Modo Simulação Identificado na Resposta: {triagem_recuperada.armazenamento_oci.modo_simulacao}")
     assert triagem_recuperada.status in (StatusTriagem.PROCESSADO, StatusTriagem.EM_REVISAO)
+    assert triagem_recuperada.armazenamento_oci.modo_simulacao is True
     print("[OK] RETENTATIVA APROVADA: Artefatos persistidos com sucesso.")
 
+
+
+
+def testar_cenario_bloqueio_falso_sucesso_nome_generico():
+    imprimir_cabecalho("CENARIO 3: Bloqueio de Falso Sucesso com simulacao_exame.txt sem Conector")
+    print("-> Submetendo documento 'simulacao_exame.txt' com OCI_OBRIGATORIO=true e sem conector...")
+    
+    os.environ["OCI_OBRIGATORIO"] = "true"
+    service = TriagemService(storage=None)
+    doc_id = service.submeter_texto(
+        "Laudo de Exame Clínico\nPaciente: Carlos Silva\nMédico: Dr. Pedro\nDiagnóstico: Rotina",
+        metadados={"nome_arquivo": "simulacao_exame.txt"}
+    )
+    triagem = service.executar_triagem(doc_id)
+    print(f"\n[Resultado da Ingestão]")
+    print(f"  Status Inicial: {triagem.status.value}")
+    print(f"  Status Backup: {triagem.armazenamento_oci.status_backup}")
+    print(f"  Modo Simulação: {triagem.armazenamento_oci.modo_simulacao}")
+    assert triagem.status == StatusTriagem.ERRO_PERSISTENCIA
+    assert triagem.armazenamento_oci.modo_simulacao is False
+
+    print("\n-> Disparando retentativa (deve RECUSAR falso sucesso sem conector)...")
+    try:
+        service.reprocessar_persistencia_oci(doc_id)
+        raise AssertionError("ERRO: A retentativa NÃO deveria ter confirmado sucesso sem conector!")
+    except RuntimeError as err:
+        print(f"  [OK] Retentativa Rejeitada com Segurança: '{err}'")
+
+    triagem_final = service.obter_triagem(doc_id)
+    assert triagem_final.status == StatusTriagem.ERRO_PERSISTENCIA
+    assert triagem_final.armazenamento_oci.status_backup == "falha"
+    assert triagem_final.armazenamento_oci.modo_simulacao is False
+    print("[OK] CENARIO 3 APROVADO: Falso sucesso bloqueado com segurança para nomes genéricos!")
 
 def main():
     print("=" * 70)
@@ -128,6 +166,7 @@ def main():
     t0 = time.time()
     testar_cenario_falha_original()
     testar_cenario_falha_resultado()
+    testar_cenario_bloqueio_falso_sucesso_nome_generico()
     duracao = round(time.time() - t0, 2)
     
     imprimir_cabecalho(f"TODOS OS CENARIOS DE ERRO DO OCI FORAM VALIDADOS COM SUCESSO EM {duracao}s!")

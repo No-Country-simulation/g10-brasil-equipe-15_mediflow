@@ -697,3 +697,94 @@ def test_retentativa_sem_conector_rejeita_falso_sucesso(client):
         assert triagem_final.armazenamento_oci.status_backup == "falha"
     finally:
         triagem_service._storage = None
+
+
+def test_arquivo_simulacao_generico_sem_conector_com_oci_obrigatorio_rejeita_sucesso(client, monkeypatch):
+    """
+    CENÁRIO TESTADO PELA COLEGA DA EQUIPE:
+    Com um arquivo chamado simulacao_exame.txt, sem conector e com OCI_OBRIGATORIO=true:
+    - O sistema NÃO pode confundir o nome genérico com o catálogo oficial EPT (§12).
+    - A recuperação NÃO pode voltar como PROCESSADO nem backup 'sucesso'.
+    - A retentativa DEVE falhar com HTTP 502 / ERRO_PERSISTENCIA e manter backup='falha'.
+    """
+    from src.api.routes import triagem_service
+    from src.schemas import StatusTriagem, CodigoErro
+
+    monkeypatch.setenv("OCI_OBRIGATORIO", "true")
+    triagem_service._storage = None
+
+    conteudo = "Laudo de Exame Clínico\nPaciente: João da Silva\nMédico: Dr. Santos\nDiagnóstico: Rotina".encode("utf-8")
+    files = {"file": ("simulacao_exame.txt", io.BytesIO(conteudo), "text/plain")}
+    res_envio = client.post("/api/v1/triagens", files=files)
+    assert res_envio.status_code == 202
+    doc_id = res_envio.json()["documento_id"]
+
+    # Ingestão inicial falha porque OCI_OBRIGATORIO=true e storage=None
+    triagem_inicial = triagem_service.obter_triagem(doc_id)
+    assert triagem_inicial.status == StatusTriagem.ERRO_PERSISTENCIA
+    assert triagem_inicial.armazenamento_oci.status_backup == "falha"
+    assert triagem_inicial.armazenamento_oci.modo_simulacao is False
+
+    # Retentativa sem conector: NÃO PODE dar falso sucesso!
+    res_retry = client.post(f"/api/v1/triagens/{doc_id}/reprocessar-persistencia")
+    assert res_retry.status_code == 502
+    assert res_retry.json()["codigo"] == CodigoErro.ERRO_PERSISTENCIA.value
+
+    # Confirma que permaneceu em ERRO_PERSISTENCIA com backup falha e modo_simulacao False
+    triagem_final = triagem_service.obter_triagem(doc_id)
+    assert triagem_final.status == StatusTriagem.ERRO_PERSISTENCIA
+    assert triagem_final.armazenamento_oci.status_backup == "falha"
+    assert triagem_final.armazenamento_oci.modo_simulacao is False
+
+
+def test_resposta_identifica_modo_simulacao_explicitamente(client):
+    """
+    Valida que documentos do catálogo EPT (§12) trazem modo_simulacao=True na resposta da API.
+    """
+    from src.api.routes import triagem_service
+    from src.schemas import StatusTriagem
+
+    triagem_service._storage = None
+    conteudo = "Solicitação de Exame\nPaciente: Maria Clara\nMédico: Dr. Pedro\nExame: Raio X".encode("utf-8")
+    files = {"file": ("Simulacao_OciFalhaNoOriginal.txt", io.BytesIO(conteudo), "text/plain")}
+    res_envio = client.post("/api/v1/triagens", files=files)
+    assert res_envio.status_code == 202
+    doc_id = res_envio.json()["documento_id"]
+
+    triagem = triagem_service.obter_triagem(doc_id)
+    assert triagem.status == StatusTriagem.ERRO_PERSISTENCIA
+    assert triagem.armazenamento_oci.modo_simulacao is True
+
+    # Na retentativa do catálogo EPT
+    res_retry = client.post(f"/api/v1/triagens/{doc_id}/reprocessar-persistencia")
+    assert res_retry.status_code == 200
+    dados_resposta = res_retry.json()
+    assert dados_resposta["armazenamento_oci"]["status_backup"] == "sucesso"
+    assert dados_resposta["armazenamento_oci"]["modo_simulacao"] is True
+
+
+def test_simulacao_via_header_http_explicito(client):
+    """
+    Valida controle explícito de simulação via header X-MediFlow-Simulacao-OCI.
+    """
+    from src.api.routes import triagem_service
+    from src.schemas import StatusTriagem
+
+    triagem_service._storage = None
+    headers = {"X-MediFlow-Simulacao-OCI": "FALHA_RESULTADO"}
+    payload = {
+        "documento_texto": "Laudo de Ultrassom\nPaciente: Marcos Lima\nMédico: Dra. Ana\nNormal.",
+    }
+    res_envio = client.post("/api/v1/triagens", json=payload, headers=headers)
+    assert res_envio.status_code == 202
+    doc_id = res_envio.json()["documento_id"]
+
+    triagem = triagem_service.obter_triagem(doc_id)
+    assert triagem.status == StatusTriagem.ERRO_PERSISTENCIA
+    assert "FALHA_GRAVACAO_RESULTADO" in triagem.erro.mensagem
+    assert triagem.armazenamento_oci.modo_simulacao is True
+
+    # Recupera via retry
+    res_retry = client.post(f"/api/v1/triagens/{doc_id}/reprocessar-persistencia")
+    assert res_retry.status_code == 200
+    assert res_retry.json()["armazenamento_oci"]["modo_simulacao"] is True

@@ -51,6 +51,7 @@ async def submeter_triagem(
     - Retorna HTTP 202 com URLs de acompanhamento (CT-001).
     """
     content_type = request.headers.get("content-type", "")
+    x_mediflow_simulacao_oci = request.headers.get("x-mediflow-simulacao-oci")
 
     # Cenário A: Requisição em formato JSON (CT-001, CT-008, CT-012)
     if "application/json" in content_type:
@@ -90,7 +91,10 @@ async def submeter_triagem(
 
         doc_id_informado = dados.get("documento_id")
         origem = dados.get("canal_origem", "Prontuário")
-        meta = dados.get("metadados", {})
+        meta = dict(dados.get("metadados", {}))
+        if x_mediflow_simulacao_oci:
+            meta["simular_falha_oci"] = x_mediflow_simulacao_oci.strip().upper()
+            meta["modo_simulacao"] = True
 
         try:
             doc_id = triagem_service.submeter_texto(
@@ -122,12 +126,18 @@ async def submeter_triagem(
             )
 
         nome = file.filename or "documento.pdf"
+        meta = {}
+        if x_mediflow_simulacao_oci:
+            meta["simular_falha_oci"] = x_mediflow_simulacao_oci.strip().upper()
+            meta["modo_simulacao"] = True
+
         try:
             doc_id = triagem_service.submeter_arquivo(
                 conteudo=conteudo,
                 nome_arquivo=nome,
                 documento_id=documento_id,
                 canal_origem=canal_origem or "Upload",
+                metadados=meta,
             )
         except (IngestaoError, ValueError) as e:
             raise _tratar_erro_ingestao(e)
