@@ -322,6 +322,37 @@ flowchart LR
 
 ---
 
+## 5.1 🧠 Arquitetura de Duplo Fallback do GeminiService (IA Resiliente)
+
+O diagrama a seguir ilustra a blindagem e o fluxo de extração estruturada do [`GeminiService`](../../src/services/gemini_service.py):
+
+```mermaid
+flowchart TD
+    DocIn["📄 Documento Clínico (Texto / Imagem / PDF)"] --> Shield["🛡️ Prompt Shielding: Delimitador <documento_clinico><br/><i>Tratamento estrito como dado passivo</i>"]
+    
+    subgraph LLM_RETRY["Camada 1: Redundância de Modelos Modernos da Google"]
+        Shield --> Try1["1ª Tentativa: gemini-3.8-flash<br/><i>(Timeout: 15s | temperature=0.0)</i>"]
+        Try1 -- "Sucesso" --> ParsePydantic["✅ Validação Estruturada Pydantic v2<br/>(_ClassificacaoDocumentoSchema / _DadosClinicosExtraidosSchema)"]
+        Try1 -- "Timeout / Erro 404 / 429" --> Try2["2ª Tentativa: gemini-3.5-flash-lite<br/><i>(Fallback de Modelo Econômico e Leve)</i>"]
+        Try2 -- "Sucesso" --> ParsePydantic
+    end
+
+    subgraph CLINICAL_FAILSAFE["Camada 2: Fallback Clínico de Segurança (Seção 12 E.F.)"]
+        Try2 -- "Falha Total / Sem Conexão / Chave Inválida" --> FailSafe["⚠️ _fallback_classificacao() / _fallback_extracao()<br/><i>tipo_documento = NAO_IDENTIFICADO<br/>score_confianca = 0.0</i>"]
+    end
+
+    ParsePydantic --> StateGraph["⚖️ Grafo LangGraph (Roteamento Determinístico)"]
+    FailSafe --> RetencaoCompulsoria["🧑‍⚕️ Destino Compulsório: FILA_REVISAO_HUMANA<br/><i>Status: EM_REVISAO (Nenhum paciente é prejudicado)</i>"]
+
+    style DocIn fill:#E1F5FE,stroke:#0288D1,stroke-width:2px
+    style Shield fill:#EDE7F6,stroke:#512DA8,stroke-width:2px
+    style ParsePydantic fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px
+    style FailSafe fill:#FFF3E0,stroke:#E65100,stroke-width:2px
+    style RetencaoCompulsoria fill:#FFEBEE,stroke:#C62828,stroke-width:2px
+```
+
+---
+
 ## 6. 📋 Dicionário de Componentes e Modelos
 
 | Modelo | Arquivo | Responsabilidade | Sub-entidades Contidas |
@@ -337,6 +368,7 @@ flowchart LR
 | **`Conflito`** | [`clinical.py`](../../src/schemas/clinical.py) | Inconsistências clínicas detectadas (ex: `DOSE_SUSPEITA`, `CRM_INCOMPATIVEL`, `DOCUMENTO_MUTILADO`). | `Gravidade` (`ALTA`, `MEDIA`, `BAIXA`) |
 | **`DecisaoRoteamento`** | [`clinical.py`](../../src/schemas/clinical.py) | Resultado do motor clínico: destino principal, lista de filas, flag de auditoria humana, justificativa em linguagem natural e alerta. | `Destino`, `Notificacao` |
 | **`ArmazenamentoOCI`** | [`clinical.py`](../../src/schemas/clinical.py) | Metadados de persistência em nuvem Oracle (Always Free): bucket, caminho do objeto e status do backup. | — |
+| **`GeminiService`** | [`gemini_service.py`](../../src/services/gemini_service.py) | **Serviço de IA Multimodal:** Orquestra classificação documental e extração com transporte REST, timeout de 15s e duplo fallback seguro. | `_ClassificacaoDocumentoSchema`, `_DadosClinicosExtraidosSchema` |
 | **`ErroProcessamento`** | [`clinical.py`](../../src/schemas/clinical.py) | Erros ocorridos durante a leitura de documentos aceitos no pipeline. | `CodigoErro` |
 | **`ErroResposta`** | [`clinical.py`](../../src/schemas/clinical.py) | Rejeição HTTP imediata na camada de ingestão (`400`, `413`, `415`). | `CodigoErro` |
 
@@ -347,5 +379,5 @@ flowchart LR
 1. **Proteção Extra (`extra="ignore"`):** Todos os modelos aceitam payloads com campos adicionais sem quebrar a desserialização, garantindo interoperabilidade entre agentes e versões da API.
 2. **Propriedades de Conveniência:** Suporte transparente a nomes legados (`medico_solicitante`, `diagnostico_principal`, `cid_extraido`, `cid_sugerido`, `score_confianca_classificacao`).
 3. **Ponto Fixo e Idempotência:** Uma instância de `TriagemMediFlow` revalidada (`TriagemMediFlow.model_validate(obj.model_dump())`) preserva rigorosamente o mesmo estado, sem oscilação de score ou destinos.
-4. **Cobertura Integral de Testes:** 100% dos modelos são validados contra os **79 fixtures canônicos** e auditados pelos **208 testes automatizados** em [`tests/test_contrato_fixtures.py`](../../tests/test_contrato_fixtures.py), [`tests/test_schemas.py`](../../tests/test_schemas.py), [`tests/test_workflow.py`](../../tests/test_workflow.py), [`tests/test_ingestion.py`](../../tests/test_ingestion.py), [`tests/test_api.py`](../../tests/test_api.py), [`tests/test_audit_items.py`](../../tests/test_audit_items.py) e [`tests/test_oci_storage.py`](../../tests/test_oci_storage.py).
+4. **Cobertura Integral de Testes:** 100% dos modelos são validados contra os **79 fixtures canônicos** e auditados pelos **245 testes automatizados (100% verde)** em [`tests/test_contrato_fixtures.py`](../../tests/test_contrato_fixtures.py), [`tests/test_schemas.py`](../../tests/test_schemas.py), [`tests/test_workflow.py`](../../tests/test_workflow.py), [`tests/test_ingestion.py`](../../tests/test_ingestion.py), [`tests/test_api.py`](../../tests/test_api.py), [`tests/test_gemini_service.py`](../../tests/test_gemini_service.py), [`tests/test_audit_items.py`](../../tests/test_audit_items.py) e [`tests/test_oci_storage.py`](../../tests/test_oci_storage.py).
 

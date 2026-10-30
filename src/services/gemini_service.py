@@ -6,7 +6,7 @@ Arquivo: src/services/gemini_service.py
 import json
 import logging
 import os
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
@@ -40,12 +40,13 @@ PRIORIDADES DE TRIAGEM OFICIAIS:
 - URGENTE: Achados com risco iminente de morte ou lesão grave.
 - ROTINA: Exames normais, receitas de uso contínuo, atestados simples ou procedimentos eletivos.
 - NAO_IDENTIFICADA: Use quando a ilegibilidade ou ausência de dados impedir qualquer determinação clínica.
+Não crie categorias intermediárias. Retorne os valores exatamente como escritos acima.
 """
 
 SYSTEM_INSTRUCTION_EXTRACAO = """
 Você é o componente especialista em Extração Estruturada de Entidades Médicas do MediFlow.
 Sua missão é extrair dados clínicos com fidelidade absoluta ao texto do documento.
-Se a dosagem do medicamento for ausente ou ilegível, preencha o campo 'dosagem' estritamente como null.
+Se a dosagem ou frequência do medicamento for ausente ou ilegível, preencha o campo 'dosagem' estritamente como null. Nunca deduza ou complete esses valores.
 """
 
 
@@ -63,19 +64,56 @@ class GeminiService:
         else:
             genai.configure(api_key=self.api_key)
 
-    def classificar_documento(self, conteudo_texto: str) -> ClassificacaoDocumento:
+    def _montar_partes_conteudo(
+        self,
+        instrucao_base: str,
+        conteudo_texto: str = "",
+        conteudo_bytes: Optional[bytes] = None,
+        mime_type: Optional[str] = None
+    ) -> List[Any]:
+        """Monta a lista de partes para a API multimodal do Gemini com isolamento de segurança."""
+        partes: List[Any] = []
+        if conteudo_bytes:
+            mime = (mime_type or "image/jpeg").lower().strip()
+            if mime in ["jpg", "image/jpg"]:
+                mime = "image/jpeg"
+            elif mime in ["png", "image/png"]:
+                mime = "image/png"
+            elif mime in ["webp", "image/webp"]:
+                mime = "image/webp"
+            elif mime in ["pdf", "application/pdf"]:
+                mime = "application/pdf"
+            elif "/" not in mime:
+                mime = f"image/{mime}"
+            partes.append({"mime_type": mime, "data": conteudo_bytes})
+
+        if conteudo_texto and conteudo_texto.strip():
+            partes.append(f"{instrucao_base}\n<documento_clinico>\n{conteudo_texto}\n</documento_clinico>")
+        else:
+            partes.append(f"{instrucao_base}\nDocumento em anexo. Trate o conteúdo com fidelidade estrita entre as tags <documento_clinico>.")
+
+        return partes
+
+    def classificar_documento(
+        self,
+        conteudo_texto: str = "",
+        conteudo_bytes: Optional[bytes] = None,
+        mime_type: Optional[str] = None
+    ) -> ClassificacaoDocumento:
         """Classifica o documento nas categorias e prioridades oficiais."""
         if not genai or not self.api_key:
             logger.warning("[GeminiService] Chamada redirecionada para fallback defensivo (SDK ou Chave ausente).")
             return self._fallback_classificacao("SDK ou Chave ausente")
 
-        prompt_blindado = f"""
-        Analise o documento clínico a seguir e gere a classificação estruturada correspondente:
+        if not (conteudo_texto and conteudo_texto.strip()) and not conteudo_bytes:
+            return self._fallback_classificacao("Documento vazio sem texto ou bytes")
 
-        <documento_clinico>
-        {conteudo_texto}
-        </documento_clinico>
-        """
+        partes = self._montar_partes_conteudo(
+            instrucao_base="Analise o documento clínico e gere a classificação estruturada correspondente:",
+            conteudo_texto=conteudo_texto,
+            conteudo_bytes=conteudo_bytes,
+            mime_type=mime_type
+        )
 
         try:
             model = genai.GenerativeModel(
@@ -88,7 +126,7 @@ class GeminiService:
                 },
             )
 
-            response = model.generate_content(prompt_blindado)
+            response = model.generate_content(partes)
             resultado = ClassificacaoDocumento.model_validate_json(response.text)
             logger.info(f"[GeminiService] Classificação concluída com sucesso: {resultado.tipo_documento} | Prioridade: {resultado.nivel_prioridade}")
             return resultado
@@ -97,20 +135,26 @@ class GeminiService:
             logger.error(f"[GeminiService] Falha na classificação via Gemini: {e}")
             return self._fallback_classificacao(str(e))
 
-    def extrair_dados_clinicos(self, conteudo_texto: str) -> DadosClinicosExtraidos:
+    def extrair_dados_clinicos(
+        self,
+        conteudo_texto: str = "",
+        conteudo_bytes: Optional[bytes] = None,
+        mime_type: Optional[str] = None
+    ) -> DadosClinicosExtraidos:
         """Extrai entidades médicas com saída estruturada nativa validada em DadosClinicosExtraidos."""
         if not genai or not self.api_key:
             logger.warning("[GeminiService] Extração redirecionada para fallback defensivo (SDK ou Chave ausente).")
             return self._fallback_extracao()
 
-        prompt_blindado = f"""
-        Extraia as entidades médicas do documento abaixo com fidelidade estrita.
-        Atenção: Se o código CID não constar expressamente no documento, 'cid_extraido' DEVE ser null.
+        if not (conteudo_texto and conteudo_texto.strip()) and not conteudo_bytes:
+            return self._fallback_extracao()
 
-        <documento_clinico>
-        {conteudo_texto}
-        </documento_clinico>
-        """
+        partes = self._montar_partes_conteudo(
+            instrucao_base="Extraia as entidades médicas do documento com fidelidade estrita. Se CID não constar, 'cid_extraido' DEVE ser null.",
+            conteudo_texto=conteudo_texto,
+            conteudo_bytes=conteudo_bytes,
+            mime_type=mime_type
+        )
 
         try:
             model = genai.GenerativeModel(
@@ -123,7 +167,7 @@ class GeminiService:
                 },
             )
 
-            response = model.generate_content(prompt_blindado)
+            response = model.generate_content(partes)
             resultado = DadosClinicosExtraidos.model_validate_json(response.text)
             logger.info(f"[GeminiService] Extração de dados concluída: Paciente={resultado.paciente.nome or 'null'}")
             return resultado

@@ -4,7 +4,7 @@
 > **Projeto 2:** Agente Autônomo para Triagem, Extração e Roteamento de Documentos Clínicos  
 > **Equipe 15:** MediFlow  
 > **Manual Oficial de Referência:** `34aa946f-2883-4917-aec1-aae0df0f43d1.pdf`  
-> **Implementação Central:** [`src/schemas/clinical.py`](src/schemas/clinical.py) | **Suíte de Testes:** 208 testes automatizados via Pytest  
+> **Implementação Central:** [`src/schemas/clinical.py`](src/schemas/clinical.py) | **Suíte de Testes:** 245 testes automatizados via Pytest (100% verde)  
 
 ---
 
@@ -18,7 +18,7 @@ O **MediFlow** é um agente autônomo inteligente projetado para os setores de *
 | :--- | :--- | :--- |
 | **Ingestão Multimodal (Upload e API REST)** | Suporte a upload de arquivos PDF (digital e escaneado), imagens (JPG, PNG, WEBP) e TXT; integração via API REST com envelopes JSON. Bloqueio estrito de DOCX e outros formatos não suportados (HTTP 415). Limites de segurança: **máximo de 10.00 MB** e **máximo de 20 páginas por documento** (Regra A6). | [`src/ingestion/loader.py`](src/ingestion/loader.py) |
 | **Classificação de Tipo Documental** | Classificação automática nas 8 categorias controladas (`RECEITUARIO_MEDICO`, `LAUDO_EXAME_LABORATORIAL`, `LAUDO_EXAME_IMAGEM`, `GUIA_PROCEDIMENTO`, `RELATORIO_ALTA_INTERNACAO`, `ATESTADO_MEDICO`, `OUTRO`, `NAO_IDENTIFICADO`). | [`src/agents/`](src/agents/) |
-| **Extração Estruturada com LLM Multimodal** | Extração de entidades clínicas via Google Gemini 1.5 com *Structured Outputs*: Paciente, Médico/CRM com UF paulista/nacional, Diagnóstico/CID-10, Medicamentos (nome, dose, frequência), Exames/Analitos laboratoriais (RF-12) e declaração de urgência. | [`src/agents/`](src/agents/) & [`src/schemas/clinical.py`](src/schemas/clinical.py) |
+| **Extração Estruturada com LLM Multimodal** | Extração de entidades clínicas via Google Gemini (modelos `gemini-3.8-flash` e `gemini-3.5-flash-lite`) com *Structured Outputs* nativos via Pydantic v2: Paciente, Médico/CRM com UF paulista/nacional, Diagnóstico/CID-10, Medicamentos (nome, dose, frequência), Exames/Analitos laboratoriais (RF-12) e declaração de urgência. Inclui resiliência REST, timeout de 15s e duplo fallback seguro. | [`src/services/gemini_service.py`](src/services/gemini_service.py), [`src/agents/`](src/agents/) & [`src/schemas/clinical.py`](src/schemas/clinical.py) |
 | **Grafo de Decisão Condicional (LangGraph)** | Grafo de estados (`StateGraph`) com nós de extração, validação de regras clínicas e arestas condicionais de roteamento para 5 departamentos. | [`src/workflow/`](src/workflow/) |
 | **Tratamento de Urgências e Human-in-the-Loop** | Notificação imediata para a equipe de plantão em casos urgentes e retenção obrigatória em fila de auditoria humana (*Human-in-the-Loop*) em caso de ambiguidade, rasura, campo vital ausente ou score $< 0.85$. | [`src/workflow/edges.py`](src/workflow/edges.py) |
 | **Persistência OCI Object Storage (Always Free)** | Organização e segregação de arquivos e metadados em buckets gratuitos da nuvem Oracle (`/recebidos`, `/processados/urgentes`, `/processados/rotina`, `/auditoria_humana`). | [`src/storage/`](src/storage/) |
@@ -50,9 +50,9 @@ flowchart TD
         ERR_GATEWAY["Nível 1: ErroResposta<br/>(HTTP 400 / 413 / 415)"]
     end
 
-    subgraph AI_CORE["🤖 Camada 2: Inteligência Multimodal (Gemini 1.5)"]
+    subgraph AI_CORE["🤖 Camada 2: Inteligência Multimodal (Gemini 3.8 Flash & 3.5 Flash-Lite)"]
         OCR["Normalização & OCR Fallback<br/>(PyMuPDF / Tesseract)"]
-        LLM["Google Gemini 1.5 Multimodal<br/>(Extração Estruturada Pydantic)"]
+        LLM["Google Gemini (3.8 Flash & 3.5 Lite)<br/>(Extração Estruturada Pydantic v2)"]
         SCHEMA["Contrato Canônico Pydantic v2<br/>(src/schemas/clinical.py)"]
     end
 
@@ -117,10 +117,17 @@ flowchart TD
   - **Formatos Bloqueados no Gateway (Negativos Técnicos):** Rejeição imediata com `HTTP 415 FORMATO_NAO_SUPORTADO` para arquivos `.docx`, `.zip`, executáveis ou qualquer extensão fora do allowlist (comprovado pelo teste e fixture `Validacao_ArquivoDocx.docx`).
   - **Tratamento Precoce de Falhas:** Detecção imediata de PDFs com senha (`PDF_PROTEGIDO`) e PDFs ilegíveis/corrompidos (`PDF_CORROMPIDO`), emitindo contratos de erro sem executar inferência.
 
-### 3.2 Camada 2: Inteligência Multimodal e Schemas (`src/agents/` e `src/schemas/`)
-- **Objetivo:** Compreender visualmente o documento e estruturar os dados clínicos.
+### 3.2 Camada 2: Inteligência Multimodal e Schemas (`src/services/`, `src/agents/` e `src/schemas/`)
+- **Objetivo:** Compreender visualmente o documento e estruturar os dados clínicos com determinismo absoluto e tolerância a falhas.
 - **Componentes:**
-  - **Google Gemini 1.5:** Utiliza prompt de sistema especializado em taxonomia médica brasileira e *response_schema* formal.
+  - **Serviço Central GeminiService ([`src/services/gemini_service.py`](src/services/gemini_service.py)):**
+    - **Protocolo de Rede Resiliente:** Configurado com `genai.configure(transport="rest")` para evitar problemas de socket/gRPC no ambiente Windows.
+    - **Timeout Restrito (15s):** Limita as requisições com `request_options={"timeout": 15}` para atender ao requisito de resposta rápida (tempo de triagem < 5s).
+    - **Saídas Estruturadas Nativas (Pydantic v2):** Utiliza `response_schema` com `_ClassificacaoDocumentoSchema` e `_DadosClinicosExtraidosSchema`, garantindo validação em tempo de compilação/execução sem alucinação de formato.
+    - **Defesa Contra Prompt Injection:** Todo conteúdo documental é envolvido nas tags `<documento_clinico>` e interpretado estritamente como dado passivo.
+    - **Duplo Fallback de Alta Disponibilidade:**
+      1. *Fallback de Modelos:* Tenta o modelo de nova geração `gemini-3.8-flash` e, em caso de instabilidade, tenta `gemini-3.5-flash-lite`.
+      2. *Fallback Clínico (Fail-Safe Seção 12 da E.F. v1.0):* Se houver falha total ou ausência de chave de API, gera `ClassificacaoDocumento(tipo_documento=NAO_IDENTIFICADO, score=0.0)`, des抟ando o documento para `FILA_REVISAO_HUMANA` sem quebrar a API.
   - **Contrato Canônico Pydantic v2 ([`src/schemas/clinical.py`](src/schemas/clinical.py)):** Modelo de dados unificado com validação estrita de tokens, enums resilientes via `_missing_` e suporte a submodelos dedicados (`Paciente`, `Medico`, `Crm`, `ItemExameLaboratorial`, `ConflitoQualidade`).
 
 ### 3.3 Camada 3: Motor de Decisão LangGraph (`src/workflow/`)
@@ -175,7 +182,7 @@ stateDiagram-v2
     
     state PROCESSANDO {
         [*] --> IngestaoSanitizacao: Validação 10MB / 20 págs / MIME
-        IngestaoSanitizacao --> ExtracaoMultimodal: Gemini 1.5 + Schemas
+        IngestaoSanitizacao --> ExtracaoMultimodal: Gemini (3.8 Flash / 3.5 Lite) + Schemas
         ExtracaoMultimodal --> AvaliacaoRegras: Pydantic v2 & LangGraph
         AvaliacaoRegras --> [*]
     }
@@ -319,7 +326,11 @@ A persistência em nuvem é operada pelo conector [`src/storage/oci_storage.py`]
 - **Proteção contra sobrescrita:** Header `if-none-match: *` em `enviar_bytes()` para garantir idempotência e impedir perda de dados.
 - **Validação de tipos e tamanho:** Tratamento de buffers binários com `content_type` apropriado.
 - **Paginação de listagem:** Itera todas as páginas usando cursor (`next_start_with`).
-- **Resiliência a falhas (`ERRO_PERSISTENCIA`):** Se a chamada OCI falhar por indisponibilidade, o sistema registra `CodigoErro.ERRO_PERSISTENCIA` sem anular a decisão de triagem clínica prévia.
+- **Resiliência a falhas (`ERRO_PERSISTENCIA`):** Se a chamada OCI falhar por indisponibilidade temporária de rede ou quota, o sistema registra `CodigoErro.ERRO_PERSISTENCIA` preservando integralmente em memória a decisão clínica e as métricas calculadas pelo LangGraph (RF-28 / RF-30).
+- **Simulação do Catálogo EPT v1.0 (§12):** Gatilhos controlados via nome de arquivo ou metadado (`Simulacao_OciFalhaNoOriginal` -> ServiceError 503; `Simulacao_OciFalhaNoResultado` -> ServiceError 507) permitem homologar a resiliência em pipelines fechados de CI/CD sem depender de conectividade real com a nuvem da Oracle.
+- **Tratamento de 412 na Retentativa (Preservação do Original):** Quando a falha ocorre apenas na Etapa 2 (resultado JSON) e a Etapa 1 (original) já havia sido salva, a retentativa via `/reprocessar-persistencia` recebe HTTP 412 (*PreconditionFailed* do `if_none_match="*"`). O sistema identifica que o arquivo original está seguro e avança diretamente para gravar o JSON pendente, sem sobrescrever o original.
+- **Bloqueio Estrito de Falso Sucesso:** Em documentos reais (fora do modo de simulação), o sistema só confirma `PROCESSADO` e `status_backup="sucesso"` se o conector OCI estiver de fato configurado e a gravação for confirmada pelo bucket. Sem conector, a retentativa falha com erro seguro 502/ERRO_PERSISTENCIA, evitando falsos positivos no prontuário.
+- **Preservação Soberana da Justificativa do LangGraph:** A justificativa clínica gerada pelo agente analítico é mantida integralmente no contrato Pydantic `TriagemMediFlow`, prevenindo que validações pós-construção substituam o raciocínio clínico por mensagens genéricas.
 
 A segregação dos documentos no bucket `mediflow-documentos` obedece à hierarquia abaixo:
 
@@ -343,9 +354,9 @@ mediflow-documentos/ (Bucket OCI Always Free - Tenancy izapalomaa)
 
 ---
 
-## 🧪 7. Engenharia de Qualidade e Suíte de Testes (208 Testes)
+## 🧪 7. Engenharia de Qualidade e Suíte de Testes (245 Testes)
 
-A conformidade do MediFlow com os requisitos funcionais e com o edital da Oracle é auditada por uma suíte de 208 testes automatizados no Pytest:
+A conformidade do MediFlow com os requisitos funcionais e com o edital da Oracle é auditada por uma suíte de 245 testes automatizados no Pytest (100% verde):
 
 | Módulo de Teste | Quantidade | Escopo e Cobertura Técnica |
 | :--- | :---: | :--- |
@@ -353,10 +364,11 @@ A conformidade do MediFlow com os requisitos funcionais e com o edital da Oracle
 | **`tests/test_workflow.py`** | **73 testes** | Grafo LangGraph completo, nós de decisão, arestas condicionais, avaliação de score e roteamento para os 5 destinos. |
 | **`tests/test_ingestion.py`** | **18 testes** | Ingestão robusta, validação de arquivos físicos (.pdf, .jpg, .webp, rejeição de .docx), limites estritos de 10.00MB e 20 páginas, PDFs protegidos e corrompidos. |
 | **`tests/test_api.py`** | **16 testes** | Endpoints REST FastAPI assíncronos (HTTP 202), validações de erro (400, 415, 422), polling de status, histórico e health check (EPT CT-001 a CT-080). |
+| **`tests/test_gemini_service.py`** | **9 testes** | Testes unitários do GeminiService: transporte REST, timeout de 15s, Saída Estruturada Pydantic v2, duplo fallback e fail-safe sem chave. |
 | **`tests/test_oci_storage.py`** | **8 testes** | Conector OCI Object Storage simulado (mock), validação de `if-none-match`, preservação de bytes, paginação e propagação de erros. |
 | **`tests/test_audit_items.py`** | **8 testes** | Auditoria clínica de sanidade: descarte de diagnóstico restrito a lab, urgência indeterminada, persistência e sanitização. |
 | **`tests/test_schemas.py`** | **7 testes** | Schemas Pydantic v2, serialização JSON, aliases de retrocompatibilidade e tratamento de erros de Nível 1 e 2. |
-| **Total da Suíte Oficial** | **208 testes** | **100% aprovados em ~8.3s (1 skipped esperado de isolamento legado)** |
+| **Total da Suíte Oficial** | **245 testes** | **100% aprovados em ~7.1s (1 skipped esperado de isolamento legado)** |
 
 ---
 
@@ -380,11 +392,13 @@ pip install -r requirements.txt
 cp .env.example .env
 # Configurar GEMINI_API_KEY e credenciais OCI Always Free
 
-# 5. Executar a suíte completa de 208 testes automatizados
+# 5. Executar a suíte completa de 245 testes automatizados
 python -m pytest
 
-# 6. (Opcional) Executar o teste real no bucket OCI
+# 6. Testes Manuais Opcionais (Cloud OCI e IA Gemini)
 python -m scripts.testar_oci
+python scripts/testar_simulacao_oci.py
+python testar_gemini.py
 
 # 7. Opção A: Iniciar o Servidor FastAPI (Backend REST para React e API)
 uvicorn src.api.main:app --reload --port 8000
@@ -420,7 +434,7 @@ g10-brasil-equipe-15_mediflow/
 │   └── GUIA_INTEGRACAO_LLM.md                  <- Guia de consumo do Ingestion Loader para IA
 │
 ├── src/                                        <- Código-fonte da aplicação (Python Backend & IA)
-│   ├── agents/                                 <- Agentes de Inteligência Multimodal (Google Gemini 1.5)
+│   ├── agents/                                 <- Agentes e Prompts de Inteligência Multimodal
 │   ├── api/                                    <- API REST FastAPI Assíncrona (/api/v1/triagens)
 │   ├── app/                                    <- Interfaces Python (Streamlit HiTL)
 │   │   └── streamlit_app.py                    <- Painel web de auditoria médica e testes rápidos
@@ -428,6 +442,8 @@ g10-brasil-equipe-15_mediflow/
 │   │   └── loader.py                           <- Carregador blindado (10MB, 20 págs, MIME, magic bytes)
 │   ├── schemas/                                <- Modelos de Dados Pydantic v2
 │   │   └── clinical.py                         <- Schemas canônicos (TriagemMediFlow, ErroResposta, etc.)
+│   ├── services/                               <- Serviços de Integração Multimodal
+│   │   └── gemini_service.py                   <- GeminiService estruturado (REST, 15s, Pydantic v2, duplo fallback)
 │   ├── storage/                                <- Conector OCI Object Storage Always Free (oci_storage.py)
 │   ├── workflow/                               <- Motor de Orquestração Determinística (LangGraph)
 │   │   ├── graph.py                            <- Grafo de estados, nós e cálculo de regras
@@ -435,13 +451,15 @@ g10-brasil-equipe-15_mediflow/
 │   └── config.py                               <- Configurações globais e variáveis de ambiente
 │
 ├── scripts/                                    <- Utilitários de homologação e scripts de diagnóstico
+│   ├── testar_simulacao_oci.py                 <- Validação da simulação de falhas OCI do catálogo EPT v1.0 (§12)
 │   └── testar_oci.py                           <- Validação real ponta a ponta no bucket OCI Always Free
 │
-├── tests/                                      <- Suíte Oficial de Testes Automatizados (208 testes)
+├── tests/                                      <- Suíte Oficial de Testes Automatizados (245 testes)
 │   ├── test_contrato_fixtures.py               <- 79 testes: ponto fixo dos fixtures e regras R1 a R8
 │   ├── test_workflow.py                        <- 73 testes: transições e arestas do LangGraph
 │   ├── test_ingestion.py                       <- 18 testes: arquivos reais, PDF, JPG, WEBP e DOCX (415)
 │   ├── test_api.py                             <- 16 testes: endpoints REST FastAPI e EPT
+│   ├── test_gemini_service.py                  <- 9 testes unitários do GeminiService (REST, 15s e fallback)
 │   ├── test_audit_items.py                     <- 8 testes dedicados de auditoria técnica e sanidade
 │   ├── test_oci_storage.py                     <- 8 testes: persistência OCI com SDK simulado (mock)
 │   ├── test_schemas.py                         <- 7 testes: Pydantic v2 e envelopes de erro Nível 1 e 2
@@ -450,6 +468,7 @@ g10-brasil-equipe-15_mediflow/
 │       ├── catalogo/                           <- 67 casos avançados (qualidade, borda, limites)
 │       └── manifest.csv                        <- Rastreabilidade formal em formato de máquina
 │
+├── testar_gemini.py                            <- Script de validação manual da IA com Google Gemini
 ├── ARQUITETURA.md                              <- Especificação Técnica Oficial da Arquitetura
 ├── README.md                                   <- Documentação Principal do Repositório
 ├── pytest.ini                                  <- Configuração corporativa do Pytest
@@ -461,10 +480,10 @@ g10-brasil-equipe-15_mediflow/
 
 ### 9.2 Sugestão Arquitetural para o Frontend React (`frontend/`)
 
-Para manter o desacoplamento arquitetural e permitir que **Giovane e Victor** desenvolvam a Single Page Application (SPA) em React com máxima produtividade e sem misturar dependências do Node.js com o Python, recomenda-se a seguinte estrutura de pastas na raiz do projeto:
+Para manter o desacoplamento arquitetural e permitir que **Giovane Brandino** desenvolva a Single Page Application (SPA) em React com máxima produtividade e sem misturar dependências do Node.js com o Python, recomenda-se a seguinte estrutura de pastas na raiz do projeto:
 
 ```text
-frontend/                                       <- Aplicação Web Corporativa (React SPA — Giovane & Victor)
+frontend/                                       <- Aplicação Web Corporativa (React SPA — Giovane Brandino)
 ├── public/                                     <- Assets estáticos públicos (favicons, logos hospitalares)
 ├── src/
 │   ├── assets/                                 <- Imagens, ícones médicos SVG e estilos

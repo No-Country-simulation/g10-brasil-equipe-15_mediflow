@@ -238,6 +238,24 @@ class Crm(BaseModel):
     numero: Optional[str] = Field(None, description="Número do CRM normalizado")
     uf: Optional[str] = Field("SP", description="UF do CRM (padrão SP)")
 
+    @field_validator("numero", mode="before")
+    @classmethod
+    def limpar_numero(cls, v):
+        if isinstance(v, str):
+            import re
+            return re.sub(r"(?i)^crm[\s\:\/\.\-]*", "", v.strip()).strip()
+        return v
+
+    def __str__(self) -> str:
+        import re
+        num = re.sub(r"(?i)^crm[\s\:\/\.\-]*", "", (self.numero or "").strip()).strip()
+        if num and self.uf:
+            return f"{num}-{self.uf}"
+        return num or self.uf or "N/I"
+
+    def formatado(self) -> str:
+        return self.__str__()
+
 
 # Alias
 CrmEstruturado = Crm
@@ -253,7 +271,9 @@ class Medico(BaseModel):
     @classmethod
     def normalizar_crm(cls, v):
         if isinstance(v, str):
-            partes = v.strip().replace("/", "-").split("-")
+            import re
+            v_limpo = re.sub(r"(?i)^crm[\s\:\/\.\-]*", "", v.strip()).strip()
+            partes = v_limpo.replace("/", "-").split("-")
             num = partes[0].strip()
             uf = partes[1].strip().upper() if len(partes) > 1 else "SP"
             return Crm(numero=num, uf=uf)
@@ -458,6 +478,7 @@ class ArmazenamentoOCI(BaseModel):
     bucket: str = Field(default="mediflow-documentos-clinicos")
     caminho_objeto: Optional[str] = Field(None, description="Caminho do objeto no bucket OCI")
     status_backup: str = Field(default="sucesso", description="Status da persistência na nuvem")
+    modo_simulacao: bool = Field(default=False, description="Indica se a persistência é simulada para homologação (EPT §12)")
 
 
 class ErroProcessamento(BaseModel):
@@ -625,22 +646,23 @@ class TriagemMediFlow(BaseModel):
         if urgencia_indeterminada:
             motivos.append("urgência clínica indeterminada (decisão A5/R2)")
 
-        if urgente and ambiguidade:
-            self.decisao_roteamento.justificativa_roteamento = (
-                "Urgência com ambiguidade: mantém FILA_URGENCIA_MEDICA e acrescenta FILA_REVISAO_HUMANA. " + "; ".join(motivos) + "."
-            )
-        elif urgente:
-            self.decisao_roteamento.justificativa_roteamento = (
-                "Urgência clínica: FILA_URGENCIA_MEDICA com alerta registrado. Sem ambiguidade, segue sem revisão humana."
-            )
-        elif ambiguidade:
-            self.decisao_roteamento.justificativa_roteamento = "Revisão humana obrigatória: " + "; ".join(motivos) + "."
-        else:
-            tipo_txt = getattr(c.tipo_documento, "value", c.tipo_documento)
-            dest_txt = getattr(self.decisao_roteamento.destino_principal, "value", self.decisao_roteamento.destino_principal)
-            self.decisao_roteamento.justificativa_roteamento = (
-                f"Classificação de rotina: {tipo_txt} encaminhado para {dest_txt}."
-            )
+        if not self.decisao_roteamento.justificativa_roteamento:
+            if urgente and ambiguidade:
+                self.decisao_roteamento.justificativa_roteamento = (
+                    "Urgência com ambiguidade: mantém FILA_URGENCIA_MEDICA e acrescenta FILA_REVISAO_HUMANA. " + "; ".join(motivos) + "."
+                )
+            elif urgente:
+                self.decisao_roteamento.justificativa_roteamento = (
+                    "Urgência clínica: FILA_URGENCIA_MEDICA com alerta registrado. Sem ambiguidade, segue sem revisão humana."
+                )
+            elif ambiguidade:
+                self.decisao_roteamento.justificativa_roteamento = "Revisão humana obrigatória: " + "; ".join(motivos) + "."
+            else:
+                tipo_txt = getattr(c.tipo_documento, "value", c.tipo_documento)
+                dest_txt = getattr(self.decisao_roteamento.destino_principal, "value", self.decisao_roteamento.destino_principal)
+                self.decisao_roteamento.justificativa_roteamento = (
+                    f"Classificação de rotina: {tipo_txt} encaminhado para {dest_txt}."
+                )
 
         # 6. Notificação Automática de Urgência
         if urgente and not self.decisao_roteamento.notificacao:
