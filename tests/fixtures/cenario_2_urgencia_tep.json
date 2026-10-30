@@ -1,0 +1,56 @@
+{
+  "status": "PROCESSADO",
+  "documento_id": "DOC-2026-002",
+  "classificacao": {
+    "tipo_documento": "LAUDO_EXAME_IMAGEM",
+    "especialidade": "Radiologia / Pneumologia",
+    "nivel_prioridade": "Urgente",
+    "score_confianca_classificacao": 0.99
+  },
+  "dados_extraidos": {
+    "paciente": {
+      "nome": "Maria Eduarda Santos",
+      "idade": 61,
+      "cpf": null
+    },
+    "medico_solicitante": {
+      "nome": "Dra. Camila Alencar",
+      "crm": "98765-SP",
+      "crm_detalhado": null
+    },
+    "exame_ou_procedimento": "ANGIOTOMOGRAFIA DE TÓRAX",
+    "exames_laboratoriais": [],
+    "diagnostico_principal": "TROMBOEMBOLISMO PULMONAR AGUDO MASSIVO EM RAMO PRINCIPAL DA ARTÉRIA PULMONAR ESQUERDA",
+    "cid_extraido": "I26.9",
+    "medicamentos": [],
+    "score_confianca_extracao": 0.98
+  },
+  "qualidade": {
+    "score_classificacao": 0.99,
+    "score_extracao": 0.98,
+    "score_combinado": 0.98,
+    "limiar_aplicado": 0.85,
+    "campos_ausentes": [],
+    "campos_incerto": [],
+    "conflitos": []
+  },
+  "decisao_roteamento": {
+    "destino_principal": "Fila_Emergencia_Medica",
+    "destinos": [
+      "Fila_Emergencia_Medica"
+    ],
+    "requer_auditoria_humana": false,
+    "justificativa_roteamento": "Achado crítico de alta gravidade (TEP Agudo - CID-10 I26.9). Alerta emitido para a equipe de plantão.",
+    "notificacao_gerada": {
+      "gerada": true,
+      "canal": "SIMULADO_SLACK_PLANTAO",
+      "mensagem": "🚨 ALERTA URGENTE [DOC-2026-002]: TROMBOEMBOLISMO PULMONAR AGUDO MASSIVO EM RAMO PRINCIPAL DA ARTÉRIA PULMONAR ESQUERDA",
+      "status": "REGISTRADA"
+    }
+  },
+  "armazenamento_oci": {
+    "bucket": "mediflow-documentos-clinicos",
+    "caminho_objeto": "processados/urgentes/DOC-2026-002.json",
+    "status_backup": "sucesso"
+  }
+}
