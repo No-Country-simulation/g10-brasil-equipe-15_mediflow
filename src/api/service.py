@@ -50,6 +50,11 @@ class TriagemService:
         self._grafo = criar_grafo()
         self._storage = storage
 
+        # Refer?ncias dos hist?ricos confirmados e recupera??o em mem?ria.
+        self._historicos_oci: Dict[str, str] = {}
+        self._historicos_pendentes: Dict[str, TriagemMediFlow] = {}
+        self._historicos_quantidades: Dict[str, int] = {}
+
     def _obter_storage(self) -> Optional[Any]:
         """Obtém cliente OCI Storage configurado ou injetado."""
         if self._storage is not None:
@@ -195,7 +200,7 @@ class TriagemService:
 
         return False, None
 
-    def executar_triagem(self, documento_id: str) -> TriagemMediFlow:
+    def _executar_triagem_existente(self, documento_id: str) -> TriagemMediFlow:
         """
         Executa o pipeline completo de triagem:
         Persistência inicial OCI -> Extração clínica -> LangGraph -> Persistência final OCI.
@@ -500,7 +505,7 @@ class TriagemService:
             )
         return triagem
 
-    def reprocessar_persistencia_oci(self, documento_id: str) -> TriagemMediFlow:
+    def _reprocessar_persistencia_existente(self, documento_id: str) -> TriagemMediFlow:
         """
         Retenta a persistência durável no OCI para triagens com ERRO_PERSISTENCIA (RF-28, RF-30).
         Preserva rigorosamente a decisão clínica e dados prévios sem reprocessar LLM ou LangGraph.
@@ -661,6 +666,272 @@ class TriagemService:
             motivo=f"Objetos gravados com sucesso no bucket {bucket_nome}",
         )
         return triagem_atualizada
+
+    def obter_referencia_historico_oci(
+        self,
+        documento_id: str,
+    ) -> Optional[str]:
+        """Retorna o caminho do último snapshot confirmado."""
+        return self._historicos_oci.get(documento_id)
+
+    def persistir_historico_oci(
+        self,
+        documento_id: str,
+    ) -> str:
+        """
+        Grava um snapshot imutável dos eventos atuais.
+
+        Não reexecuta extração, grafo ou persistência do original.
+        Só registra a referência após confirmação do conector.
+        """
+        eventos = self._historico.get(documento_id)
+        if not eventos:
+            raise ValueError(
+                "Não há histórico para persistir."
+            )
+
+        doc = self._documentos_originais.get(documento_id)
+        if doc is not None:
+            eh_simulacao, _ = self._detectar_simulacao_oci(doc)
+            if eh_simulacao:
+                raise RuntimeError(
+                    "Histórico em modo de simulação "
+                    "não confirma gravação real."
+                )
+
+        storage = self._obter_storage()
+        if storage is None:
+            raise RuntimeError(
+                "Conector OCI indisponível para gravar o histórico."
+            )
+
+        referencia = self._historicos_oci.get(documento_id)
+        quantidade = self._historicos_quantidades.get(
+            documento_id
+        )
+
+        if referencia and quantidade == len(eventos):
+            return referencia
+
+        snapshot_id = uuid4().hex
+        caminho = (
+            f"historico/{documento_id}/{snapshot_id}.json"
+        )
+
+        payload = {
+            "versao_esquema": "2.0.0",
+            "documento_id": documento_id,
+            "snapshot_id": snapshot_id,
+            "eventos": [
+                evento.model_dump(mode="json")
+                for evento in eventos
+            ],
+        }
+        conteudo = json.dumps(
+            payload,
+            ensure_ascii=False,
+            indent=2,
+        ).encode("utf-8")
+
+        confirmacao = storage.enviar_bytes(
+            caminho,
+            conteudo,
+            tipo_conteudo="application/json",
+        )
+
+        if (
+            not isinstance(confirmacao, dict)
+            or confirmacao.get("status_backup") != "sucesso"
+            or confirmacao.get("caminho_objeto") != caminho
+        ):
+            raise RuntimeError(
+                "O conector não confirmou "
+                "a gravação do histórico."
+            )
+
+        self._historicos_oci[documento_id] = caminho
+        self._historicos_quantidades[
+            documento_id
+        ] = len(eventos)
+
+        return caminho
+
+    def _marcar_falha_historico(
+        self,
+        documento_id: str,
+        triagem: TriagemMediFlow,
+    ) -> TriagemMediFlow:
+        """
+        Preserva a decisão, mas sinaliza a pendência do histórico.
+
+        O resultado anterior é mantido para recuperação sem
+        nova análise ou reenvio dos documentos.
+        """
+        self._historicos_pendentes[
+            documento_id
+        ] = triagem.model_copy(deep=True)
+
+        armazenamento = triagem.armazenamento_oci.model_copy(
+            update={"status_backup": "falha"},
+            deep=True,
+        )
+        triagem_com_erro = triagem.model_copy(
+            update={
+                "status": StatusTriagem.ERRO_PERSISTENCIA,
+                "armazenamento_oci": armazenamento,
+                "erro": ErroProcessamento(
+                    codigo=CodigoErro.ERRO_PERSISTENCIA,
+                    mensagem=(
+                        "Original e resultado preservados. "
+                        "A gravação do histórico não foi "
+                        "confirmada; é necessária nova tentativa."
+                    ),
+                ),
+            },
+            deep=True,
+        )
+
+        self._triagens[documento_id] = triagem_com_erro
+        self._status_em_andamento[
+            documento_id
+        ] = StatusTriagem.ERRO_PERSISTENCIA
+
+        self.registrar_evento(
+            documento_id=documento_id,
+            tipo_evento="HISTORICO_PERSISTENCIA_FALHA",
+            status_anterior=triagem.status,
+            status_novo=StatusTriagem.ERRO_PERSISTENCIA,
+            ator="OCI_STORAGE_HISTORY",
+            motivo=(
+                "Gravação do histórico não confirmada. "
+                "Evento mantido em memória para nova tentativa."
+            ),
+        )
+        return triagem_com_erro
+
+    def executar_triagem(
+        self,
+        documento_id: str,
+    ) -> TriagemMediFlow:
+        """Executa o fluxo existente e persiste o histórico."""
+        triagem = self._executar_triagem_existente(
+            documento_id
+        )
+
+        doc = self._documentos_originais.get(documento_id)
+        if (
+            doc is not None
+            and self._detectar_simulacao_oci(doc)[0]
+        ):
+            return triagem
+
+        # Se original ou resultado falharam, mantém o erro
+        # e os eventos em memória. A recuperação existente
+        # deverá confirmar os documentos antes do histórico.
+        if triagem.status == StatusTriagem.ERRO_PERSISTENCIA:
+            return triagem
+
+        if (
+            triagem.armazenamento_oci.status_backup
+            != "sucesso"
+        ):
+            return triagem
+
+        try:
+            self.persistir_historico_oci(documento_id)
+        except Exception:
+            logger.exception(
+                "Gravação do histórico não confirmada para %s",
+                documento_id,
+            )
+            return self._marcar_falha_historico(
+                documento_id,
+                triagem,
+            )
+
+        return triagem
+
+    def reprocessar_persistencia_oci(
+        self,
+        documento_id: str,
+    ) -> TriagemMediFlow:
+        """
+        Recupera a persistência sem repetir a análise clínica.
+
+        Se somente o histórico falhou, grava apenas o histórico.
+        """
+        pendente = self._historicos_pendentes.get(
+            documento_id
+        )
+
+        if pendente is not None:
+            evento = self.registrar_evento(
+                documento_id=documento_id,
+                tipo_evento="HISTORICO_PERSISTENCIA_RECUPERADA",
+                status_anterior=StatusTriagem.ERRO_PERSISTENCIA,
+                status_novo=pendente.status,
+                ator="OCI_STORAGE_HISTORY",
+                motivo=(
+                    "Recuperação da gravação do histórico, "
+                    "preservando original e resultado."
+                ),
+            )
+
+            try:
+                self.persistir_historico_oci(documento_id)
+
+            except Exception as err:
+                # Retira o evento de recuperação porque
+                # a gravação não foi confirmada.
+                self._historico[documento_id] = [
+                    item
+                    for item in self._historico[documento_id]
+                    if item.evento_id != evento.evento_id
+                ]
+                logger.exception(
+                    "Nova tentativa do histórico falhou para %s",
+                    documento_id,
+                )
+                raise RuntimeError(
+                    "A gravação do histórico continua pendente."
+                ) from err
+
+            self._triagens[documento_id] = pendente
+            self._status_em_andamento[
+                documento_id
+            ] = pendente.status
+
+            del self._historicos_pendentes[documento_id]
+            return pendente
+
+        triagem = self._reprocessar_persistencia_existente(
+            documento_id
+        )
+
+        doc = self._documentos_originais.get(documento_id)
+        if (
+            doc is not None
+            and self._detectar_simulacao_oci(doc)[0]
+        ):
+            return triagem
+
+        if triagem.status == StatusTriagem.ERRO_PERSISTENCIA:
+            return triagem
+
+        try:
+            self.persistir_historico_oci(documento_id)
+
+        except Exception as err:
+            self._marcar_falha_historico(
+                documento_id,
+                triagem,
+            )
+            raise RuntimeError(
+                "Documentos preservados, "
+                "mas o histórico continua pendente."
+            ) from err
+
+        return triagem
 
     def obter_triagem(self, documento_id: str) -> Optional[TriagemMediFlow]:
         return self._triagens.get(documento_id)

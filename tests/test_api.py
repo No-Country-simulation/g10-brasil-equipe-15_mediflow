@@ -496,8 +496,18 @@ def test_reprocessar_persistencia_oci_via_api_com_sucesso(client):
         assert res_status.json()["concluido"] is True
 
         # 2. Restaura OCI (sem side_effect) e dispara retentativa
-        storage_mock.enviar_bytes.side_effect = None
-        storage_mock.enviar_bytes.return_value = {"status_backup": "sucesso"}
+        def confirmar_gravacao(
+            caminho,
+            conteudo,
+            tipo_conteudo="application/octet-stream",
+        ):
+            return {
+                "bucket": "mediflow-documentos",
+                "caminho_objeto": caminho,
+                "status_backup": "sucesso",
+            }
+
+        storage_mock.enviar_bytes.side_effect = confirmar_gravacao
 
         res_retry = client.post(f"/api/v1/triagens/{doc_id}/reprocessar-persistencia")
         assert res_retry.status_code == 200
@@ -507,6 +517,24 @@ def test_reprocessar_persistencia_oci_via_api_com_sucesso(client):
         assert data_retry["armazenamento_oci"]["status_backup"] == "sucesso"
         assert "resultado.json" in data_retry["armazenamento_oci"]["caminho_objeto"]
         assert data_retry["dados_extraidos"]["paciente"]["nome"] == "Maria Clara"
+
+        referencia_historico = (
+            triagem_service.obter_referencia_historico_oci(
+                doc_id
+            )
+        )
+
+        assert referencia_historico is not None
+        assert referencia_historico.startswith(
+            f"historico/{doc_id}/"
+        )
+
+        assert any(
+            chamada.args[0] == referencia_historico
+            for chamada in (
+                storage_mock.enviar_bytes.call_args_list
+            )
+        )
     finally:
         triagem_service._storage = None
 
