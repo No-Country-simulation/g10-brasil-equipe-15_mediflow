@@ -72,8 +72,8 @@
   --text-body: 16px;
   --text-body--line-height: 1.5;
   --text-heading: 30px;
-  --text-heading--line-height: 1;
-  --text-heading--letter-spacing: -1.5px;
+  --text-heading--line-height: 1.2;
+  --text-heading--letter-spacing: -0.45px;
 }
 
 @layer base {
