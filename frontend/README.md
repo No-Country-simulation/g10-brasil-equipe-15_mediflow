@@ -2,7 +2,7 @@
 
 Portal corporativo do MediFlow, construído a partir do design do Figma **MediFlow** e consumindo a API FastAPI do repositório.
 
-**Stack:** Vite 8 · React 19 · TypeScript · Tailwind CSS 4 · React Router
+**Stack:** Vite 8 · React 19 · TypeScript · Tailwind CSS 4 · React Router · Vitest
 
 ## Pré-requisitos
 
@@ -32,6 +32,8 @@ O portal abre em `http://localhost:5173`. Em desenvolvimento, as chamadas para `
 | `npm run build` | Checagem de tipos (`tsc -b`) e build de produção em `dist/` |
 | `npm run preview` | Serve o build de produção localmente |
 | `npm run lint` | Lint com oxlint |
+| `npm test` | Testes (Vitest + Testing Library) em execução única |
+| `npm run test:watch` | Testes em modo observação |
 
 ## Variáveis de ambiente
 
@@ -51,7 +53,8 @@ src/
 │   ├── ui/              Button, Badge, Field, Input, Select, SegmentedControl, Icon
 │   └── layout/          AppLayout, Sidebar, NavItem, UserCard, DemoNotice, PageHeader
 ├── lib/                 utilitários (cx)
-├── pages/               telas (hoje, apenas PlaceholderPage)
+├── pages/               telas (Nova triagem e placeholders)
+├── hooks/               useSubmeterTriagem
 ├── services/api.ts      cliente HTTP da API e ApiError
 ├── types/               contrato clínico (clinical.ts) e DTOs da API (api.ts)
 ├── index.css            Tailwind e tokens do design system (@theme)
@@ -74,7 +77,7 @@ Os ícones são SVGs com `currentColor`, usados pelo componente `<Icon name="plu
 
 | Rota | Tela | Estado |
 |---|---|---|
-| `/nova-triagem` | Nova triagem (Figma 01a/01b) | em desenvolvimento |
+| `/nova-triagem` | Nova triagem (Figma 01a/01b) | pronta, integrada à API |
 | `/triagens` | Triagens e filas | placeholder (a API ainda não lista triagens) |
 | `/meus-documentos` | Meus documentos | placeholder (a API ainda não tem autenticação) |
 
