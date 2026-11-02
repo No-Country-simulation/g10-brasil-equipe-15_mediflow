@@ -254,3 +254,109 @@ def test_pr13_412_com_original_diferente_nao_salva_resultado(
         mode="json"
     ) == decisao_antes
 
+
+@pytest.mark.parametrize(
+    "cenario",
+    ["metodo_ausente", "retorno_none"],
+)
+def test_pr13_412_sem_conferencia_interrompe_retry(
+    ambiente_isolado,
+    armazenamento_em_memoria,
+    cenario,
+):
+    TriagemService, _ = ambiente_isolado
+    storage, cliente, objetos = armazenamento_em_memoria
+
+    if cenario == "metodo_ausente":
+        # Representa um conector sem o método de leitura.
+        conector = SimpleNamespace(
+            enviar_bytes=storage.enviar_bytes
+        )
+        assert not hasattr(conector, "ler_bytes")
+
+    else:
+        # O método existe, mas não retorna conteúdo.
+        conector = storage
+        conector.ler_bytes = Mock(return_value=None)
+
+    servico = TriagemService(storage=conector)
+    servico._grafo = Mock(wraps=servico._grafo)
+
+    documento_id = servico.submeter_texto(
+        texto_ficticio()
+    )
+    caminho_original = (
+        f"recebidos/{documento_id}/original.txt"
+    )
+
+    # O original existe e é idêntico, mas o serviço
+    # precisa conseguir comprovar isso para prosseguir.
+    original = texto_ficticio().encode("utf-8")
+    objetos[caminho_original] = original
+
+    inicial = servico.executar_triagem(documento_id)
+
+    assert inicial.status.value == "ERRO_PERSISTENCIA"
+
+    qualidade_antes = inicial.qualidade.model_dump(
+        mode="json"
+    )
+    decisao_antes = (
+        inicial.decisao_roteamento.model_dump(
+            mode="json"
+        )
+    )
+    execucoes_antes = servico._grafo.invoke.call_count
+
+    # Limpa as chamadas anteriores, preservando
+    # o comportamento simulado do cliente.
+    cliente.put_object.reset_mock()
+
+    final = tentar_novamente(
+        servico,
+        documento_id,
+    )
+
+    # Nenhuma tentativa de gravar o JSON é permitida
+    # quando a conferência do original não foi possível.
+    assert all(
+        chamada.kwargs["object_name"]
+        == caminho_original
+        for chamada in cliente.put_object.call_args_list
+    ), (
+        "A retentativa não pode tentar gravar o JSON "
+        "sem conferir o original."
+    )
+
+    if cenario == "retorno_none":
+        conector.ler_bytes.assert_called_once_with(
+            caminho_original
+        )
+
+    assert final is not None
+    assert final.status.value == "ERRO_PERSISTENCIA"
+    assert (
+        final.armazenamento_oci.status_backup
+        != "sucesso"
+    )
+    assert final.erro is not None
+
+    # O original continua intacto e não há JSON novo.
+    assert objetos == {
+        caminho_original: original
+    }
+
+    # A falha de persistência não altera os resultados
+    # do agente nem provoca uma nova execução.
+    assert final.qualidade.model_dump(
+        mode="json"
+    ) == qualidade_antes
+
+    assert final.decisao_roteamento.model_dump(
+        mode="json"
+    ) == decisao_antes
+
+    assert (
+        servico._grafo.invoke.call_count
+        == execucoes_antes
+    )
