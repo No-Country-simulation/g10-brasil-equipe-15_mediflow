@@ -1,0 +1,42 @@
+{
+  "documento_id": "DOC-97E7E7B2",
+  "classificacao": {
+    "tipo_documento": "ATESTADO_MEDICO",
+    "especialidade": [
+      "Clínica Médica"
+    ],
+    "nivel_prioridade": "ROTINA",
+    "score_classificacao": 0.93
+  },
+  "dados_extraidos": {
+    "paciente": {
+      "nome": "Thiago Pelegrini Moraes",
+      "idade": 33
+    },
+    "medico": {
+      "nome": "Dra. Camila Ferreira Lopes",
+      "crm": {
+        "numero": "198765",
+        "uf": "SP"
+      }
+    },
+    "diagnostico": "Cefaleia tensional",
+    "cid": "G44.2",
+    "exames": [],
+    "medicamentos": [],
+    "urgencia": "NAO"
+  },
+  "qualidade": {
+    "campos_incertos": [],
+    "conflitos": [
+      {
+        "tipo": "DADOS_PACIENTE",
+        "campos": [
+          "paciente.nome"
+        ],
+        "gravidade": "BAIXA",
+        "descricao": "Variação de grafia do nome entre cabeçalho e corpo: Moraes x Morais, mesmo prontuário"
+      }
+    ]
+  }
+}

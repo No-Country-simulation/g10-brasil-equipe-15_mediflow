@@ -1,0 +1,38 @@
+{
+  "documento_id": "DOC-151FDCA7",
+  "classificacao": {
+    "tipo_documento": "LAUDO_EXAME_LABORATORIAL",
+    "especialidade": [
+      "Nefrologia",
+      "Clínica Médica"
+    ],
+    "nivel_prioridade": "ROTINA",
+    "score_classificacao": 0.93
+  },
+  "dados_extraidos": {
+    "paciente": {
+      "nome": "Nilo Sérgio Amarante",
+      "idade": 58
+    },
+    "medico": {
+      "nome": "Dra. Renata Silveira",
+      "crm": {
+        "numero": "145892",
+        "uf": "SP"
+      }
+    },
+    "diagnostico": "Hipercalemia leve com função renal discretamente alterada",
+    "cid": null,
+    "exames": [
+      "Potássio",
+      "Creatinina",
+      "Hemoglobina"
+    ],
+    "medicamentos": [],
+    "urgencia": "INDETERMINADO"
+  },
+  "qualidade": {
+    "campos_incertos": [],
+    "conflitos": []
+  }
+}
