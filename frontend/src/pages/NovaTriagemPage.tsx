@@ -1,6 +1,7 @@
 import { useId, useState } from 'react'
 import { PageHeader } from '../components/layout'
 import { CANAIS_ORIGEM } from '../components/triagem/canais'
+import { Dropzone } from '../components/triagem/Dropzone'
 import type { CanalOrigem } from '../components/triagem/canais'
 import { Button, Field, Input, SegmentedControl, Select } from '../components/ui'
 
@@ -22,6 +23,10 @@ export function NovaTriagemPage() {
   const [tipo, setTipo] = useState<TipoEnvio>('arquivo')
   const [canal, setCanal] = useState<CanalOrigem>(CANAIS_ORIGEM[0])
   const [documentoId, setDocumentoId] = useState('')
+  const [arquivo, setArquivo] = useState<File | null>(null)
+
+  // O texto entra no commit 11; o envio real, no commit 12.
+  const podeEnviar = tipo === 'arquivo' && arquivo !== null
 
   return (
     <>
@@ -44,10 +49,14 @@ export function NovaTriagemPage() {
             />
           </div>
 
-          {/* Conteúdo da aba: dropzone (commit 10) e campo de texto (commit 11). */}
-          <div className="flex min-h-55 items-center justify-center rounded-lg border-2 border-dashed border-border-dashed bg-subtle text-sm text-text-placeholder">
-            {tipo === 'arquivo' ? 'Área de envio de arquivo em construção' : 'Campo de texto em construção'}
-          </div>
+          {tipo === 'arquivo' ? (
+            <Dropzone arquivo={arquivo} onArquivoChange={setArquivo} />
+          ) : (
+            // Campo de texto clínico: commit 11.
+            <div className="flex min-h-55 items-center justify-center rounded-lg border-2 border-dashed border-border-dashed bg-subtle text-sm text-text-placeholder">
+              Campo de texto em construção
+            </div>
+          )}
 
           <div className="flex gap-4">
             <Field label="Canal de origem" htmlFor={idCanal}>
@@ -75,10 +84,10 @@ export function NovaTriagemPage() {
           </div>
 
           <div className="flex items-center gap-3 border-t border-border-subtle pt-5">
-            <Button type="submit" disabled>
+            <Button type="submit" disabled={!podeEnviar}>
               Enviar para triagem
             </Button>
-            <p className="m-0 text-caption text-text-placeholder">{AJUDA_SEM_CONTEUDO[tipo]}</p>
+            <p className="m-0 text-caption text-text-placeholder">{podeEnviar ? 'Pronto para enviar.' : AJUDA_SEM_CONTEUDO[tipo]}</p>
           </div>
         </form>
       </div>
