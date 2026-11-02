@@ -1,10 +1,13 @@
 import { useId, useState } from 'react'
+import type { FormEvent } from 'react'
 import { PageHeader } from '../components/layout'
 import { CANAIS_ORIGEM } from '../components/triagem/canais'
 import { Dropzone } from '../components/triagem/Dropzone'
+import { ResultadoEnvio } from '../components/triagem/ResultadoEnvio'
 import { TextoClinicoInput } from '../components/triagem/TextoClinicoInput'
 import type { CanalOrigem } from '../components/triagem/canais'
 import { Button, Field, Input, SegmentedControl, Select } from '../components/ui'
+import { useSubmeterTriagem } from '../hooks/useSubmeterTriagem'
 
 type TipoEnvio = 'arquivo' | 'texto'
 
@@ -29,8 +32,35 @@ export function NovaTriagemPage() {
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [texto, setTexto] = useState('')
 
-  // O envio real entra no commit 12.
-  const podeEnviar = tipo === 'arquivo' ? arquivo !== null : texto.trim().length > 0
+  const { estado, submeter, reiniciar } = useSubmeterTriagem()
+
+  const enviando = estado.fase === 'enviando'
+  const temConteudo = tipo === 'arquivo' ? arquivo !== null : texto.trim().length > 0
+  const podeEnviar = temConteudo && !enviando
+
+  async function aoEnviar(evento: FormEvent<HTMLFormElement>) {
+    evento.preventDefault()
+    if (!podeEnviar) return
+    const aceito =
+      tipo === 'arquivo' && arquivo
+        ? await submeter({ tipo, arquivo, canalOrigem: canal, documentoId })
+        : await submeter({ tipo: 'texto', texto, canalOrigem: canal, documentoId })
+
+    // Limpa o formulário para evitar reenvio acidental do mesmo documento.
+    if (aceito) {
+      setArquivo(null)
+      setTexto('')
+      setDocumentoId('')
+    }
+  }
+
+  /** Qualquer edição do formulário descarta o feedback do envio anterior. */
+  function editar<T>(definir: (valor: T) => void) {
+    return (valor: T) => {
+      reiniciar()
+      definir(valor)
+    }
+  }
 
   return (
     <>
@@ -42,21 +72,21 @@ export function NovaTriagemPage() {
       <div className="flex items-start gap-6">
         <form
           className="flex min-w-0 flex-1 flex-col gap-6 rounded-lg border border-border bg-surface p-7"
-          onSubmit={(evento) => evento.preventDefault()}
+          onSubmit={aoEnviar}
         >
           <div>
             <SegmentedControl
               aria-label="Tipo de envio"
               options={OPCOES_TIPO}
               value={tipo}
-              onChange={setTipo}
+              onChange={editar(setTipo)}
             />
           </div>
 
           {tipo === 'arquivo' ? (
-            <Dropzone arquivo={arquivo} onArquivoChange={setArquivo} />
+            <Dropzone arquivo={arquivo} onArquivoChange={editar(setArquivo)} />
           ) : (
-            <TextoClinicoInput value={texto} onChange={setTexto} />
+            <TextoClinicoInput value={texto} onChange={editar(setTexto)} />
           )}
 
           <div className="flex gap-4">
@@ -64,7 +94,7 @@ export function NovaTriagemPage() {
               <Select
                 id={idCanal}
                 value={canal}
-                onChange={(evento) => setCanal(evento.target.value as CanalOrigem)}
+                onChange={(evento) => editar(setCanal)(evento.target.value as CanalOrigem)}
               >
                 {CANAIS_ORIGEM.map((opcao) => (
                   <option key={opcao} value={opcao}>
@@ -78,7 +108,7 @@ export function NovaTriagemPage() {
                 id={idDocumento}
                 placeholder="Gerado automaticamente"
                 value={documentoId}
-                onChange={(evento) => setDocumentoId(evento.target.value)}
+                onChange={(evento) => editar(setDocumentoId)(evento.target.value)}
                 autoComplete="off"
               />
             </Field>
@@ -86,10 +116,12 @@ export function NovaTriagemPage() {
 
           <div className="flex items-center gap-3 border-t border-border-subtle pt-5">
             <Button type="submit" disabled={!podeEnviar}>
-              Enviar para triagem
+              {enviando ? 'Enviando…' : 'Enviar para triagem'}
             </Button>
             <p className="m-0 text-caption text-text-placeholder">{podeEnviar ? AJUDA_PRONTO : AJUDA_SEM_CONTEUDO[tipo]}</p>
           </div>
+
+          <ResultadoEnvio estado={estado} />
         </form>
       </div>
     </>
