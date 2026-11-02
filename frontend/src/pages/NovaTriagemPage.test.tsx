@@ -129,8 +129,33 @@ describe('NovaTriagemPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/Não foi possível conectar à API/)
   })
 
-  it('carrega o PDF de um caso de teste e marca o card como selecionado', async () => {
+  it('mostra o destino esperado de cada cenário, lido dos fixtures', () => {
+    render(<NovaTriagemPage />)
+
+    expect(screen.getByRole('button', { name: /Fluxo padrão/ })).toHaveTextContent('Esperado: Prontuário eletrônico')
+    expect(screen.getByRole('button', { name: /Caso urgente/ })).toHaveTextContent('Esperado: Fila de urgência + alerta')
+    expect(screen.getByRole('button', { name: /Caso ambíguo/ })).toHaveTextContent('Esperado: Fila de revisão humana')
+  })
+
+  it('carrega o PDF do fluxo padrão na aba Arquivo e marca o card como selecionado', async () => {
     fetchMock.mockResolvedValue(new Response('%PDF-1.4', { status: 200 }))
+    const user = userEvent.setup()
+    render(<NovaTriagemPage />)
+
+    const card = screen.getByRole('button', { name: /Fluxo padrão/ })
+    await user.click(card)
+
+    await waitFor(() => expect(card).toHaveAttribute('aria-pressed', 'true'))
+    expect(fetchMock).toHaveBeenCalledWith('/samples/rotina/Matriz_LaudoDeImagem_Texto.pdf')
+    expect(screen.getByText('Matriz_LaudoDeImagem_Texto.pdf')).toBeInTheDocument()
+    expect(botaoEnviar()).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: 'Remover' }))
+    expect(card).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('carrega o caso urgente como texto, na aba Texto', async () => {
+    fetchMock.mockResolvedValue(new Response('LAUDO DE TOMOGRAFIA\nTromboembolismo pulmonar agudo', { status: 200 }))
     const user = userEvent.setup()
     render(<NovaTriagemPage />)
 
@@ -138,11 +163,42 @@ describe('NovaTriagemPage', () => {
     await user.click(card)
 
     await waitFor(() => expect(card).toHaveAttribute('aria-pressed', 'true'))
-    expect(fetchMock).toHaveBeenCalledWith('/samples/02_laudo_urgencia_tep.pdf')
-    expect(screen.getByText('02_laudo_urgencia_tep.pdf')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith('/samples/urgente/Matriz_LaudoDeImagem_Pdf.txt')
+    expect(screen.getByLabelText('Conteúdo do documento')).toHaveValue(
+      'LAUDO DE TOMOGRAFIA\nTromboembolismo pulmonar agudo',
+    )
     expect(botaoEnviar()).toBeEnabled()
+  })
 
-    await user.click(screen.getByRole('button', { name: 'Remover' }))
-    expect(card).toHaveAttribute('aria-pressed', 'false')
+  it('envia o caso urgente como JSON de texto', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('Tromboembolismo pulmonar agudo', { status: 200 }))
+    fetchMock.mockResolvedValueOnce(json(202, criada))
+    const user = userEvent.setup()
+    render(<NovaTriagemPage />)
+
+    await user.click(screen.getByRole('button', { name: /Caso urgente/ }))
+    await waitFor(() => expect(botaoEnviar()).toBeEnabled())
+    await user.click(botaoEnviar())
+
+    await screen.findByText(/DOC-2026-1/)
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({
+      documento_texto: 'Tromboembolismo pulmonar agudo',
+    })
+  })
+
+  it('trocar de caso texto para caso arquivo limpa o texto', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('texto do TEP', { status: 200 }))
+    fetchMock.mockResolvedValueOnce(new Response('%PDF-1.4', { status: 200 }))
+    const user = userEvent.setup()
+    render(<NovaTriagemPage />)
+
+    await user.click(screen.getByRole('button', { name: /Caso urgente/ }))
+    await waitFor(() => expect(screen.getByLabelText('Conteúdo do documento')).toHaveValue('texto do TEP'))
+
+    await user.click(screen.getByRole('button', { name: /Caso ambíguo/ }))
+    await waitFor(() => expect(screen.getByText('Borda_Score_084.pdf')).toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: 'Texto' }))
+    expect(screen.getByLabelText('Conteúdo do documento')).toHaveValue('')
   })
 })

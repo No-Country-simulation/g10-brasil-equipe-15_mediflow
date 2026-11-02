@@ -2,7 +2,7 @@ import { useId, useState } from 'react'
 import type { FormEvent } from 'react'
 import { PageHeader } from '../components/layout'
 import { CANAIS_ORIGEM } from '../components/triagem/canais'
-import { carregarArquivoDoCaso } from '../components/triagem/casosTeste'
+import { carregarCaso } from '../components/triagem/casosTeste'
 import type { CasoTeste } from '../components/triagem/casosTeste'
 import { CasosTestePanel } from '../components/triagem/CasosTestePanel'
 import { Dropzone } from '../components/triagem/Dropzone'
@@ -61,15 +61,21 @@ export function NovaTriagemPage() {
     }
   }
 
-  /** Carrega o PDF do caso de teste no formulário e muda para a aba Arquivo. */
+  /** Carrega o documento do caso de teste no formulário, na aba Arquivo ou Texto conforme o caso. */
   async function selecionarCaso(caso: CasoTeste) {
     setErroCaso(null)
     setCarregandoCaso(true)
     try {
-      const arquivoDoCaso = await carregarArquivoDoCaso(caso)
+      const conteudo = await carregarCaso(caso)
       reiniciar()
-      setTipo('arquivo')
-      setArquivo(arquivoDoCaso)
+      setTipo(conteudo.tipo)
+      if (conteudo.tipo === 'arquivo') {
+        setArquivo(conteudo.arquivo)
+        setTexto('')
+      } else {
+        setTexto(conteudo.texto)
+        setArquivo(null)
+      }
       setCasoId(caso.id)
     } catch (erro) {
       setErroCaso(erro instanceof Error ? erro.message : 'Não foi possível carregar o exemplo.')
