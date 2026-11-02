@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import { PageHeader } from '../components/layout'
 import { CANAIS_ORIGEM } from '../components/triagem/canais'
 import { Dropzone } from '../components/triagem/Dropzone'
+import { TextoClinicoInput } from '../components/triagem/TextoClinicoInput'
 import type { CanalOrigem } from '../components/triagem/canais'
 import { Button, Field, Input, SegmentedControl, Select } from '../components/ui'
 
@@ -17,6 +18,8 @@ const AJUDA_SEM_CONTEUDO: Record<TipoEnvio, string> = {
   texto: 'Cole o texto para enviar.',
 }
 
+const AJUDA_PRONTO = 'Validação final de formato e tamanho também acontece na API.'
+
 export function NovaTriagemPage() {
   const idCanal = useId()
   const idDocumento = useId()
@@ -24,9 +27,10 @@ export function NovaTriagemPage() {
   const [canal, setCanal] = useState<CanalOrigem>(CANAIS_ORIGEM[0])
   const [documentoId, setDocumentoId] = useState('')
   const [arquivo, setArquivo] = useState<File | null>(null)
+  const [texto, setTexto] = useState('')
 
-  // O texto entra no commit 11; o envio real, no commit 12.
-  const podeEnviar = tipo === 'arquivo' && arquivo !== null
+  // O envio real entra no commit 12.
+  const podeEnviar = tipo === 'arquivo' ? arquivo !== null : texto.trim().length > 0
 
   return (
     <>
@@ -52,10 +56,7 @@ export function NovaTriagemPage() {
           {tipo === 'arquivo' ? (
             <Dropzone arquivo={arquivo} onArquivoChange={setArquivo} />
           ) : (
-            // Campo de texto clínico: commit 11.
-            <div className="flex min-h-55 items-center justify-center rounded-lg border-2 border-dashed border-border-dashed bg-subtle text-sm text-text-placeholder">
-              Campo de texto em construção
-            </div>
+            <TextoClinicoInput value={texto} onChange={setTexto} />
           )}
 
           <div className="flex gap-4">
@@ -87,7 +88,7 @@ export function NovaTriagemPage() {
             <Button type="submit" disabled={!podeEnviar}>
               Enviar para triagem
             </Button>
-            <p className="m-0 text-caption text-text-placeholder">{podeEnviar ? 'Pronto para enviar.' : AJUDA_SEM_CONTEUDO[tipo]}</p>
+            <p className="m-0 text-caption text-text-placeholder">{podeEnviar ? AJUDA_PRONTO : AJUDA_SEM_CONTEUDO[tipo]}</p>
           </div>
         </form>
       </div>
