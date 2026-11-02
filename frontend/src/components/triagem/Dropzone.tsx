@@ -15,7 +15,9 @@ const NOTA = 'PDF, JPG, PNG, WEBP ou TXT · até 10 MB · até 20 páginas'
 export function Dropzone({ arquivo, onArquivoChange }: DropzoneProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [arrastando, setArrastando] = useState(false)
-  const [erro, setErro] = useState<string | null>(null)
+  const [erroInterno, setErro] = useState<string | null>(null)
+  // Um arquivo carregado de fora (ex.: caso de teste) invalida um erro antigo do dropzone.
+  const erro = arquivo ? null : erroInterno
 
   function abrirSeletor() {
     inputRef.current?.click()

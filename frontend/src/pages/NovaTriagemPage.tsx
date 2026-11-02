@@ -2,6 +2,9 @@ import { useId, useState } from 'react'
 import type { FormEvent } from 'react'
 import { PageHeader } from '../components/layout'
 import { CANAIS_ORIGEM } from '../components/triagem/canais'
+import { carregarArquivoDoCaso } from '../components/triagem/casosTeste'
+import type { CasoTeste } from '../components/triagem/casosTeste'
+import { CasosTestePanel } from '../components/triagem/CasosTestePanel'
 import { Dropzone } from '../components/triagem/Dropzone'
 import { ResultadoEnvio } from '../components/triagem/ResultadoEnvio'
 import { TextoClinicoInput } from '../components/triagem/TextoClinicoInput'
@@ -32,6 +35,9 @@ export function NovaTriagemPage() {
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [texto, setTexto] = useState('')
 
+  const [casoId, setCasoId] = useState<CasoTeste['id'] | null>(null)
+  const [carregandoCaso, setCarregandoCaso] = useState(false)
+  const [erroCaso, setErroCaso] = useState<string | null>(null)
   const { estado, submeter, reiniciar } = useSubmeterTriagem()
 
   const enviando = estado.fase === 'enviando'
@@ -49,9 +55,34 @@ export function NovaTriagemPage() {
     // Limpa o formulário para evitar reenvio acidental do mesmo documento.
     if (aceito) {
       setArquivo(null)
+      setCasoId(null)
       setTexto('')
       setDocumentoId('')
     }
+  }
+
+  /** Carrega o PDF do caso de teste no formulário e muda para a aba Arquivo. */
+  async function selecionarCaso(caso: CasoTeste) {
+    setErroCaso(null)
+    setCarregandoCaso(true)
+    try {
+      const arquivoDoCaso = await carregarArquivoDoCaso(caso)
+      reiniciar()
+      setTipo('arquivo')
+      setArquivo(arquivoDoCaso)
+      setCasoId(caso.id)
+    } catch (erro) {
+      setErroCaso(erro instanceof Error ? erro.message : 'Não foi possível carregar o exemplo.')
+    } finally {
+      setCarregandoCaso(false)
+    }
+  }
+
+  /** Troca ou remove o arquivo manualmente: deixa de ser "um caso de teste carregado". */
+  function trocarArquivo(novo: File | null) {
+    reiniciar()
+    setCasoId(null)
+    setArquivo(novo)
   }
 
   /** Qualquer edição do formulário descarta o feedback do envio anterior. */
@@ -84,7 +115,7 @@ export function NovaTriagemPage() {
           </div>
 
           {tipo === 'arquivo' ? (
-            <Dropzone arquivo={arquivo} onArquivoChange={editar(setArquivo)} />
+            <Dropzone arquivo={arquivo} onArquivoChange={trocarArquivo} />
           ) : (
             <TextoClinicoInput value={texto} onChange={editar(setTexto)} />
           )}
@@ -123,6 +154,13 @@ export function NovaTriagemPage() {
 
           <ResultadoEnvio estado={estado} />
         </form>
+
+        <CasosTestePanel
+          selecionadoId={casoId}
+          carregando={carregandoCaso}
+          erro={erroCaso}
+          onSelecionar={selecionarCaso}
+        />
       </div>
     </>
   )
