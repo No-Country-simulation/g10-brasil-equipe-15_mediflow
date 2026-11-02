@@ -14,8 +14,8 @@ from unittest.mock import Mock
 import pytest
 from pydantic import ValidationError
 
-from src.workflow.gemini_adapter import (
-    entrada_de_envelope_gemini,
+from src.workflow.extraction_adapter import (
+    entrada_do_envelope,
 )
 from src.workflow.graph import criar_grafo
 
@@ -140,7 +140,7 @@ def test_servico_envelope_adaptador_grafo(
     )
     antes = deepcopy(envelope)
 
-    entrada = entrada_de_envelope_gemini(
+    entrada = entrada_do_envelope(
         documento_id=exemplo["documento_id"],
         classificacao=exemplo["classificacao"],
         envelope=envelope,
@@ -216,7 +216,7 @@ def test_medicamento_preservado(
         exemplo_rotina,
     )
 
-    entrada = entrada_de_envelope_gemini(
+    entrada = entrada_do_envelope(
         documento_id="DOC-MEDICAMENTO",
         classificacao=exemplo_rotina["classificacao"],
         envelope=envelope,
@@ -248,7 +248,7 @@ def test_timeout_vai_para_revisao(
         )
     )
 
-    entrada = entrada_de_envelope_gemini(
+    entrada = entrada_do_envelope(
         documento_id="DOC-FALHA-IA",
         classificacao=exemplo_rotina["classificacao"],
         envelope=envelope,
@@ -293,7 +293,7 @@ def test_sinal_invalido_nao_e_convertido_em_lista_vazia(
     with pytest.raises(
         (ValueError, ValidationError)
     ):
-        entrada_de_envelope_gemini(
+        entrada_do_envelope(
             documento_id="DOC-INVALIDO",
             classificacao=exemplo_rotina["classificacao"],
             envelope=envelope,
@@ -314,7 +314,7 @@ def test_limiar_vem_da_aplicacao(
     # substituir a configuração da aplicação.
     envelope["limiar"] = 0.01
 
-    entrada = entrada_de_envelope_gemini(
+    entrada = entrada_do_envelope(
         documento_id="DOC-LIMIAR",
         classificacao=exemplo_rotina["classificacao"],
         envelope=envelope,
