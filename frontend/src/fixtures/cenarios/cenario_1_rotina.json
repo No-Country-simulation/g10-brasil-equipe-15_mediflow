@@ -1,0 +1,51 @@
+{
+  "status": "PROCESSADO",
+  "documento_id": "DOC-2026-001",
+  "classificacao": {
+    "tipo_documento": "LAUDO_EXAME_IMAGEM",
+    "especialidade": "Radiologia",
+    "nivel_prioridade": "Rotina",
+    "score_confianca_classificacao": 0.96
+  },
+  "dados_extraidos": {
+    "paciente": {
+      "nome": "João Carlos da Silva",
+      "idade": 42,
+      "cpf": "123.456.789-00"
+    },
+    "medico_solicitante": {
+      "nome": "Dr. Roberto Mendes",
+      "crm": "112345-SP",
+      "crm_detalhado": null
+    },
+    "exame_ou_procedimento": "RADIOGRAFIA DE TÓRAX (PA E PERFIL)",
+    "exames_laboratoriais": [],
+    "diagnostico_principal": "Radiografia de tórax dentro dos limites da normalidade.",
+    "cid_extraido": null,
+    "medicamentos": [],
+    "score_confianca_extracao": 0.94
+  },
+  "qualidade": {
+    "score_classificacao": 0.96,
+    "score_extracao": 0.94,
+    "score_combinado": 0.94,
+    "limiar_aplicado": 0.85,
+    "campos_ausentes": [],
+    "campos_incerto": [],
+    "conflitos": []
+  },
+  "decisao_roteamento": {
+    "destino_principal": "Prontuario_Eletronico_Paciente",
+    "destinos": [
+      "Prontuario_Eletronico_Paciente"
+    ],
+    "requer_auditoria_humana": false,
+    "justificativa_roteamento": "Laudo de rotina sem alterações e com score de confiança elevado (0.94 >= 0.85).",
+    "notificacao_gerada": null
+  },
+  "armazenamento_oci": {
+    "bucket": "mediflow-documentos-clinicos",
+    "caminho_objeto": "processados/rotina/DOC-2026-001.json",
+    "status_backup": "sucesso"
+  }
+}
