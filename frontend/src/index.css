@@ -40,6 +40,8 @@
 
   /* Marca */
   --color-primary: #1f5bd6;
+  /* Não existe no Figma: hover do botão primário (primário ~8% mais escuro). */
+  --color-primary-hover: #1a4fba;
 
   /* Badges (tons de status) */
   --color-status-neutral-bg: #eef1f5;
