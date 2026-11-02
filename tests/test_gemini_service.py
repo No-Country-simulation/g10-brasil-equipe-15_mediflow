@@ -125,8 +125,7 @@ class TestGeminiService:
         assert isinstance(resultado, DadosClinicosExtraidos)
         assert resultado.score_confianca_extracao == 0.0
         assert resultado.cid_extraido is None
-        assert "Falha de comunicação" in (resultado.diagnostico_principal or "")
-
+        assert resultado.diagnostico_principal is None
     def test_fallback_quando_api_estoura_timeout_ou_lanca_excecao(self):
         """Verifica se timeout na API aciona o fallback seguro sem lançar erro 500."""
         mock_model = MagicMock()
