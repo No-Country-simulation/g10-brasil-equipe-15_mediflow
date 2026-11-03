@@ -1,5 +1,6 @@
 import { useId, useState } from 'react'
 import type { FormEvent } from 'react'
+import { useNavigate } from 'react-router'
 import { PageHeader } from '../components/layout'
 import { CANAIS_ORIGEM } from '../components/triagem/canais'
 import { carregarCaso } from '../components/triagem/casosTeste'
@@ -11,6 +12,8 @@ import { TextoClinicoInput } from '../components/triagem/TextoClinicoInput'
 import type { CanalOrigem } from '../components/triagem/canais'
 import { Button, Field, Input, SegmentedControl, Select } from '../components/ui'
 import { useSubmeterTriagem } from '../hooks/useSubmeterTriagem'
+import { rotuloFormato } from '../lib/dadosEnvio'
+import type { DadosEnvio } from '../lib/dadosEnvio'
 
 type TipoEnvio = 'arquivo' | 'texto'
 
@@ -27,6 +30,7 @@ const AJUDA_SEM_CONTEUDO: Record<TipoEnvio, string> = {
 const AJUDA_PRONTO = 'Validação final de formato e tamanho também acontece na API.'
 
 export function NovaTriagemPage() {
+  const navigate = useNavigate()
   const idCanal = useId()
   const idDocumento = useId()
   const [tipo, setTipo] = useState<TipoEnvio>('arquivo')
@@ -47,18 +51,19 @@ export function NovaTriagemPage() {
   async function aoEnviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault()
     if (!podeEnviar) return
-    const aceito =
+    const resposta =
       tipo === 'arquivo' && arquivo
         ? await submeter({ tipo, arquivo, canalOrigem: canal, documentoId })
         : await submeter({ tipo: 'texto', texto, canalOrigem: canal, documentoId })
+    if (!resposta) return
 
-    // Limpa o formulário para evitar reenvio acidental do mesmo documento.
-    if (aceito) {
-      setArquivo(null)
-      setCasoId(null)
-      setTexto('')
-      setDocumentoId('')
+    // Aceito (202): segue para o acompanhamento. O formulário é desmontado, então não precisa ser limpo.
+    const envio: DadosEnvio = {
+      formato: rotuloFormato(tipo === 'arquivo' ? arquivo : null),
+      canal,
+      enviadoEm: new Date().toISOString(),
     }
+    navigate(`/nova-triagem/processamento/${encodeURIComponent(resposta.documento_id)}`, { state: envio })
   }
 
   /** Carrega o documento do caso de teste no formulário, na aba Arquivo ou Texto conforme o caso. */

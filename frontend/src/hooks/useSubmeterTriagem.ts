@@ -19,9 +19,9 @@ export function useSubmeterTriagem() {
   // Impede envio duplicado mesmo antes da próxima renderização (duplo clique).
   const emAndamento = useRef(false)
 
-  /** Devolve `true` quando a API aceitou o documento (202). */
-  const submeter = useCallback(async (entrada: EntradaTriagem): Promise<boolean> => {
-    if (emAndamento.current) return false
+  /** Devolve a resposta 202 quando a API aceitou o documento, ou `null` se não aceitou (ou já há envio em curso). */
+  const submeter = useCallback(async (entrada: EntradaTriagem): Promise<TriagemCriadaResponse | null> => {
+    if (emAndamento.current) return null
     emAndamento.current = true
     setEstado({ fase: 'enviando' })
 
@@ -40,10 +40,10 @@ export function useSubmeterTriagem() {
               documento_id: documentoId,
             })
       setEstado({ fase: 'sucesso', resposta })
-      return true
+      return resposta
     } catch (erro) {
       setEstado({ fase: 'erro', mensagem: mensagemDeErro(erro) })
-      return false
+      return null
     } finally {
       emAndamento.current = false
     }
