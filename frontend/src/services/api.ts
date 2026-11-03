@@ -2,9 +2,12 @@ import type {
   CriarTriagemArquivoRequest,
   CriarTriagemTextoRequest,
   ErroEnvelope,
+  EventoHistorico,
   HealthResponse,
+  StatusTriagemResponse,
   TriagemCriadaResponse,
 } from '../types/api'
+import type { TriagemMediFlow } from '../types/clinical'
 
 /** Vazio = mesma origem (em dev, o proxy do Vite encaminha /api para o FastAPI). */
 const BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
@@ -76,4 +79,24 @@ export function submeterTriagemTexto(dados: CriarTriagemTextoRequest): Promise<T
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tipo_arquivo: 'TEXTO', ...dados }),
   })
+}
+
+const caminhoTriagem = (documentoId: string) => `/api/v1/triagens/${encodeURIComponent(documentoId)}`
+
+/** Consulta leve para polling: estado atual e se a triagem já terminou. */
+export function obterStatus(documentoId: string, sinal?: AbortSignal): Promise<StatusTriagemResponse> {
+  return requisitar<StatusTriagemResponse>(`${caminhoTriagem(documentoId)}/status`, { signal: sinal })
+}
+
+/** Linha do tempo de eventos de auditoria, em ordem cronológica. */
+export function obterHistorico(documentoId: string, sinal?: AbortSignal): Promise<EventoHistorico[]> {
+  return requisitar<EventoHistorico[]>(`${caminhoTriagem(documentoId)}/historico`, { signal: sinal })
+}
+
+/**
+ * Resultado completo da triagem. Chamar só depois de `obterStatus` devolver `concluido`:
+ * se ainda não houver resultado, a API executa o pipeline na hora.
+ */
+export function obterTriagem(documentoId: string, sinal?: AbortSignal): Promise<TriagemMediFlow> {
+  return requisitar<TriagemMediFlow>(caminhoTriagem(documentoId), { signal: sinal })
 }

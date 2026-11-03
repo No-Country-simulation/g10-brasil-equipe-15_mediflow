@@ -6,6 +6,7 @@ const POR_CODIGO: Record<string, string> = {
   ARQUIVO_MAIOR_QUE_LIMITE: 'O arquivo excede o limite de 10 MB.',
   PDF_PROTEGIDO: 'PDF protegido por senha não pode ser processado.',
   PDF_CORROMPIDO: 'O PDF está corrompido ou truncado.',
+  DOCUMENTO_NAO_ENCONTRADO: 'Documento não encontrado. Confira o ID ou envie uma nova triagem.',
 }
 
 /** Texto amigável para exibir ao usuário a partir de um erro da API ou de rede. */

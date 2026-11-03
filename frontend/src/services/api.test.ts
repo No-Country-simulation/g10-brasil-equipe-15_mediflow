@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, health, submeterTriagemArquivo, submeterTriagemTexto } from './api'
+import {
+  ApiError,
+  health,
+  obterHistorico,
+  obterStatus,
+  obterTriagem,
+  submeterTriagemArquivo,
+  submeterTriagemTexto,
+} from './api'
 
 const criada = {
   documento_id: 'DOC-1',
@@ -71,5 +79,49 @@ describe('cliente da API', () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
 
     await expect(health()).rejects.toMatchObject({ status: 0, codigo: 'REDE' })
+  })
+
+  describe('consulta de triagem', () => {
+    it('obterStatus chama /status do documento e repassa o sinal de cancelamento', async () => {
+      const status = { documento_id: 'DOC-1', status: 'PROCESSANDO', destinos: [], requer_auditoria_humana: false, concluido: false }
+      fetchMock.mockResolvedValue(responder(200, status))
+      const controle = new AbortController()
+
+      await expect(obterStatus('DOC-1', controle.signal)).resolves.toEqual(status)
+
+      expect(fetchMock).toHaveBeenCalledWith('/api/v1/triagens/DOC-1/status', { signal: controle.signal })
+    })
+
+    it('obterHistorico devolve a lista de eventos', async () => {
+      const eventos = [{ evento_id: 'E1', documento_id: 'DOC-1', tipo_evento: 'RECEBIDO', status_novo: 'RECEBIDO' }]
+      fetchMock.mockResolvedValue(responder(200, eventos))
+
+      await expect(obterHistorico('DOC-1')).resolves.toEqual(eventos)
+      expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/triagens/DOC-1/historico')
+    })
+
+    it('obterTriagem chama o recurso do documento', async () => {
+      fetchMock.mockResolvedValue(responder(200, { documento_id: 'DOC-1', status: 'PROCESSADO' }))
+
+      await obterTriagem('DOC-1')
+
+      expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/triagens/DOC-1')
+    })
+
+    it('codifica o ID na URL', async () => {
+      fetchMock.mockResolvedValue(responder(200, []))
+
+      await obterHistorico('a/b c')
+
+      expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/triagens/a%2Fb%20c/historico')
+    })
+
+    it('converte o 404 do documento em ApiError', async () => {
+      fetchMock.mockResolvedValue(
+        responder(404, { codigo: 'DOCUMENTO_NAO_ENCONTRADO', mensagem: "Documento 'X' não encontrado." }),
+      )
+
+      await expect(obterStatus('X')).rejects.toMatchObject({ status: 404, codigo: 'DOCUMENTO_NAO_ENCONTRADO' })
+    })
   })
 })

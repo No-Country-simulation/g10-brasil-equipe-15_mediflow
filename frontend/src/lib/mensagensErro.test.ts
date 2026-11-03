@@ -10,6 +10,12 @@ describe('mensagemDeErro', () => {
     expect(mensagemDeErro(new ApiError(415, 'FORMATO_NAO_SUPORTADO', 'x'))).toMatch(/Formato não suportado/)
   })
 
+  it('explica quando o documento não existe (404)', () => {
+    expect(mensagemDeErro(new ApiError(404, 'DOCUMENTO_NAO_ENCONTRADO', "Documento 'X' não encontrado."))).toMatch(
+      /Documento não encontrado/,
+    )
+  })
+
   it('repassa a mensagem da API em erros 400/422 sem código mapeado', () => {
     expect(mensagemDeErro(new ApiError(422, 'CAMPOS_INVALIDOS', 'Arquivo vazio (0 bytes).'))).toBe(
       'Arquivo vazio (0 bytes).',
