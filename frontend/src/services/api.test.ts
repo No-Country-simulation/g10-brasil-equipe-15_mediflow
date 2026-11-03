@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ApiError,
   health,
@@ -122,6 +122,32 @@ describe('cliente da API', () => {
       )
 
       await expect(obterStatus('X')).rejects.toMatchObject({ status: 404, codigo: 'DOCUMENTO_NAO_ENCONTRADO' })
+    })
+  })
+
+  describe('modo demo (VITE_USAR_FIXTURES)', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    it('desligado: chama a API de verdade', async () => {
+      vi.stubEnv('VITE_USAR_FIXTURES', 'false')
+      fetchMock.mockResolvedValue(responder(200, { status: 'healthy', versao: '2.0.0', servicos: {} }))
+
+      await health()
+
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('ligado: usa o simulador e não faz nenhuma chamada de rede', async () => {
+      vi.stubEnv('VITE_USAR_FIXTURES', 'true')
+
+      await expect(health()).resolves.toMatchObject({ versao: 'demo' })
+      await expect(obterStatus('DOC-INEXISTENTE')).rejects.toMatchObject({ status: 404 })
+      await expect(obterHistorico('DOC-INEXISTENTE')).rejects.toBeInstanceOf(ApiError)
+      await expect(obterTriagem('DOC-INEXISTENTE')).rejects.toMatchObject({ codigo: 'DOCUMENTO_NAO_ENCONTRADO' })
+
+      expect(fetchMock).not.toHaveBeenCalled()
     })
   })
 })

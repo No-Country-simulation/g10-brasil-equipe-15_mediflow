@@ -9,23 +9,13 @@ import type {
 } from '../types/api'
 import type { TriagemMediFlow } from '../types/clinical'
 
+import { ApiError } from './erros'
+import * as simulada from './apiSimulada'
+
+export { ApiError }
+
 /** Vazio = mesma origem (em dev, o proxy do Vite encaminha /api para o FastAPI). */
 const BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
-
-/** Erro de chamada à API. `codigo` segue o envelope da API (ou REDE / RESPOSTA_INVALIDA). */
-export class ApiError extends Error {
-  readonly status: number
-  readonly codigo: string
-  readonly detalhes?: unknown
-
-  constructor(status: number, codigo: string, mensagem: string, detalhes?: unknown) {
-    super(mensagem)
-    this.name = 'ApiError'
-    this.status = status
-    this.codigo = codigo
-    this.detalhes = detalhes
-  }
-}
 
 function ehEnvelope(valor: unknown): valor is ErroEnvelope {
   return (
@@ -59,12 +49,19 @@ async function requisitar<T>(caminho: string, init?: RequestInit): Promise<T> {
   return corpo as T
 }
 
+/** Modo demo (`VITE_USAR_FIXTURES=true`): as chamadas vão para um simulador local, sem backend. */
+function modoDemo(): boolean {
+  return import.meta.env.VITE_USAR_FIXTURES === 'true'
+}
+
 export function health(): Promise<HealthResponse> {
+  if (modoDemo()) return simulada.health()
   return requisitar<HealthResponse>('/api/v1/health')
 }
 
 /** Envia um documento (PDF, imagem ou TXT) como multipart/form-data. */
 export function submeterTriagemArquivo(dados: CriarTriagemArquivoRequest): Promise<TriagemCriadaResponse> {
+  if (modoDemo()) return simulada.submeterTriagemArquivo(dados)
   const form = new FormData()
   form.append('file', dados.file)
   if (dados.documento_id) form.append('documento_id', dados.documento_id)
@@ -74,6 +71,7 @@ export function submeterTriagemArquivo(dados: CriarTriagemArquivoRequest): Promi
 
 /** Envia texto clínico como JSON. */
 export function submeterTriagemTexto(dados: CriarTriagemTextoRequest): Promise<TriagemCriadaResponse> {
+  if (modoDemo()) return simulada.submeterTriagemTexto(dados)
   return requisitar<TriagemCriadaResponse>('/api/v1/triagens', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -85,11 +83,13 @@ const caminhoTriagem = (documentoId: string) => `/api/v1/triagens/${encodeURICom
 
 /** Consulta leve para polling: estado atual e se a triagem já terminou. */
 export function obterStatus(documentoId: string, sinal?: AbortSignal): Promise<StatusTriagemResponse> {
+  if (modoDemo()) return simulada.obterStatus(documentoId)
   return requisitar<StatusTriagemResponse>(`${caminhoTriagem(documentoId)}/status`, { signal: sinal })
 }
 
 /** Linha do tempo de eventos de auditoria, em ordem cronológica. */
 export function obterHistorico(documentoId: string, sinal?: AbortSignal): Promise<EventoHistorico[]> {
+  if (modoDemo()) return simulada.obterHistorico(documentoId)
   return requisitar<EventoHistorico[]>(`${caminhoTriagem(documentoId)}/historico`, { signal: sinal })
 }
 
@@ -98,5 +98,6 @@ export function obterHistorico(documentoId: string, sinal?: AbortSignal): Promis
  * se ainda não houver resultado, a API executa o pipeline na hora.
  */
 export function obterTriagem(documentoId: string, sinal?: AbortSignal): Promise<TriagemMediFlow> {
+  if (modoDemo()) return simulada.obterTriagem(documentoId)
   return requisitar<TriagemMediFlow>(caminhoTriagem(documentoId), { signal: sinal })
 }

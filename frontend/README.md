@@ -43,6 +43,15 @@ Copie `.env.example` para `.env` para sobrescrever os padrões:
 |---|---|---|
 | `VITE_API_URL` | vazio (mesma origem) | URL base da API usada pelo cliente HTTP. Em produção, aponte para o endereço do backend. |
 | `VITE_PROXY_TARGET` | `http://localhost:8000` | Destino do proxy `/api` no servidor de desenvolvimento |
+| `VITE_USAR_FIXTURES` | `false` | `true` liga o modo demo (veja abaixo) |
+
+## Modo demo (sem backend)
+
+Com `VITE_USAR_FIXTURES=true` no `.env` (ou `VITE_USAR_FIXTURES=true npm run dev`), o cliente da API passa a usar um simulador local (`src/services/apiSimulada.ts`). Não precisa de backend nem de chave do Gemini.
+
+- O envio é aceito (202) e a tela de Processamento acompanha a triagem: `RECEBIDO` (2 s) → `PROCESSANDO` (10 s) → estado final.
+- O cenário final depende do documento enviado. Os três casos de teste da Nova triagem cobrem os três: rotina (`PROCESSADO`, prontuário), urgente (`PROCESSADO`, fila de urgência com alerta) e ambíguo (`EM_REVISAO`, revisão humana). Qualquer outro documento cai em rotina.
+- As respostas finais vêm dos JSONs de `src/fixtures/` (cenários da demo). Os dados simulados ficam no `sessionStorage`, então sobrevivem a um F5 mas não a fechar a aba.
 
 ## Estrutura
 
@@ -78,6 +87,8 @@ Os ícones são SVGs com `currentColor`, usados pelo componente `<Icon name="plu
 | Rota | Tela | Estado |
 |---|---|---|
 | `/nova-triagem` | Nova triagem (Figma 01a/01b) | pronta, integrada à API |
+| `/nova-triagem/processamento/:id` | Processamento (Figma 02a/02b) | pronta, acompanha `/status` a cada 2 s |
+| `/resultado/:id` | Resultado | placeholder (Fase 3) |
 | `/triagens` | Triagens e filas | placeholder (a API ainda não lista triagens) |
 | `/meus-documentos` | Meus documentos | placeholder (a API ainda não tem autenticação) |
 
