@@ -1,4 +1,6 @@
+export { AvisoSaidaDaTela } from './AvisoSaidaDaTela'
 export { BarraProgresso } from './BarraProgresso'
+export { CardEnvio } from './CardEnvio'
 export { EtapaItem } from './EtapaItem'
 export { ListaEtapas } from './ListaEtapas'
 export { MarcadorEtapa } from './MarcadorEtapa'

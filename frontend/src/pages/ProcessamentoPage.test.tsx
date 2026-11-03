@@ -53,9 +53,9 @@ describe('ProcessamentoPage', () => {
   })
 
   /** Os cliques usam fireEvent: o userEvent não reconhece os timers falsos do Vitest e trava. */
-  async function abrir() {
+  async function abrir(estado?: unknown) {
     render(
-      <MemoryRouter initialEntries={['/nova-triagem/processamento/DOC-CLIN-2026-8942']}>
+      <MemoryRouter initialEntries={[{ pathname: '/nova-triagem/processamento/DOC-CLIN-2026-8942', state: estado }]}>
         <Routes>
           <Route path="/nova-triagem" element={<p>Tela Nova triagem</p>} />
           <Route path="/nova-triagem/processamento/:documentoId" element={<ProcessamentoPage />} />
@@ -165,6 +165,22 @@ describe('ProcessamentoPage', () => {
 
     expect(screen.queryByText('Não foi possível acompanhar a triagem')).not.toBeInTheDocument()
     expect(screen.getByText('PROCESSADO')).toBeInTheDocument()
+  })
+
+  it('mostra no card Envio os dados vindos do formulário e o aviso de saída', async () => {
+    await abrir({ formato: 'PDF', canal: 'Ambulatório', enviadoEm: '2026-10-21T13:47:00.000Z' })
+
+    expect(screen.getByText('Formato').nextElementSibling).toHaveTextContent('PDF')
+    expect(screen.getByText('Canal').nextElementSibling).toHaveTextContent('Ambulatório')
+    expect(screen.getByText('Resposta').nextElementSibling).toHaveTextContent('202 Accepted')
+    expect(screen.getByRole('heading', { name: 'Pode sair desta tela' })).toBeInTheDocument()
+  })
+
+  it('sem dados do formulário (acesso direto) o card Envio mostra "—"', async () => {
+    await abrir()
+
+    expect(screen.getByText('Formato').nextElementSibling).toHaveTextContent('—')
+    expect(screen.getByText('Resposta').nextElementSibling).toHaveTextContent('—')
   })
 
   it('"Voltar" e "Simular de novo" levam à Nova triagem', async () => {

@@ -1,7 +1,8 @@
-import { Link, useNavigate, useParams } from 'react-router'
-import { BarraProgresso, ListaEtapas } from '../components/processamento'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
+import { AvisoSaidaDaTela, BarraProgresso, CardEnvio, ListaEtapas } from '../components/processamento'
 import { Badge, Button, Icon } from '../components/ui'
 import { useAcompanharTriagem } from '../hooks/useAcompanharTriagem'
+import { lerDadosEnvio } from '../lib/dadosEnvio'
 import { badgeDoStatus, derivarEtapas } from '../lib/etapasProcessamento'
 import type { StatusTriagem } from '../types/clinical'
 
@@ -15,6 +16,7 @@ const MENSAGEM_ERRO_PADRAO: Partial<Record<StatusTriagem, string>> = {
 export function ProcessamentoPage() {
   const { documentoId } = useParams()
   const navigate = useNavigate()
+  const envio = lerDadosEnvio(useLocation().state)
   const acompanhamento = useAcompanharTriagem(documentoId)
   const { status, erro, resultado, motivoErro } = acompanhamento
 
@@ -100,6 +102,11 @@ export function ProcessamentoPage() {
             </Button>
           </div>
         </section>
+
+        <div className="flex w-91.5 shrink-0 flex-col gap-4">
+          <CardEnvio documentoId={documentoId ?? ''} envio={envio} enviadoEm={acompanhamento.enviadoEm} />
+          <AvisoSaidaDaTela />
+        </div>
       </div>
     </div>
   )
