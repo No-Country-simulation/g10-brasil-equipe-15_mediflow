@@ -23,18 +23,21 @@
   --color-muted: #eef1f5;
   --color-selected: #eef3fd;
   --color-disabled: #d5dce6;
+  --color-progress-track: #e6ebf2;
 
   /* Bordas */
   --color-border: #dde3ea;
   --color-border-subtle: #eef1f5;
   --color-border-input: #c4cdd8;
   --color-border-dashed: #b7c3d3;
+  --color-border-info: #c9d8f6;
 
   /* Texto */
   --color-text: #0f1b2d;
   --color-text-secondary: #4a5568;
   --color-text-placeholder: #5b6577;
   --color-accent: #1747aa;
+  --color-info-panel-text: #1e3a6e;
   --color-link: #1f5bd6;
   --color-on-primary: #ffffff;
 
