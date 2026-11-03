@@ -372,3 +372,191 @@ def test_retorno_sem_confirmacao_nao_vira_sucesso(preparar):
         caminho.startswith("historico/")
         for caminho in storage.objetos
     )
+
+@pytest.mark.parametrize(
+    "etapa_falha",
+    ["original", "resultado"],
+)
+def test_recuperacao_documentos_grava_historico_sem_reanalise(
+    preparar,
+    monkeypatch,
+    etapa_falha,
+):
+    """Recupera original/resultado e persiste o histórico."""
+    from types import SimpleNamespace
+
+    service, storage, documento_id = preparar
+
+    enviar_existente = storage.enviar_bytes
+    ler_existente = storage.ler_bytes
+
+    falha_ativa = True
+    leituras = []
+
+    class ObjetoJaExiste(Exception):
+        status = 412
+        code = "PreconditionFailed"
+
+    def enviar_controlado(
+        caminho,
+        conteudo,
+        tipo_conteudo="application/octet-stream",
+    ):
+        eh_original = caminho.startswith("recebidos/")
+        eh_resultado = caminho.endswith("/resultado.json")
+
+        deve_falhar = (
+            etapa_falha == "original" and eh_original
+        ) or (
+            etapa_falha == "resultado" and eh_resultado
+        )
+
+        if falha_ativa and deve_falhar:
+            storage.tentativas.append(caminho)
+            raise TimeoutError(
+                f"Falha simulada na etapa {etapa_falha}"
+            )
+
+        # Reproduz o bloqueio de sobrescrita do conector.
+        # O serviço deve ler e comparar o original antes de avançar.
+        if caminho in storage.objetos:
+            storage.tentativas.append(caminho)
+            raise ObjetoJaExiste(
+                "Objeto já existe no armazenamento simulado."
+            )
+
+        return enviar_existente(
+            caminho,
+            conteudo,
+            tipo_conteudo=tipo_conteudo,
+        )
+
+    def ler_controlado(caminho):
+        leituras.append(caminho)
+        return ler_existente(caminho)
+
+    monkeypatch.setattr(
+        storage,
+        "enviar_bytes",
+        enviar_controlado,
+    )
+    monkeypatch.setattr(
+        storage,
+        "ler_bytes",
+        ler_controlado,
+    )
+
+    inicial = service.executar_triagem(documento_id)
+
+    assert inicial.status == StatusTriagem.ERRO_PERSISTENCIA
+    assert inicial.armazenamento_oci.status_backup != "sucesso"
+    assert (
+        service.obter_referencia_historico_oci(documento_id)
+        is None
+    )
+
+    doc = service._documentos_originais[documento_id]
+    caminho_original = (
+        f"recebidos/{documento_id}/original."
+        f"{doc.formato.lower()}"
+    )
+
+    if etapa_falha == "original":
+        assert caminho_original not in storage.objetos
+    else:
+        assert (
+            storage.objetos[caminho_original]
+            == doc.conteudo_bytes
+        )
+
+    assert not any(
+        caminho.endswith("/resultado.json")
+        for caminho in storage.objetos
+    )
+
+    qualidade_antes = inicial.qualidade.model_dump(mode="json")
+    decisao_antes = inicial.decisao_roteamento.model_dump(
+        mode="json"
+    )
+    dados_antes = inicial.dados_extraidos.model_dump(mode="json")
+
+    eventos_antes = [
+        evento.model_dump(mode="json")
+        for evento in service.obter_historico(documento_id)
+    ]
+
+    def proibir_grafo(*args, **kwargs):
+        raise AssertionError(
+            "A retentativa não pode executar o grafo novamente."
+        )
+
+    monkeypatch.setattr(
+        service,
+        "_grafo",
+        SimpleNamespace(invoke=proibir_grafo),
+    )
+
+    # Restaura apenas o armazenamento simulado.
+    falha_ativa = False
+
+    recuperada = service.reprocessar_persistencia_oci(
+        documento_id
+    )
+
+    assert recuperada.status in (
+        StatusTriagem.PROCESSADO,
+        StatusTriagem.EM_REVISAO,
+    )
+    assert recuperada.erro is None
+    assert recuperada.armazenamento_oci.status_backup == "sucesso"
+    assert recuperada.armazenamento_oci.modo_simulacao is False
+
+    assert recuperada.qualidade.model_dump(
+        mode="json"
+    ) == qualidade_antes
+    assert recuperada.decisao_roteamento.model_dump(
+        mode="json"
+    ) == decisao_antes
+    assert recuperada.dados_extraidos.model_dump(
+        mode="json"
+    ) == dados_antes
+
+    assert (
+        storage.objetos[caminho_original]
+        == doc.conteudo_bytes
+    )
+
+    if etapa_falha == "resultado":
+        assert caminho_original in leituras
+
+    caminho_resultado = (
+        recuperada.armazenamento_oci.caminho_objeto
+    )
+    resultado_salvo = json.loads(
+        storage.objetos[caminho_resultado]
+    )
+
+    assert resultado_salvo["documento_id"] == documento_id
+    assert resultado_salvo["qualidade"] == qualidade_antes
+    assert resultado_salvo["decisao_roteamento"] == decisao_antes
+
+    caminho_historico = (
+        service.obter_referencia_historico_oci(documento_id)
+    )
+    assert caminho_historico is not None
+
+    historico_salvo = json.loads(
+        storage.objetos[caminho_historico]
+    )
+    eventos_salvos = historico_salvo["eventos"]
+
+    assert historico_salvo["documento_id"] == documento_id
+    assert eventos_salvos[:len(eventos_antes)] == eventos_antes
+    assert eventos_salvos == [
+        evento.model_dump(mode="json")
+        for evento in service.obter_historico(documento_id)
+    ]
+    assert (
+        eventos_salvos[-1]["tipo_evento"]
+        == "RETRY_PERSISTENCIA_SUCESSO"
+    )
