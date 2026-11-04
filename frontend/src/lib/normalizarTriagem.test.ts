@@ -36,7 +36,7 @@ describe('normalizarTriagem — cenários da demo (formato anterior)', () => {
     const t = CENARIOS_DEMO.ambiguo
     expect(t.status).toBe('EM_REVISAO')
     expect(t.qualidade?.score_combinado).toBeLessThan(t.qualidade?.limiar_aplicado ?? 0)
-    expect(t.qualidade?.campos_ausentes).toEqual(['medico_solicitante.nome', 'medico_solicitante.crm'])
+    expect(t.qualidade?.campos_ausentes).toEqual(['medico.nome', 'medico.crm'])
     expect(t.decisao_roteamento?.requer_auditoria_humana).toBe(true)
     expect(t.decisao_roteamento?.destino_principal).toBe('FILA_REVISAO_HUMANA')
     expect(t.decisao_roteamento?.destinos).toEqual(['FILA_REVISAO_HUMANA', 'FARMACIA_HOSPITALAR'])

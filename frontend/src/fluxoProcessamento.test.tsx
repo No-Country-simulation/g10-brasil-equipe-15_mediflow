@@ -73,7 +73,12 @@ describe('fluxo de processamento (modo demo)', () => {
     expect(screen.getAllByText('Concluído')).toHaveLength(8)
 
     clicar(screen.getByRole('button', { name: 'Ver resultado' }))
+    await avancar(0)
     expect(screen.getByRole('heading', { name: 'Resultado da triagem' })).toBeInTheDocument()
+    expect(screen.getByText('Urgente · encaminhado à fila de urgência médica')).toBeInTheDocument()
+    expect(screen.getByText('FILA_URGENCIA_MEDICA')).toBeInTheDocument()
+    // O histórico do simulador chega até o ROTEADO.
+    expect(screen.getByText('ROTEADO')).toBeInTheDocument()
   })
 
   it('caso de rotina: envia o PDF e conclui em PROCESSADO', async () => {

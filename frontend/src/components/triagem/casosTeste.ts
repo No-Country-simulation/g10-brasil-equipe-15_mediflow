@@ -1,6 +1,6 @@
 import { CENARIOS_DEMO } from '../../fixtures'
 import type { IdCenario } from '../../fixtures'
-import type { Destino } from '../../types/clinical'
+import { ROTULO_DESTINO } from '../../lib/rotulos'
 
 export type CasoTeste = {
   id: IdCenario
@@ -19,13 +19,6 @@ export type ConteudoDoCaso =
   | { tipo: 'arquivo'; arquivo: File }
   | { tipo: 'texto'; texto: string }
 
-const ROTULO_DESTINO: Record<Destino, string> = {
-  FILA_URGENCIA_MEDICA: 'Fila de urgência',
-  FARMACIA_HOSPITALAR: 'Farmácia hospitalar',
-  AUDITORIA_AUTORIZACOES: 'Auditoria de autorizações',
-  PRONTUARIO_ELETRONICO: 'Prontuário eletrônico',
-  FILA_REVISAO_HUMANA: 'Fila de revisão humana',
-}
 
 function esperadoDe(id: IdCenario): string {
   const roteamento = CENARIOS_DEMO[id].decisao_roteamento

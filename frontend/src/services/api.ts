@@ -101,3 +101,9 @@ export function obterTriagem(documentoId: string, sinal?: AbortSignal): Promise<
   if (modoDemo()) return simulada.obterTriagem(documentoId)
   return requisitar<TriagemMediFlow>(caminhoTriagem(documentoId), { signal: sinal })
 }
+
+/** Refaz só a gravação no OCI de uma triagem em ERRO_PERSISTENCIA, sem chamar o modelo de novo. */
+export function reprocessarPersistencia(documentoId: string): Promise<TriagemMediFlow> {
+  if (modoDemo()) return simulada.reprocessarPersistencia(documentoId)
+  return requisitar<TriagemMediFlow>(`${caminhoTriagem(documentoId)}/reprocessar-persistencia`, { method: 'POST' })
+}

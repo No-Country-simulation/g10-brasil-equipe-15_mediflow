@@ -178,3 +178,8 @@ export async function obterTriagem(documentoId: string): Promise<TriagemMediFlow
 export async function health(): Promise<HealthResponse> {
   return { status: 'healthy', versao: 'demo', servicos: { api: 'simulada' } }
 }
+
+/** Os cenários da demo nunca falham ao salvar; o reprocessamento só devolve o resultado. */
+export async function reprocessarPersistencia(documentoId: string): Promise<TriagemMediFlow> {
+  return obterTriagem(documentoId)
+}

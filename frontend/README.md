@@ -60,6 +60,8 @@ src/
 ├── assets/icons/        SVGs da Biblioteca do Figma
 ├── components/
 │   ├── ui/              Button, Badge, Field, Input, Select, SegmentedControl, Icon
+│   ├── processamento/   etapas, barra de progresso, card Envio (Figma 02)
+│   ├── resultado/       banners, cards, histórico, alerta de erro, painel JSON (Figma 03)
 │   └── layout/          AppLayout, Sidebar, NavItem, UserCard, DemoNotice, PageHeader
 ├── lib/                 utilitários (cx)
 ├── pages/               telas (Nova triagem e placeholders)
@@ -88,7 +90,7 @@ Os ícones são SVGs com `currentColor`, usados pelo componente `<Icon name="plu
 |---|---|---|
 | `/nova-triagem` | Nova triagem (Figma 01a/01b) | pronta, integrada à API |
 | `/nova-triagem/processamento/:id` | Processamento (Figma 02a/02b) | pronta, acompanha `/status` a cada 2 s |
-| `/resultado/:id` | Resultado | placeholder (Fase 3) |
+| `/resultado/:id` | Resultado (Figma 03a–03e) | pronta, lê `GET /triagens/{id}` e `/historico`; reprocessa a persistência em `ERRO_PERSISTENCIA` |
 | `/triagens` | Triagens e filas | placeholder (a API ainda não lista triagens) |
 | `/meus-documentos` | Meus documentos | placeholder (a API ainda não tem autenticação) |
 

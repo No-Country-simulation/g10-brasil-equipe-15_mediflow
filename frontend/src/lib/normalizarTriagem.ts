@@ -167,13 +167,18 @@ function normalizarDados(
   }
 }
 
+/** O formato anterior usa `medico_solicitante.*`; o contrato atual, `medico.*`. */
+function caminhoDoCampo(caminho: string): string {
+  return caminho.replace(/^medico_solicitante\./, 'medico.')
+}
+
 function normalizarQualidade(bruto: Obj): Qualidade {
   return {
     score_extracao: numero(bruto.score_extracao, 0),
     score_combinado: numero(bruto.score_combinado, 0),
     limiar_aplicado: numero(bruto.limiar_aplicado, 0.85),
-    campos_ausentes: lista(bruto.campos_ausentes),
-    campos_incertos: lista(primeiro(bruto.campos_incertos, bruto.campos_incerto)),
+    campos_ausentes: lista<string>(bruto.campos_ausentes).map(caminhoDoCampo),
+    campos_incertos: lista<string>(primeiro(bruto.campos_incertos, bruto.campos_incerto)).map(caminhoDoCampo),
     conflitos: lista<Conflito>(bruto.conflitos),
   }
 }

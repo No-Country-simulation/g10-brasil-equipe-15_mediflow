@@ -15,4 +15,11 @@ Os documentos de entrada (`.pdf` e `.txt`) estão em `public/samples/{rotina,urg
 | urgente | `demo/Matriz_LaudoDeImagem_Pdf` |
 | ambiguo | `demo/Borda_Score_084` |
 
+Extras usados nos testes da tela de Resultado (também em `expected/`):
+
+| Arquivo | Fixture de origem | Para quê |
+|---|---|---|
+| `urgente_revisao.json` | `catalogo/Simultaneo_Urgencia_Score` | 03c: urgente + revisão, dois destinos e alerta |
+| `conflito_dose.json` | `catalogo/Conflito_Dose` | tabela de medicamentos com dose suspeita |
+
 Para atualizar, copie de novo os arquivos de `tests/fixtures/`. Não edite à mão.

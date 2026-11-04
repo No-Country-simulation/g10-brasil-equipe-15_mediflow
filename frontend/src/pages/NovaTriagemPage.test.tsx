@@ -164,7 +164,7 @@ describe('NovaTriagemPage', () => {
     renderPagina()
 
     expect(screen.getByRole('button', { name: /Fluxo padrão/ })).toHaveTextContent('Esperado: Prontuário eletrônico')
-    expect(screen.getByRole('button', { name: /Caso urgente/ })).toHaveTextContent('Esperado: Fila de urgência + alerta')
+    expect(screen.getByRole('button', { name: /Caso urgente/ })).toHaveTextContent('Esperado: Fila de urgência médica + alerta')
     expect(screen.getByRole('button', { name: /Caso ambíguo/ })).toHaveTextContent('Esperado: Fila de revisão humana')
   })
 
