@@ -1,3 +1,4 @@
+export { AcessoRestrito } from './AcessoRestrito'
 export { AlertaErro } from './AlertaErro'
 export { BannerResultado } from './Banners'
 export { Card, Tag, ValorAusente } from './Card'

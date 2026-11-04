@@ -63,6 +63,7 @@ src/
 │   ├── processamento/   etapas, barra de progresso, card Envio (Figma 02)
 │   ├── resultado/       banners, cards, histórico, alerta de erro, painel JSON (Figma 03)
 │   ├── triagens/        cards de fila, tabela, faixa do médico (Figma 04)
+│   ├── sessao/          SessaoProvider e RotaProtegida (login de demonstração)
 │   └── layout/          AppLayout, Sidebar, NavItem, UserCard, DemoNotice, PageHeader
 ├── lib/                 utilitários (cx)
 ├── pages/               telas (Nova triagem, Processamento, Resultado, Triagens e filas)
@@ -89,13 +90,24 @@ Os ícones são SVGs com `currentColor`, usados pelo componente `<Icon name="plu
 
 | Rota | Tela | Estado |
 |---|---|---|
+| `/login` | Login (Figma 00a–00c) | pronta, login de demonstração (veja abaixo); as demais rotas exigem sessão |
 | `/nova-triagem` | Nova triagem (Figma 01a/01b) | pronta, integrada à API |
 | `/nova-triagem/processamento/:id` | Processamento (Figma 02a/02b) | pronta, acompanha `/status` a cada 2 s |
 | `/resultado/:id` | Resultado (Figma 03a–03e) | pronta, lê `GET /triagens/{id}` e `/historico`; reprocessa a persistência em `ERRO_PERSISTENCIA` |
 | `/triagens` | Triagens e filas (Figma 04a/04b) | pronta, com lista provisória (veja abaixo); filtro na URL: `?fila=urgencia\|revisao\|processados\|andamento\|erro` |
 | `/meus-documentos` | Meus documentos (Figma 04c) | pronta, filtra pelo CRM da médica de demonstração |
 
-O card da médica na sidebar é fictício (a API ainda não tem login). O mock fica em `src/lib/medicoLogado.ts`.
+### Login de demonstração
+
+O login é **fake**, só no front (não há autenticação no backend). Entra apenas a conta de demonstração:
+
+| CRM | UF | Senha |
+|---|---|---|
+| `145892` | `SP` | `mediflow` |
+
+A credencial fica em `src/lib/sessao.ts`. A sessão vai para o `sessionStorage` (ou `localStorage` com "Manter conectado") e expira após 30 min sem navegar. 5 tentativas erradas bloqueiam o login por 15 min, contadas no navegador. Nada disso é segurança: é só o estado de "logado" da demonstração.
+
+**Acesso restrito (00d):** o Resultado bloqueia um documento quando o CRM do solicitante extraído não é o da sessão **e** o documento não foi enviado por este navegador (quem envia sempre vê o que enviou).
 
 ### Lista provisória de triagens
 

@@ -116,7 +116,7 @@ export function buscarPorId(linhas: readonly LinhaTriagem[], termo: string): Lin
 
 // ---------- Meus documentos ----------
 
-function partesCrm(crm: Crm | string | null): { numero: string; uf: string } | null {
+export function partesCrm(crm: Crm | string | null): { numero: string; uf: string } | null {
   if (!crm) return null
   if (typeof crm === 'string') {
     const numero = crm.replace(/\D/g, '')
@@ -129,10 +129,15 @@ function partesCrm(crm: Crm | string | null): { numero: string; uf: string } | n
 
 /** O CRM extraído do documento é o do médico logado? (UF só conta quando os dois a têm.) */
 export function ehDoMedicoLogado(linha: LinhaTriagem): boolean {
-  const crm = partesCrm(linha.crmMedico)
-  if (!crm) return false
-  const logado = MEDICO_LOGADO.crm
-  return crm.numero === logado.numero && (!crm.uf || crm.uf === logado.uf)
+  return crmIgual(linha.crmMedico, MEDICO_LOGADO.crm)
+}
+
+/** Mesmo CRM? A UF só conta quando os dois lados a têm. */
+export function crmIgual(a: Crm | string | null, b: Crm | string | null): boolean {
+  const x = partesCrm(a)
+  const y = partesCrm(b)
+  if (!x || !y) return false
+  return x.numero === y.numero && (!x.uf || !y.uf || x.uf === y.uf)
 }
 
 // ---------- Células ----------

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { useId, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import {
+  AcessoRestrito,
   AlertaErro,
   BannerResultado,
   CardArmazenamento,
@@ -16,8 +17,11 @@ import {
   PainelJson,
 } from '../components/resultado'
 import { Badge, Button, Icon } from '../components/ui'
+import { useSessao } from '../hooks/useSessao'
 import { useResultadoTriagem } from '../hooks/useResultadoTriagem'
+import { acessoAoDocumento } from '../lib/acessoDocumento'
 import { formatarDataHora } from '../lib/dadosEnvio'
+import { lerRegistro } from '../lib/registroTriagens'
 import { alertaDeErro, bannersDe, tomDoStatus } from '../lib/resultadoTriagem'
 
 const linkVoltar =
@@ -42,6 +46,7 @@ export function ResultadoPage() {
   const idPainel = useId()
   const [mostrarJson, setMostrarJson] = useState(false)
   const { estado, recarregar, reprocessar, reprocessamento } = useResultadoTriagem(documentoId)
+  const { sessao } = useSessao()
 
   const voltar = (
     <Link to="/triagens" className={linkVoltar}>
@@ -97,6 +102,13 @@ export function ResultadoPage() {
   }
 
   const { triagem, bruto, historico } = estado
+  // Pelo ID aberto (o mesmo que a API devolve em documento_id).
+  const enviadoAqui = lerRegistro().some((e) => e.documentoId === documentoId)
+  const acesso = acessoAoDocumento(triagem, sessao?.medico ?? null, enviadoAqui)
+  if (!acesso.permitido && sessao) {
+    const { numero, uf } = sessao.medico.crm
+    return <AcessoRestrito documentoId={triagem.documento_id} crmDocumento={acesso.crmDocumento} crmSessao={`CRM ${numero} / ${uf}`} />
+  }
   const alerta = alertaDeErro(triagem)
   const recebidoEm = historico.find((e) => e.tipo_evento === 'RECEBIDO')?.criado_em ?? null
   const metadado = [

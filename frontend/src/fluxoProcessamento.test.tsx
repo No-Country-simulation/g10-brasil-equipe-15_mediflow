@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { iniciarSessao } from './lib/sessao'
 import { limparSimulacao, FIM_PROCESSANDO_MS, INICIO_PROCESSANDO_MS, ATRASO_ENVIO_MS } from './services/apiSimulada'
 
 /**
@@ -37,6 +38,7 @@ describe('fluxo de processamento (modo demo)', () => {
     vi.stubEnv('VITE_USAR_FIXTURES', 'true')
     limparSimulacao()
     localStorage.clear()
+    iniciarSessao(false)
     fetchMock.mockReset()
     // Só os documentos de exemplo de public/samples passam por fetch no modo demo.
     fetchMock.mockImplementation(async (url: string) =>

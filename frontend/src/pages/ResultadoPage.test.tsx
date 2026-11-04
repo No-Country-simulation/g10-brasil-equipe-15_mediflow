@@ -7,10 +7,16 @@ import cenarioAmbiguo from '../fixtures/cenarios/cenario_3_ambiguidade_rasura.js
 import conflitoDose from '../fixtures/expected/conflito_dose.json'
 import rotina from '../fixtures/expected/rotina.json'
 import urgenteRevisao from '../fixtures/expected/urgente_revisao.json'
+import { SessaoProvider } from '../components/sessao'
+import { registrarEnvio } from '../lib/registroTriagens'
+import { encerrarSessao, iniciarSessao } from '../lib/sessao'
 import { ResultadoPage } from './ResultadoPage'
 
 function json(status: number, corpo: unknown) {
-  return new Response(JSON.stringify(corpo), { status, headers: { 'Content-Type': 'application/json' } })
+  return new Response(JSON.stringify(corpo), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
 }
 
 const TERMINAIS = ['PROCESSADO', 'EM_REVISAO', 'ERRO_PROCESSAMENTO', 'ERRO_PERSISTENCIA']
@@ -49,7 +55,20 @@ describe('ResultadoPage', () => {
   let reprocessoOk: boolean
 
   beforeEach(() => {
-    triagem = { ...rotina.resposta_esperada, canal_origem: 'Ambulatório', versao_esquema: '2.0.0' }
+    localStorage.clear()
+    encerrarSessao()
+    iniciarSessao(false)
+    // Enviado por este navegador: o acesso restrito (00d) não se aplica.
+    registrarEnvio({
+      documentoId: 'DOC-1',
+      canal: 'Ambulatório',
+      enviadoEm: new Date().toISOString(),
+    })
+    triagem = {
+      ...rotina.resposta_esperada,
+      canal_origem: 'Ambulatório',
+      versao_esquema: '2.0.0',
+    }
     statusForcado = null
     falhaStatus = null
     reprocessoOk = true
@@ -57,14 +76,28 @@ describe('ResultadoPage', () => {
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url.endsWith('/status')) {
-        if (falhaStatus === 404) return json(404, { codigo: 'DOCUMENTO_NAO_ENCONTRADO', mensagem: 'x' })
+        if (falhaStatus === 404)
+          return json(404, {
+            codigo: 'DOCUMENTO_NAO_ENCONTRADO',
+            mensagem: 'x',
+          })
         if (falhaStatus === 'REDE') throw new TypeError('Failed to fetch')
         const status = statusForcado ?? (triagem.status as string)
-        return json(200, { documento_id: 'DOC-1', status, destinos: [], requer_auditoria_humana: false, concluido: TERMINAIS.includes(status) })
+        return json(200, {
+          documento_id: 'DOC-1',
+          status,
+          destinos: [],
+          requer_auditoria_humana: false,
+          concluido: TERMINAIS.includes(status),
+        })
       }
       if (url.endsWith('/historico')) return json(200, historicoPadrao)
       if (url.endsWith('/reprocessar-persistencia') && init?.method === 'POST') {
-        if (!reprocessoOk) return json(502, { codigo: 'ERRO_PERSISTENCIA', mensagem: 'Falha na retentativa OCI' })
+        if (!reprocessoOk)
+          return json(502, {
+            codigo: 'ERRO_PERSISTENCIA',
+            mensagem: 'Falha na retentativa OCI',
+          })
         triagem = { ...triagem, status: 'PROCESSADO', erro: null }
         return json(200, triagem)
       }
@@ -75,15 +108,21 @@ describe('ResultadoPage', () => {
   async function abrir() {
     const user = userEvent.setup()
     render(
-      <MemoryRouter initialEntries={['/resultado/DOC-1']}>
-        <Routes>
-          <Route path="/resultado/:documentoId" element={<ResultadoPage />} />
-          <Route path="/nova-triagem" element={<p>Tela Nova triagem</p>} />
-          <Route path="/nova-triagem/processamento/:documentoId" element={<p>Tela Processamento</p>} />
-        </Routes>
-      </MemoryRouter>,
+      <SessaoProvider>
+        <MemoryRouter initialEntries={['/resultado/DOC-1']}>
+          <Routes>
+            <Route path="/resultado/:documentoId" element={<ResultadoPage />} />
+            <Route path="/nova-triagem" element={<p>Tela Nova triagem</p>} />
+            <Route path="/nova-triagem/processamento/:documentoId" element={<p>Tela Processamento</p>} />
+            <Route path="/meus-documentos" element={<p>Tela Meus documentos</p>} />
+            <Route path="/login" element={<p>Tela Login</p>} />
+          </Routes>
+        </MemoryRouter>
+      </SessaoProvider>,
     )
-    await screen.findByText(/Resultado da triagem|ainda está em processamento|Não foi possível carregar/)
+    await screen.findByText(
+      /Resultado da triagem|ainda está em processamento|Não foi possível carregar|Acesso restrito/,
+    )
     return user
   }
 
@@ -118,7 +157,9 @@ describe('ResultadoPage', () => {
     expect(within(card('Classificação')).getByText('Urgente')).toBeInTheDocument()
     expect(within(card('Exames e urgência')).getByText('ANGIOTOMOGRAFIA DE TÓRAX')).toBeInTheDocument()
     expect(within(card('Exames e urgência')).getByText('Sim — urgência detectada')).toBeInTheDocument()
-    expect(within(card('Decisão de roteamento')).getByText('Evento simulado registrado (SIMULADO_SLACK_PLANTAO)')).toBeInTheDocument()
+    expect(
+      within(card('Decisão de roteamento')).getByText('Evento simulado registrado (SIMULADO_SLACK_PLANTAO)'),
+    ).toBeInTheDocument()
   })
 
   it('03c urgente + revisão: dois banners e dois destinos', async () => {
@@ -142,7 +183,11 @@ describe('ResultadoPage', () => {
     expect(within(dados).getAllByText('Ausente · exige revisão')).toHaveLength(2)
     expect(within(dados).getByText('Ausente · não exige revisão')).toBeInTheDocument()
     expect(within(dados).getAllByText('obrigatório')).toHaveLength(5)
-    expect(screen.getByText('Médico solicitante não consta no documento', { exact: false })).toBeInTheDocument()
+    expect(
+      screen.getByText('Médico solicitante não consta no documento', {
+        exact: false,
+      }),
+    ).toBeInTheDocument()
     expect(within(card('Confiança')).getByText('Abaixo do limiar 0,85 — exige revisão humana')).toBeInTheDocument()
   })
 
@@ -160,7 +205,11 @@ describe('ResultadoPage', () => {
   })
 
   it('03e erro de persistência: só cabeçalho, alerta e histórico; "Tentar salvar de novo" recarrega', async () => {
-    triagem = { ...triagem, status: 'ERRO_PERSISTENCIA', erro: { codigo: 'ERRO_PERSISTENCIA', mensagem: 'Timeout' } }
+    triagem = {
+      ...triagem,
+      status: 'ERRO_PERSISTENCIA',
+      erro: { codigo: 'ERRO_PERSISTENCIA', mensagem: 'Timeout' },
+    }
     const user = await abrir()
 
     expect(screen.getByText('ERRO_PERSISTENCIA')).toBeInTheDocument()
@@ -171,7 +220,9 @@ describe('ResultadoPage', () => {
     await user.click(screen.getByRole('button', { name: 'Tentar salvar de novo' }))
 
     expect(await screen.findByText('PROCESSADO')).toBeInTheDocument()
-    expect(fetchMock.mock.calls.some(([u, i]) => String(u).endsWith('/reprocessar-persistencia') && i?.method === 'POST')).toBe(true)
+    expect(
+      fetchMock.mock.calls.some(([u, i]) => String(u).endsWith('/reprocessar-persistencia') && i?.method === 'POST'),
+    ).toBe(true)
     expect(screen.getByRole('heading', { name: 'Classificação' })).toBeInTheDocument()
   })
 
@@ -240,5 +291,46 @@ describe('ResultadoPage', () => {
     expect(painel).toHaveTextContent('"medico_solicitante"')
     await user.click(screen.getByRole('button', { name: 'Ocultar JSON da resposta' }))
     expect(screen.queryByRole('region', { name: 'JSON da resposta' })).not.toBeInTheDocument()
+  })
+
+  describe('acesso restrito (00d)', () => {
+    beforeEach(() => {
+      // Documento de outro médico (CRM 165432/SP) que NÃO foi enviado por este navegador.
+      localStorage.clear()
+    })
+
+    it('mostra a 00d com o documento, o CRM do solicitante e o da sessão', async () => {
+      await abrir()
+
+      expect(screen.getByRole('heading', { name: 'Acesso restrito' })).toBeInTheDocument()
+      expect(screen.getByText('Solicitante do documento').nextElementSibling).toHaveTextContent('CRM 165432 / SP')
+      expect(screen.getByText('Você está logada como').nextElementSibling).toHaveTextContent('CRM 145892 / SP')
+      expect(screen.queryByRole('heading', { name: 'Classificação' })).not.toBeInTheDocument()
+    })
+
+    it('"Voltar para meus documentos" e "Entrar com outra conta"', async () => {
+      const user = await abrir()
+      await user.click(screen.getByRole('button', { name: 'Voltar para meus documentos' }))
+      expect(screen.getByText('Tela Meus documentos')).toBeInTheDocument()
+    })
+
+    it('"Entrar com outra conta" encerra a sessão e vai ao login', async () => {
+      const user = await abrir()
+      await user.click(screen.getByRole('button', { name: 'Entrar com outra conta' }))
+      expect(screen.getByText('Tela Login')).toBeInTheDocument()
+      expect(sessionStorage.getItem('mediflow:sessao')).toBeNull()
+    })
+
+    it('documento da própria médica abre normalmente mesmo sem ter sido enviado aqui', async () => {
+      triagem = { ...urgenteRevisao.resposta_esperada }
+      await abrir()
+      expect(screen.getByRole('heading', { name: 'Resultado da triagem' })).toBeInTheDocument()
+    })
+
+    it('documento sem CRM extraído não é bloqueado', async () => {
+      triagem = cenarioAmbiguo
+      await abrir()
+      expect(screen.getByRole('heading', { name: 'Resultado da triagem' })).toBeInTheDocument()
+    })
   })
 })

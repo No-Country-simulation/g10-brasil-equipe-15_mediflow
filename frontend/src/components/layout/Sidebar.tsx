@@ -1,13 +1,19 @@
+import { useNavigate } from 'react-router'
+import { useSessao } from '../../hooks/useSessao'
 import { CRM_LOGADO_TEXTO, MEDICO_LOGADO } from '../../lib/medicoLogado'
 import { Icon } from '../ui'
 import { DemoNotice } from './DemoNotice'
 import { NavItem } from './NavItem'
 import { UserCard } from './UserCard'
 
-/** Médica logada fictícia: a API ainda não tem autenticação. */
-const USUARIO_MOCK = { nome: MEDICO_LOGADO.nome, crm: CRM_LOGADO_TEXTO }
 
 export function Sidebar() {
+  const { sessao, sair } = useSessao()
+  const navigate = useNavigate()
+  // Login de demonstração (Fase 5): o médico vem da sessão; o mock é só o valor de segurança.
+  const nome = sessao?.medico.nome ?? MEDICO_LOGADO.nome
+  const crm = sessao ? `CRM ${sessao.medico.crm.numero} / ${sessao.medico.crm.uf}` : CRM_LOGADO_TEXTO
+
   return (
     <aside className="sticky top-0 flex h-screen w-58 shrink-0 flex-col gap-7 bg-sidebar px-4 py-6">
       <div className="flex w-full items-center gap-2.5 px-2">
@@ -23,7 +29,14 @@ export function Sidebar() {
 
       <div className="flex-1" />
 
-      <UserCard {...USUARIO_MOCK} />
+      <UserCard
+        nome={nome}
+        crm={crm}
+        onSair={() => {
+          sair()
+          navigate('/login', { replace: true })
+        }}
+      />
       <DemoNotice />
     </aside>
   )
