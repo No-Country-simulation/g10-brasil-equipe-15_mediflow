@@ -22,6 +22,7 @@ from src.ingestion import DocumentLoader, IngestaoError
 from src.services.gemini_service import GeminiService
 from src.workflow.graph import criar_grafo
 from src.workflow.state import EntradaWorkflow
+from src.app.triage_pipeline import processar_documento_com_agente
 from src.schemas import (
     TriagemMediFlow,
     StatusTriagem,
@@ -253,15 +254,15 @@ if "resultado_ia" not in st.session_state:
 with st.sidebar:
     st.markdown("### 🏥 MediFlow `v2.0`")
     st.caption("Agente Autônomo para Triagem Clínica · Equipe 15")
-    
+
     st.markdown("---")
-    
+
     modo_entrada = st.segmented_control(
         "Origem do Documento:",
         options=["Cenários Oficiais (Demo)", "Upload de Arquivo Real"],
         default="Cenários Oficiais (Demo)"
     )
-    
+
     doc_ingerido = None
     dados_mock = None
 
@@ -272,19 +273,19 @@ with st.sidebar:
         )
         dados_mock = CENARIOS_DEMO[cenario_escolhido]
         caminho_pdf = ROOT_DIR / "data" / "samples" / dados_mock["arquivo"]
-        
+
         if caminho_pdf.exists():
             doc_ingerido = DocumentLoader.carregar_arquivo(caminho_pdf)
         else:
             st.warning("Arquivo PDF de teste não encontrado localmente.", title="Arquivo ausente")
-            
+
     else:
         uploaded_file = st.file_uploader(
             "Arraste ou selecione um laudo/receita:",
-            type=["pdf", "png", "jpg", "jpeg", "webp", "txt"],
+            type=["pdf", "png", "jpg", "webp", "txt"],
             help="Formatos aceitos: PDF, TXT ou Imagens (Máx: 10MB / 20 páginas)"
         )
-        
+
         if uploaded_file is not None:
             try:
                 bytes_data = uploaded_file.read()
@@ -336,7 +337,7 @@ if doc_ingerido is not None:
     # -------------------------------------------------------------------------
     with col_esquerda:
         st.subheader("📄 Documento Ingerido", anchor=False)
-        
+
         # Cards de métricas rápidas da ingestão em container delimitado
         with st.container(border=True):
             m1, m2, m3, m4 = st.columns(4)
@@ -346,7 +347,7 @@ if doc_ingerido is not None:
             m4.metric("OCR Visual?", "Sim" if doc_ingerido.requer_ocr else "Não")
 
         st.caption(f"**Identificador Canônico:** `{doc_ingerido.documento_id}` | **Arquivo:** `{doc_ingerido.nome_arquivo}`")
-        
+
         # Exibição visual de imagem se for mídia gráfica ou texto bruto extraído
         if doc_ingerido.formato in ["JPG", "JPEG", "PNG", "WEBP"] and doc_ingerido.conteudo_bytes:
             st.markdown("**Visualização do Documento Digitalizado:**")
@@ -410,7 +411,7 @@ if doc_ingerido is not None:
         else:
             # Modo Upload: botões de execução
             st.info("Arquivo recebido com sucesso na Ingestão! Pronto para análise inteligente com Gemini.", title="Pronto para Análise")
-            
+
             btn_col1, btn_col2 = st.columns([2, 1])
             with btn_col1:
                 executar_ia = st.button("Executar Triagem Clínica com Gemini IA", type="primary", width="stretch", icon=":material/smart_toy:")
@@ -420,7 +421,7 @@ if doc_ingerido is not None:
             if executar_ia:
                 with st.spinner("Analisando documento clínico com Gemini IA Multimodal e Motor LangGraph..."):
                     service = GeminiService(api_key=api_key_custom or os.getenv("GEMINI_API_KEY"))
-                    
+
                     mime_map = {
                         "PDF": "application/pdf",
                         "JPG": "image/jpeg",
@@ -432,16 +433,17 @@ if doc_ingerido is not None:
                     formato_upper = (doc_ingerido.formato or "JPG").upper()
                     mime_tipo = doc_ingerido.metadados.get("mime") or mime_map.get(formato_upper, "image/jpeg")
 
-                    classif = service.classificar_documento(
+                    resultado_pipeline = processar_documento_com_agente(
+                        servico=service,
+                        documento_id=doc_ingerido.documento_id,
                         conteudo_texto=doc_ingerido.conteudo_texto or "",
                         conteudo_bytes=doc_ingerido.conteudo_bytes,
-                        mime_type=mime_tipo
+                        mime_type=mime_tipo,
+                        limiar=float(os.getenv("LIMIAR_CONFIANCA", "0.85")),
                     )
-                    extrac = service.extrair_dados_clinicos(
-                        conteudo_texto=doc_ingerido.conteudo_texto or "",
-                        conteudo_bytes=doc_ingerido.conteudo_bytes,
-                        mime_type=mime_tipo
-                    )
+                    classif = resultado_pipeline["classificacao"]
+                    extrac = resultado_pipeline["dados_clinicos"]
+                    estado_wf = resultado_pipeline["estado_workflow"]
 
                     paciente_obj = getattr(extrac, "paciente", None)
                     medico_obj = getattr(extrac, "medico_solicitante", getattr(extrac, "medico", None))
@@ -461,20 +463,6 @@ if doc_ingerido is not None:
 
                     d_val = getattr(extrac, "diagnostico_principal", getattr(extrac, "diagnostico", None))
                     c_val = getattr(extrac, "cid_extraido", getattr(extrac, "cid", None))
-
-                    estado_wf = executar_fluxo_agente(
-                        documento_id=doc_ingerido.documento_id,
-                        tipo_documento=t_str,
-                        prioridade_str=pr_str,
-                        score_classificacao=getattr(classif, "score_confianca_classificacao", 0.95),
-                        paciente_dict=p_d,
-                        medico_dict=m_d,
-                        diagnostico=d_val,
-                        cid=c_val,
-                        medicamentos=getattr(extrac, "medicamentos", []),
-                        exames=getattr(extrac, "exames", []),
-                        urgencia="SIM" if "URGENTE" in pr_str.upper() else "NAO",
-                    )
 
                     st.session_state.resultado_ia = {
                         "decisao_wf": estado_wf.get("decisao"),
@@ -766,7 +754,10 @@ if doc_ingerido is not None:
                         "score_classificacao": qualidade_wf.score_classificacao,
                         "score_extracao": qualidade_wf.score_extracao,
                         "motivos_revisao": qualidade_wf.motivos_revisao,
-                        "campos_ausentes": qualidade_wf.campos_ausentes
+                        "campos_ausentes": qualidade_wf.campos_ausentes,
+                        "campos_incertos": qualidade_wf.campos_incertos,
+                        "conflitos": [c.model_dump(mode="json") for c in qualidade_wf.conflitos],
+                        "limiar_aplicado": qualidade_wf.limiar_aplicado
                     },
                     "decisao_roteamento": {
                         "destinos": destinos_raw,
