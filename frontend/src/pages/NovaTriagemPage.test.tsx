@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation, useParams } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { lerRegistro } from '../lib/registroTriagens'
 import { NovaTriagemPage } from './NovaTriagemPage'
 
 const criada = {
@@ -46,6 +47,7 @@ describe('NovaTriagemPage', () => {
   const fetchMock = vi.fn()
 
   beforeEach(() => {
+    localStorage.clear()
     fetchMock.mockReset()
     vi.stubGlobal('fetch', fetchMock)
   })
@@ -65,6 +67,7 @@ describe('NovaTriagemPage', () => {
 
     expect(screen.getByText('laudo.pdf')).toBeInTheDocument()
     expect(screen.queryByText(/Processamento de/)).not.toBeInTheDocument()
+    expect(lerRegistro()).toEqual([])
     expect(botaoEnviar()).toBeEnabled()
   })
 
@@ -113,6 +116,8 @@ describe('NovaTriagemPage', () => {
       formato: 'PDF',
       canal: 'Pronto-socorro',
     })
+    // Base provisória de "Triagens e filas".
+    expect(lerRegistro()[0]).toMatchObject({ documentoId: 'DOC-2026-1', canal: 'Pronto-socorro' })
   })
 
   it('envia o texto como JSON e leva o formato "Texto" e o canal para o processamento', async () => {
@@ -146,6 +151,7 @@ describe('NovaTriagemPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/não corresponde à extensão/)
     expect(screen.getByText('laudo.pdf')).toBeInTheDocument()
     expect(screen.queryByText(/Processamento de/)).not.toBeInTheDocument()
+    expect(lerRegistro()).toEqual([])
     expect(botaoEnviar()).toBeEnabled()
   })
 

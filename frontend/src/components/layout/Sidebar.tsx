@@ -1,10 +1,11 @@
+import { CRM_LOGADO_TEXTO, MEDICO_LOGADO } from '../../lib/medicoLogado'
 import { Icon } from '../ui'
 import { DemoNotice } from './DemoNotice'
 import { NavItem } from './NavItem'
 import { UserCard } from './UserCard'
 
 /** Médica logada fictícia: a API ainda não tem autenticação. */
-const USUARIO_MOCK = { nome: 'Dra. Renata Silveira', crm: 'CRM 145892 / SP' }
+const USUARIO_MOCK = { nome: MEDICO_LOGADO.nome, crm: CRM_LOGADO_TEXTO }
 
 export function Sidebar() {
   return (

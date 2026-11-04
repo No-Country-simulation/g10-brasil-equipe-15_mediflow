@@ -62,9 +62,10 @@ src/
 │   ├── ui/              Button, Badge, Field, Input, Select, SegmentedControl, Icon
 │   ├── processamento/   etapas, barra de progresso, card Envio (Figma 02)
 │   ├── resultado/       banners, cards, histórico, alerta de erro, painel JSON (Figma 03)
+│   ├── triagens/        cards de fila, tabela, faixa do médico (Figma 04)
 │   └── layout/          AppLayout, Sidebar, NavItem, UserCard, DemoNotice, PageHeader
 ├── lib/                 utilitários (cx)
-├── pages/               telas (Nova triagem e placeholders)
+├── pages/               telas (Nova triagem, Processamento, Resultado, Triagens e filas)
 ├── hooks/               useSubmeterTriagem
 ├── services/api.ts      cliente HTTP da API e ApiError
 ├── types/               contrato clínico (clinical.ts) e DTOs da API (api.ts)
@@ -91,7 +92,11 @@ Os ícones são SVGs com `currentColor`, usados pelo componente `<Icon name="plu
 | `/nova-triagem` | Nova triagem (Figma 01a/01b) | pronta, integrada à API |
 | `/nova-triagem/processamento/:id` | Processamento (Figma 02a/02b) | pronta, acompanha `/status` a cada 2 s |
 | `/resultado/:id` | Resultado (Figma 03a–03e) | pronta, lê `GET /triagens/{id}` e `/historico`; reprocessa a persistência em `ERRO_PERSISTENCIA` |
-| `/triagens` | Triagens e filas | placeholder (a API ainda não lista triagens) |
-| `/meus-documentos` | Meus documentos | placeholder (a API ainda não tem autenticação) |
+| `/triagens` | Triagens e filas (Figma 04a/04b) | pronta, com lista provisória (veja abaixo); filtro na URL: `?fila=urgencia\|revisao\|processados\|andamento\|erro` |
+| `/meus-documentos` | Meus documentos (Figma 04c) | pronta, filtra pelo CRM da médica de demonstração |
 
-O card da médica na sidebar é fictício (a API ainda não tem login).
+O card da médica na sidebar é fictício (a API ainda não tem login). O mock fica em `src/lib/medicoLogado.ts`.
+
+### Lista provisória de triagens
+
+A API ainda não tem `GET /api/v1/triagens`. Até lá, a Nova triagem guarda no `localStorage` o ID, o canal e a hora de cada envio aceito (até 50), e `src/services/listarTriagens.ts` consulta `/status` (e o resultado, quando concluída) de cada ID. Por isso a lista mostra só os documentos enviados **neste navegador**. IDs que a API não conhece mais (404, por exemplo depois de reiniciar o backend, que guarda tudo em memória) saem da lista. Quando o endpoint existir, basta trocar a implementação de `listarTriagens`.

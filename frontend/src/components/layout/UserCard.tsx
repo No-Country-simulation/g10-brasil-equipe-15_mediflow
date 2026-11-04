@@ -1,3 +1,4 @@
+import { iniciais } from '../../lib/medicoLogado'
 import { Icon } from '../ui'
 
 type UserCardProps = {
@@ -6,10 +7,6 @@ type UserCardProps = {
   onSair?: () => void
 }
 
-function iniciais(nome: string): string {
-  const partes = nome.split(' ').filter((p) => !/^(dr|dra)\.?$/i.test(p))
-  return ((partes[0]?.[0] ?? '') + (partes[partes.length - 1]?.[0] ?? '')).toUpperCase()
-}
 
 export function UserCard({ nome, crm, onSair }: UserCardProps) {
   return (

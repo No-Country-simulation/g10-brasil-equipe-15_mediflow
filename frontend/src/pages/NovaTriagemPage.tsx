@@ -13,6 +13,7 @@ import type { CanalOrigem } from '../components/triagem/canais'
 import { Button, Field, Input, SegmentedControl, Select } from '../components/ui'
 import { useSubmeterTriagem } from '../hooks/useSubmeterTriagem'
 import { rotuloFormato } from '../lib/dadosEnvio'
+import { registrarEnvio } from '../lib/registroTriagens'
 import type { DadosEnvio } from '../lib/dadosEnvio'
 
 type TipoEnvio = 'arquivo' | 'texto'
@@ -63,6 +64,8 @@ export function NovaTriagemPage() {
       canal,
       enviadoEm: new Date().toISOString(),
     }
+    // Base provisória da lista de "Triagens e filas" (a API ainda não lista triagens).
+    registrarEnvio({ documentoId: resposta.documento_id, canal, enviadoEm: envio.enviadoEm })
     navigate(`/nova-triagem/processamento/${encodeURIComponent(resposta.documento_id)}`, { state: envio })
   }
 

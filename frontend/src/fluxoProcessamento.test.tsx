@@ -36,6 +36,7 @@ describe('fluxo de processamento (modo demo)', () => {
     vi.useFakeTimers()
     vi.stubEnv('VITE_USAR_FIXTURES', 'true')
     limparSimulacao()
+    localStorage.clear()
     fetchMock.mockReset()
     // Só os documentos de exemplo de public/samples passam por fetch no modo demo.
     fetchMock.mockImplementation(async (url: string) =>
@@ -171,5 +172,23 @@ describe('fluxo de processamento (modo demo)', () => {
 
     const urlsDaApi = fetchMock.mock.calls.map(([url]) => String(url)).filter((url) => url.includes('/api/'))
     expect(urlsDaApi).toEqual([])
+  })
+
+  it('a triagem enviada aparece em "Triagens e filas" e "Abrir" leva ao resultado', async () => {
+    abrir()
+    const id = await enviarCaso(/Caso ambíguo/)
+    await avancar(FIM_PROCESSANDO_MS + INICIO_PROCESSANDO_MS)
+
+    clicar(screen.getAllByRole('link', { name: 'Triagens e filas' })[0])
+    await avancar(0)
+
+    expect(screen.getByRole('heading', { name: 'Triagens e filas' })).toBeInTheDocument()
+    expect(screen.getByText(id)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Fila de revisão: 1$/ })).toBeInTheDocument()
+
+    clicar(screen.getByRole('button', { name: `Abrir ${id}` }))
+    await avancar(0)
+    expect(screen.getByRole('heading', { name: 'Resultado da triagem' })).toBeInTheDocument()
+    expect(screen.getByText('EM_REVISAO')).toBeInTheDocument()
   })
 })
