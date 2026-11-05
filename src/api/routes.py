@@ -230,8 +230,9 @@ def obter_status_triagem(documento_id: str):
         )
 
     triagem = triagem_service.obter_triagem(documento_id)
-    destinos = [d.value for d in triagem.decisao_roteamento.destinos] if triagem else []
-    requer_auditoria = triagem.decisao_roteamento.requer_auditoria_humana if triagem else False
+    decisao = triagem.decisao_roteamento if triagem else None
+    destinos = [destino.value for destino in decisao.destinos] if decisao else []
+    requer_auditoria = decisao.requer_auditoria_humana if decisao else False
 
     return StatusTriagemResponse(
         documento_id=documento_id,

@@ -857,3 +857,60 @@ def test_retry_com_original_existente_divergente_retorna_502_conflito(client):
         assert triagem_final.status.value == "ERRO_PERSISTENCIA"
     finally:
         triagem_service._storage = None
+
+
+def test_falha_grafo_apos_202_fica_consultavel_sem_reanalise(
+    client, monkeypatch
+):
+    from src.api.routes import triagem_service
+
+    monkeypatch.setenv("OCI_OBRIGATORIO", "false")
+    monkeypatch.setattr(triagem_service, "_obter_storage", lambda: None)
+
+    detalhe_interno = "detalhe interno ficticio do grafo"
+
+    with patch.object(
+        triagem_service._grafo,
+        "invoke",
+        side_effect=RuntimeError(detalhe_interno),
+    ) as executar_grafo:
+        envio = client.post(
+            "/api/v1/triagens",
+            json={
+                "documento_texto": (
+                    "Receituário médico fictício para teste "
+                    "de falha após o aceite."
+                ),
+                "canal_origem": "TESTE",
+            },
+        )
+        assert envio.status_code == 202
+        documento_id = envio.json()["documento_id"]
+        rota = f"/api/v1/triagens/{documento_id}"
+
+        status = client.get(f"{rota}/status")
+        resultado = client.get(rota)
+        consulta_repetida = client.get(rota)
+        historico = client.get(f"{rota}/historico")
+
+        assert executar_grafo.call_count == 1
+
+    assert status.status_code == 200
+    assert status.json()["status"] == "ERRO_PROCESSAMENTO"
+    assert status.json()["concluido"] is True
+
+    assert resultado.status_code == 200
+    dados = resultado.json()
+    assert dados["documento_id"] == documento_id
+    assert dados["status"] == "ERRO_PROCESSAMENTO"
+    assert dados["erro"]["codigo"]
+    assert dados["erro"]["mensagem"]
+    assert detalhe_interno not in resultado.text
+
+    assert consulta_repetida.status_code == 200
+    assert consulta_repetida.json() == dados
+
+    assert historico.status_code == 200
+    eventos = historico.json()
+    assert sum(evento["tipo_evento"] == "PROCESSANDO" for evento in eventos) == 1
+    assert eventos[-1]["status_novo"] == "ERRO_PROCESSAMENTO"

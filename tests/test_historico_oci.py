@@ -560,3 +560,374 @@ def test_recuperacao_documentos_grava_historico_sem_reanalise(
         eventos_salvos[-1]["tipo_evento"]
         == "RETRY_PERSISTENCIA_SUCESSO"
     )
+
+
+def test_erro_processamento_persiste_resultado_e_historico(
+    preparar, monkeypatch
+):
+    service, storage, documento_id = preparar
+    chamadas_grafo = []
+
+    def falhar_grafo(entrada):
+        chamadas_grafo.append(entrada)
+        raise RuntimeError("Detalhe interno fictício do grafo.")
+
+    monkeypatch.setattr(service._grafo, "invoke", falhar_grafo)
+
+    triagem = service.executar_triagem(documento_id)
+
+    assert triagem.status == StatusTriagem.ERRO_PROCESSAMENTO
+    assert triagem.armazenamento_oci.status_backup == "sucesso"
+    assert service.obter_triagem(documento_id) == triagem
+    assert service.obter_status(documento_id) == StatusTriagem.ERRO_PROCESSAMENTO
+    assert len(chamadas_grafo) == 1
+
+    caminho_resultado = triagem.armazenamento_oci.caminho_objeto
+    assert caminho_resultado == f"processados/{documento_id}/resultado.json"
+
+    resultado = json.loads(storage.objetos[caminho_resultado])
+    assert resultado["documento_id"] == documento_id
+    assert resultado["status"] == "ERRO_PROCESSAMENTO"
+    assert resultado["erro"]["codigo"] == "FALHA_WORKFLOW"
+    assert "Detalhe interno fictício" not in resultado["erro"]["mensagem"]
+
+    referencia = service.obter_referencia_historico_oci(documento_id)
+    assert referencia is not None
+    assert referencia.startswith(f"historico/{documento_id}/")
+
+    historico = json.loads(storage.objetos[referencia])
+    assert historico["documento_id"] == documento_id
+    assert historico["eventos"] == [
+        evento.model_dump(mode="json")
+        for evento in service.obter_historico(documento_id)
+    ]
+    assert [evento["tipo_evento"] for evento in historico["eventos"]] == [
+        "RECEBIDO",
+        "PROCESSANDO",
+        "ERRO_PROCESSAMENTO",
+    ]
+    assert historico["eventos"][-1]["status_novo"] == "ERRO_PROCESSAMENTO"
+
+
+def test_erro_processamento_sinaliza_falha_oci(preparar, monkeypatch):
+    service, storage, documento_id = preparar
+    chamadas_grafo = []
+    tentativas_resultado = []
+    enviar_bytes_original = storage.enviar_bytes
+
+    def falhar_grafo(entrada):
+        chamadas_grafo.append(entrada)
+        raise RuntimeError("Detalhe interno fictício do grafo.")
+
+    def falhar_gravacao_resultado(
+        caminho, conteudo, tipo_conteudo="application/octet-stream"
+    ):
+        if caminho.endswith("/resultado.json"):
+            tentativas_resultado.append(caminho)
+            raise TimeoutError("Falha simulada na gravação do resultado.")
+        return enviar_bytes_original(caminho, conteudo, tipo_conteudo)
+
+    monkeypatch.setattr(service._grafo, "invoke", falhar_grafo)
+    monkeypatch.setattr(storage, "enviar_bytes", falhar_gravacao_resultado)
+
+    triagem = service.executar_triagem(documento_id)
+
+    caminho_resultado = f"processados/{documento_id}/resultado.json"
+    assert tentativas_resultado == [caminho_resultado]
+    assert len(chamadas_grafo) == 1
+    assert triagem.status == StatusTriagem.ERRO_PERSISTENCIA
+    assert triagem.armazenamento_oci.status_backup == "falha"
+    assert service.obter_triagem(documento_id) == triagem
+    assert service.obter_status(documento_id) == StatusTriagem.ERRO_PERSISTENCIA
+
+    assert f"recebidos/{documento_id}/original.txt" in storage.objetos
+    assert caminho_resultado not in storage.objetos
+    assert service.obter_referencia_historico_oci(documento_id) is None
+
+    eventos = service.obter_historico(documento_id)
+    assert any(evento.tipo_evento == "ERRO_PROCESSAMENTO" for evento in eventos)
+    assert eventos[-1].status_novo == StatusTriagem.ERRO_PERSISTENCIA
+
+
+@pytest.mark.parametrize(
+    "cenario",
+    ["identico", "divergente", "leitura_indisponivel", "erro_processamento"],
+)
+def test_retry_412_resultado_mesmo_documento(preparar, monkeypatch, cenario):
+    service, storage, documento_id = preparar
+    caminho_resultado = f"processados/{documento_id}/resultado.json"
+    enviar_bytes = storage.enviar_bytes
+    ler_bytes = storage.ler_bytes
+    executar_grafo = service._grafo.invoke
+    chamadas_grafo = []
+    leituras = []
+
+    class ObjetoJaExiste(Exception):
+        status = 412
+        code = "PreconditionFailed"
+
+    def grafo_controlado(entrada):
+        chamadas_grafo.append(entrada)
+        if cenario == "erro_processamento":
+            raise RuntimeError("Falha fictícia do grafo.")
+        return executar_grafo(entrada)
+
+    def enviar_com_timeout(caminho, conteudo, tipo_conteudo="application/octet-stream"):
+        if caminho in storage.objetos:
+            raise ObjetoJaExiste("Objeto já existe.")
+        confirmacao = enviar_bytes(caminho, conteudo, tipo_conteudo)
+        if caminho == caminho_resultado:
+            raise TimeoutError("Objeto gravado, mas a confirmação se perdeu.")
+        return confirmacao
+
+    def ler_objeto(caminho):
+        leituras.append(caminho)
+        if caminho == caminho_resultado and cenario == "leitura_indisponivel":
+            raise TimeoutError("Não foi possível ler o resultado existente.")
+        return ler_bytes(caminho)
+
+    monkeypatch.setattr(service._grafo, "invoke", grafo_controlado)
+    monkeypatch.setattr(storage, "enviar_bytes", enviar_com_timeout)
+    monkeypatch.setattr(storage, "ler_bytes", ler_objeto)
+
+    primeira_triagem = service.executar_triagem(documento_id)
+
+    assert primeira_triagem.status == StatusTriagem.ERRO_PERSISTENCIA
+    assert primeira_triagem.armazenamento_oci.status_backup == "falha"
+    assert service.obter_referencia_historico_oci(documento_id) is None
+
+    caminho_original = f"recebidos/{documento_id}/original.txt"
+    original_antes = storage.objetos[caminho_original]
+    resultado_esperado = json.loads(storage.objetos[caminho_resultado])
+
+    if cenario == "divergente":
+        storage.objetos[caminho_resultado] = b'{"documento_id": "OUTRO-DOCUMENTO"}'
+
+    resultado_antes_do_retry = storage.objetos[caminho_resultado]
+
+    if cenario in {"divergente", "leitura_indisponivel"}:
+        with pytest.raises(RuntimeError):
+            service.reprocessar_persistencia_oci(documento_id)
+
+        triagem = service.obter_triagem(documento_id)
+        assert triagem.status == StatusTriagem.ERRO_PERSISTENCIA
+        assert triagem.armazenamento_oci.status_backup == "falha"
+        assert service.obter_referencia_historico_oci(documento_id) is None
+    else:
+        triagem = service.reprocessar_persistencia_oci(documento_id)
+
+        assert triagem.status.value == resultado_esperado["status"]
+        assert triagem.armazenamento_oci.status_backup == "sucesso"
+        assert service.obter_triagem(documento_id) == triagem
+
+        referencia = service.obter_referencia_historico_oci(documento_id)
+        assert referencia is not None
+        historico = json.loads(storage.objetos[referencia])
+        assert historico["documento_id"] == documento_id
+        assert historico["eventos"][-1]["status_novo"] == triagem.status.value
+
+        if cenario == "erro_processamento":
+            assert triagem.status == StatusTriagem.ERRO_PROCESSAMENTO
+            assert triagem.erro.codigo.value == "FALHA_WORKFLOW"
+            assert triagem.classificacao is None
+            assert triagem.decisao_roteamento is None
+
+    assert caminho_resultado in leituras
+    assert storage.objetos[caminho_original] == original_antes
+    assert storage.objetos[caminho_resultado] == resultado_antes_do_retry
+    assert len(chamadas_grafo) == 1
+
+
+@pytest.mark.parametrize(
+    "cenario",
+    ["identico", "divergente", "leitura_indisponivel"],
+)
+def test_retry_412_snapshot_historico(preparar, monkeypatch, cenario):
+    service, storage, documento_id = preparar
+    enviar_bytes = storage.enviar_bytes
+    ler_bytes = storage.ler_bytes
+    envios_historico = []
+    leituras = []
+
+    class ObjetoJaExiste(Exception):
+        status = 412
+        code = "PreconditionFailed"
+
+    def enviar_com_timeout(
+        caminho, conteudo, tipo_conteudo="application/octet-stream"
+    ):
+        if not caminho.startswith("historico/"):
+            return enviar_bytes(caminho, conteudo, tipo_conteudo)
+
+        envios_historico.append(caminho)
+        if caminho in storage.objetos:
+            raise ObjetoJaExiste("Snapshot já existe.")
+
+        confirmacao = enviar_bytes(caminho, conteudo, tipo_conteudo)
+        if len(envios_historico) == 1:
+            raise TimeoutError("Snapshot gravado, mas a confirmação se perdeu.")
+        return confirmacao
+
+    def ler_objeto(caminho):
+        leituras.append(caminho)
+        if cenario == "leitura_indisponivel":
+            raise TimeoutError("Leitura do snapshot indisponível.")
+        return ler_bytes(caminho)
+
+    monkeypatch.setattr(storage, "enviar_bytes", enviar_com_timeout)
+    monkeypatch.setattr(storage, "ler_bytes", ler_objeto)
+
+    triagem = service.executar_triagem(documento_id)
+
+    assert triagem.status == StatusTriagem.ERRO_PERSISTENCIA
+    assert triagem.armazenamento_oci.status_backup == "falha"
+    assert service.obter_referencia_historico_oci(documento_id) is None
+    assert len(envios_historico) == 1
+
+    primeiro_snapshot = envios_historico[0]
+    documentos_salvos = {
+        caminho: conteudo
+        for caminho, conteudo in storage.objetos.items()
+        if not caminho.startswith("historico/")
+    }
+
+    if cenario == "divergente":
+        storage.objetos[primeiro_snapshot] = b'{"documento_id": "OUTRO"}'
+
+    bytes_antes_do_retry = storage.objetos[primeiro_snapshot]
+
+    if cenario == "identico":
+        recuperada = service.reprocessar_persistencia_oci(documento_id)
+
+        assert recuperada.status != StatusTriagem.ERRO_PERSISTENCIA
+        assert recuperada.armazenamento_oci.status_backup == "sucesso"
+
+        referencia = service.obter_referencia_historico_oci(documento_id)
+        assert referencia is not None
+        assert referencia != primeiro_snapshot
+        assert envios_historico == [
+            primeiro_snapshot,
+            primeiro_snapshot,
+            referencia,
+        ]
+
+        historico = json.loads(storage.objetos[referencia])
+        assert historico["documento_id"] == documento_id
+        assert historico["eventos"] == [
+            evento.model_dump(mode="json")
+            for evento in service.obter_historico(documento_id)
+        ]
+        assert (
+            historico["eventos"][-1]["tipo_evento"]
+            == "HISTORICO_PERSISTENCIA_RECUPERADA"
+        )
+    else:
+        with pytest.raises(RuntimeError):
+            service.reprocessar_persistencia_oci(documento_id)
+
+        assert service.obter_status(documento_id) == StatusTriagem.ERRO_PERSISTENCIA
+        assert service.obter_referencia_historico_oci(documento_id) is None
+        assert envios_historico == [primeiro_snapshot, primeiro_snapshot]
+
+    assert leituras == [primeiro_snapshot]
+    assert storage.objetos[primeiro_snapshot] == bytes_antes_do_retry
+    assert all(
+        storage.objetos[caminho] == conteudo
+        for caminho, conteudo in documentos_salvos.items()
+    )
+
+
+def test_retry_412_snapshot_recuperacao_preserva_evento(preparar, monkeypatch):
+    service, storage, documento_id = preparar
+    enviar_bytes = storage.enviar_bytes
+    ler_bytes = storage.ler_bytes
+    envios_historico = []
+    envios_recuperacao = []
+    leituras = []
+    tipo_recuperacao = "HISTORICO_PERSISTENCIA_RECUPERADA"
+
+    class ObjetoJaExiste(Exception):
+        status = 412
+        code = "PreconditionFailed"
+
+    def enviar_com_falhas(
+        caminho, conteudo, tipo_conteudo="application/octet-stream"
+    ):
+        if not caminho.startswith("historico/"):
+            return enviar_bytes(caminho, conteudo, tipo_conteudo)
+
+        envios_historico.append(caminho)
+        if len(envios_historico) == 1:
+            raise TimeoutError("Primeira tentativa falhou antes da gravação.")
+
+        payload = json.loads(conteudo)
+        contem_recuperacao = any(
+            evento["tipo_evento"] == tipo_recuperacao
+            for evento in payload["eventos"]
+        )
+        if contem_recuperacao:
+            envios_recuperacao.append((caminho, bytes(conteudo)))
+
+        if caminho in storage.objetos:
+            raise ObjetoJaExiste("Snapshot já existe.")
+
+        confirmacao = enviar_bytes(caminho, conteudo, tipo_conteudo)
+        if contem_recuperacao and len(envios_recuperacao) == 1:
+            raise TimeoutError("Snapshot de recuperação gravado sem confirmação.")
+
+        return confirmacao
+
+    def ler_objeto(caminho):
+        leituras.append(caminho)
+        return ler_bytes(caminho)
+
+    monkeypatch.setattr(storage, "enviar_bytes", enviar_com_falhas)
+    monkeypatch.setattr(storage, "ler_bytes", ler_objeto)
+
+    # A primeira gravação do histórico falha antes de criar o objeto.
+    triagem = service.executar_triagem(documento_id)
+    assert triagem.status == StatusTriagem.ERRO_PERSISTENCIA
+    assert service.obter_referencia_historico_oci(documento_id) is None
+
+    # A primeira retentativa grava o snapshot de recuperação, mas perde a confirmação.
+    with pytest.raises(RuntimeError, match="histórico continua pendente"):
+        service.reprocessar_persistencia_oci(documento_id)
+
+    assert service.obter_status(documento_id) == StatusTriagem.ERRO_PERSISTENCIA
+    assert len(envios_recuperacao) == 1
+
+    caminho_recuperacao, bytes_recuperacao = envios_recuperacao[0]
+    assert storage.objetos[caminho_recuperacao] == bytes_recuperacao
+    assert service.obter_referencia_historico_oci(documento_id) != caminho_recuperacao
+
+    historico_gravado = json.loads(bytes_recuperacao)
+    eventos_recuperacao = [
+        evento
+        for evento in historico_gravado["eventos"]
+        if evento["tipo_evento"] == tipo_recuperacao
+    ]
+    assert len(eventos_recuperacao) == 1
+    evento_id = eventos_recuperacao[0]["evento_id"]
+
+    # A segunda retentativa recebe 412 e confirma o snapshot existente.
+    recuperada = service.reprocessar_persistencia_oci(documento_id)
+
+    assert recuperada.status != StatusTriagem.ERRO_PERSISTENCIA
+    assert recuperada.armazenamento_oci.status_backup == "sucesso"
+    assert service.obter_referencia_historico_oci(documento_id) == caminho_recuperacao
+    assert leituras == [caminho_recuperacao]
+    assert envios_recuperacao == [
+        (caminho_recuperacao, bytes_recuperacao),
+        (caminho_recuperacao, bytes_recuperacao),
+    ]
+    assert storage.objetos[caminho_recuperacao] == bytes_recuperacao
+
+    eventos_finais = service.obter_historico(documento_id)
+    assert [
+        evento.evento_id
+        for evento in eventos_finais
+        if evento.tipo_evento == tipo_recuperacao
+    ] == [evento_id]
+    assert [evento.model_dump(mode="json") for evento in eventos_finais] == (
+        historico_gravado["eventos"]
+    )
