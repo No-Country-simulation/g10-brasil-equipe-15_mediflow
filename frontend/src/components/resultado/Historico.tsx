@@ -1,3 +1,4 @@
+import { ordenarHistorico } from '../../lib/resultadoTriagem'
 import type { EventoHistorico } from '../../types/api'
 import { Card } from './Card'
 
@@ -9,8 +10,9 @@ function dataHora(iso: string): string {
   return `${dia} ${hora}`
 }
 
-/** Linha do tempo de auditoria, como a API devolve (sem inventar eventos). */
-export function Historico({ eventos }: { eventos: readonly EventoHistorico[] }) {
+/** Linha do tempo de auditoria com os eventos da API em ordem cronológica (sem inventar eventos). */
+export function Historico({ eventos: recebidos }: { eventos: readonly EventoHistorico[] }) {
+  const eventos = ordenarHistorico(recebidos)
   return (
     <Card titulo="Histórico" gap="gap-3.5">
       {eventos.length === 0 ? (

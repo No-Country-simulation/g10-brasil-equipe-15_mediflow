@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { CENARIOS_DEMO } from '../fixtures'
 import cenarioUrgente from '../fixtures/cenarios/cenario_2_urgencia_tep.json'
 import cenarioAmbiguo from '../fixtures/cenarios/cenario_3_ambiguidade_rasura.json'
 import conflitoDose from '../fixtures/expected/conflito_dose.json'
@@ -53,6 +54,7 @@ describe('ResultadoPage', () => {
   let statusForcado: string | null
   let falhaStatus: 404 | 'REDE' | null
   let reprocessoOk: boolean
+  let historico: unknown[]
 
   beforeEach(() => {
     localStorage.clear()
@@ -72,6 +74,7 @@ describe('ResultadoPage', () => {
     statusForcado = null
     falhaStatus = null
     reprocessoOk = true
+    historico = historicoPadrao
     fetchMock.mockReset()
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -91,7 +94,7 @@ describe('ResultadoPage', () => {
           concluido: TERMINAIS.includes(status),
         })
       }
-      if (url.endsWith('/historico')) return json(200, historicoPadrao)
+      if (url.endsWith('/historico')) return json(200, historico)
       if (url.endsWith('/reprocessar-persistencia') && init?.method === 'POST') {
         if (!reprocessoOk)
           return json(502, {
@@ -160,6 +163,28 @@ describe('ResultadoPage', () => {
     expect(
       within(card('Decisão de roteamento')).getByText('Evento simulado registrado (SIMULADO_SLACK_PLANTAO)'),
     ).toBeInTheDocument()
+  })
+
+  it('urgente sem alerta registrado: a linha Alerta mostra a falha e o encaminhamento mantido', async () => {
+    triagem = {
+      ...CENARIOS_DEMO.urgente,
+      decisao_roteamento: { ...CENARIOS_DEMO.urgente.decisao_roteamento, notificacao: null },
+    }
+    await abrir()
+
+    expect(within(card('Decisão de roteamento')).getByText(/^Falha ao registrar o evento de alerta simulado\./)).toHaveTextContent(
+      'O encaminhamento à fila de urgência foi mantido.',
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent('Falha ao registrar o evento de alerta simulado')
+  })
+
+  it('histórico é exibido em ordem cronológica mesmo se a API devolver fora de ordem', async () => {
+    historico = [...historicoPadrao].reverse()
+    await abrir()
+
+    const tipos = within(card('Histórico')).getAllByRole('listitem').map((li) => li.textContent)
+    expect(tipos[0]).toContain('RECEBIDO')
+    expect(tipos[1]).toContain('ROTEADO')
   })
 
   it('03c urgente + revisão: dois banners e dois destinos', async () => {

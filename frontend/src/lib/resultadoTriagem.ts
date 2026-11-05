@@ -1,6 +1,7 @@
 import type { BadgeTone } from '../components/ui/Badge'
 import type { Conflito, Crm, Destino, Gravidade, StatusTriagem, TriagemMediFlow } from '../types/clinical'
-import { CAMPOS_OBRIGATORIOS, ROTULO_CAMPO } from './rotulos'
+import type { EventoHistorico } from '../types/api'
+import { CAMPOS_OBRIGATORIOS, ROTULO_CAMPO, rotuloTipoDocumento } from './rotulos'
 
 /** Regras de apresentação da tela de Resultado (Figma 03a–03e), sem React. */
 
@@ -137,8 +138,40 @@ function rotuloDoCampo(caminho: string): string {
   return ROTULO_CAMPO[caminho] ?? caminho
 }
 
-/** Motivos da revisão humana, na ordem do Figma: ausências, incertezas, conflitos e score. */
+const TIPOS_FORA_DA_TAXONOMIA: ReadonlySet<string> = new Set(['OUTRO', 'NAO_IDENTIFICADO'])
+
+export const MOTIVO_REVISAO_GENERICO = 'Caso sinalizado para revisão humana pela decisão de roteamento.'
+
+/**
+ * Motivos da revisão humana, na ordem do Figma: ausências, incertezas, conflitos e score.
+ * Depois vêm os demais gatilhos da RN-08 (tipo fora da taxonomia, prioridade e urgência
+ * indeterminadas). Sem nenhum motivo reconhecido, usa a justificativa do roteamento ou,
+ * na falta dela, um texto genérico — a lista nunca fica vazia.
+ */
 export function motivosDaRevisao(triagem: TriagemMediFlow): string[] {
+  const itens = motivosDeQualidade(triagem)
+  const c = triagem.classificacao
+
+  // Só OUTRO e NAO_IDENTIFICADO: o backend aceita apelidos de tipo que o front não traduz.
+  if (c && TIPOS_FORA_DA_TAXONOMIA.has(c.tipo_documento)) {
+    itens.push(`Tipo de documento fora da taxonomia (${rotuloTipoDocumento(c.tipo_documento)})`)
+  }
+  if (c?.nivel_prioridade === 'NAO_IDENTIFICADA') {
+    itens.push('Prioridade não identificada')
+  }
+  // Com prioridade ausente ou NAO_IDENTIFICADA, o normalizador pode ter deduzido INDETERMINADO
+  // sem o campo vir da API; nesse caso o motivo de prioridade já cobre o gatilho.
+  if (c && c.nivel_prioridade !== 'NAO_IDENTIFICADA' && triagem.dados_extraidos?.urgencia === 'INDETERMINADO') {
+    itens.push('Urgência clínica indeterminada')
+  }
+
+  if (itens.length === 0) {
+    itens.push(triagem.decisao_roteamento?.justificativa_roteamento || MOTIVO_REVISAO_GENERICO)
+  }
+  return itens
+}
+
+function motivosDeQualidade(triagem: TriagemMediFlow): string[] {
   const q = triagem.qualidade
   if (!q) return []
   const itens = [
@@ -168,21 +201,49 @@ export function emRevisao(triagem: TriagemMediFlow): boolean {
   return triagem.status === 'EM_REVISAO' || triagem.decisao_roteamento?.requer_auditoria_humana === true
 }
 
+// ---------- Alerta simulado (RF-22 e seção 12) ----------
+
+export type SituacaoAlerta =
+  | { tipo: 'registrado'; canal: string }
+  /** Caso urgente cujo evento de alerta não foi registrado; o encaminhamento urgente continua. */
+  | { tipo: 'falhou'; status: string | null }
+  | { tipo: 'nenhum' }
+
+/** Status de notificação que indicam falha (ex.: FALHA, FALHA_REGISTRO, ERRO_OCI). */
+const STATUS_FALHA_ALERTA = /^(FALHA|ERRO)/i
+
+/** A falha de alerta só existe em caso urgente: fora dele, nenhum alerta é devido. */
+export function situacaoDoAlerta(triagem: TriagemMediFlow): SituacaoAlerta {
+  const n = triagem.decisao_roteamento?.notificacao
+  const statusFalho = n ? STATUS_FALHA_ALERTA.test(n.status) : false
+  if (n?.gerada && !statusFalho) return { tipo: 'registrado', canal: n.canal }
+  if (ehUrgente(triagem)) return { tipo: 'falhou', status: statusFalho ? (n?.status ?? null) : null }
+  return { tipo: 'nenhum' }
+}
+
+export function textoFalhaAlerta(status: string | null): string {
+  const detalhe = status ? ` (status ${status})` : ''
+  return `Falha ao registrar o evento de alerta simulado${detalhe}. O encaminhamento à fila de urgência foi mantido.`
+}
+
 /** Banners do topo da página. Em 03c (urgente + revisão) vêm os dois, nessa ordem. */
 export function bannersDe(triagem: TriagemMediFlow): Banner[] {
   if (triagem.status === 'ERRO_PROCESSAMENTO' || triagem.status === 'ERRO_PERSISTENCIA') return []
   const justificativa = triagem.decisao_roteamento?.justificativa_roteamento ?? ''
-  const notificacao = triagem.decisao_roteamento?.notificacao
   const banners: Banner[] = []
 
   if (ehUrgente(triagem)) {
+    const alerta = situacaoDoAlerta(triagem)
     banners.push({
       tipo: 'urgente',
       titulo: 'Urgente · encaminhado à fila de urgência médica',
       corpo: triagem.dados_extraidos?.achados_criticos || justificativa,
-      nota: notificacao?.gerada
-        ? `Alerta registrado como evento simulado (${notificacao.canal}). Nenhuma mensagem foi enviada a serviço externo.`
-        : null,
+      nota:
+        alerta.tipo === 'registrado'
+          ? `Alerta registrado como evento simulado (${alerta.canal}). Nenhuma mensagem foi enviada a serviço externo.`
+          : alerta.tipo === 'falhou'
+            ? textoFalhaAlerta(alerta.status)
+            : null,
     })
   }
   if (emRevisao(triagem)) {
@@ -228,4 +289,22 @@ export function alertaDeErro(triagem: TriagemMediFlow): AlertaErro | null {
     }
   }
   return null
+}
+
+// ---------- Histórico ----------
+
+/**
+ * Eventos em ordem cronológica por `criado_em` (seção 11.8), sem confiar na ordem da API.
+ * A ordenação é estável; datas inválidas vão para o fim, na ordem em que chegaram.
+ */
+export function ordenarHistorico(eventos: readonly EventoHistorico[]): EventoHistorico[] {
+  const instante = (e: EventoHistorico) => {
+    const t = Date.parse(e.criado_em)
+    return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t
+  }
+  return [...eventos].sort((a, b) => {
+    const ta = instante(a)
+    const tb = instante(b)
+    return ta === tb ? 0 : ta < tb ? -1 : 1
+  })
 }

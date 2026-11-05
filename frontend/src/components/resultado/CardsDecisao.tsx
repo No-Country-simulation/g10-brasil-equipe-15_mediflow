@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { cx } from '../../lib/cx'
-import { confiancaDe, formatarScore, TOM_DESTINO } from '../../lib/resultadoTriagem'
+import { confiancaDe, formatarScore, situacaoDoAlerta, textoFalhaAlerta, TOM_DESTINO } from '../../lib/resultadoTriagem'
 import { ROTULO_DESTINO, ROTULO_GRAVIDADE } from '../../lib/rotulos'
 import type { Destino, TriagemMediFlow } from '../../types/clinical'
 import { Icon } from '../ui'
@@ -120,7 +120,7 @@ function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
 export function CardRoteamento({ triagem }: { triagem: TriagemMediFlow }) {
   const r = triagem.decisao_roteamento
   const destinos: Destino[] = r?.destinos.length ? r.destinos : r?.destino_principal ? [r.destino_principal] : []
-  const notificacao = r?.notificacao
+  const alerta = situacaoDoAlerta(triagem)
 
   return (
     <Card titulo="Decisão de roteamento">
@@ -144,7 +144,13 @@ export function CardRoteamento({ triagem }: { triagem: TriagemMediFlow }) {
           <span className="font-semibold">{r?.requer_auditoria_humana ? 'Sim' : 'Não'}</span>
         </Linha>
         <Linha rotulo="Alerta">
-          {notificacao?.gerada ? `Evento simulado registrado (${notificacao.canal})` : 'Nenhum alerta gerado'}
+          {alerta.tipo === 'registrado' ? (
+            `Evento simulado registrado (${alerta.canal})`
+          ) : alerta.tipo === 'falhou' ? (
+            <span className="font-semibold text-status-danger-fg">{textoFalhaAlerta(alerta.status)}</span>
+          ) : (
+            'Nenhum alerta gerado'
+          )}
         </Linha>
         <Linha rotulo="Justificativa">{r?.justificativa_roteamento || '—'}</Linha>
       </dl>

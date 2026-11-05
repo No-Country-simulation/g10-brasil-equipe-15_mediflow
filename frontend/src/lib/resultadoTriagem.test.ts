@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CENARIOS_DEMO, RESPOSTAS_ESPERADAS } from '../fixtures'
 import conflitoDose from '../fixtures/expected/conflito_dose.json'
 import urgenteRevisao from '../fixtures/expected/urgente_revisao.json'
+import type { EventoHistorico } from '../types/api'
 import type { TriagemMediFlow } from '../types/clinical'
 import { normalizarTriagem } from './normalizarTriagem'
 import {
@@ -12,9 +13,13 @@ import {
   formatarCrm,
   formatarEspecialidade,
   formatarIdade,
+  MOTIVO_REVISAO_GENERICO,
   motivosDaRevisao,
+  ordenarHistorico,
   rotuloSinalizacao,
+  situacaoDoAlerta,
   situacaoDoCampo,
+  textoFalhaAlerta,
   tomDoStatus,
 } from './resultadoTriagem'
 
@@ -76,6 +81,137 @@ describe('motivosDaRevisao', () => {
       qualidade: { ...RESPOSTAS_ESPERADAS.rotina.qualidade!, campos_incertos: ['medico.crm'] },
     }
     expect(motivosDaRevisao(incerto)).toContain('CRM incerto ou ilegível')
+  })
+
+  const comTipo = (tipo: string) =>
+    ({
+      ...RESPOSTAS_ESPERADAS.rotina,
+      classificacao: { ...RESPOSTAS_ESPERADAS.rotina.classificacao!, tipo_documento: tipo },
+    }) as TriagemMediFlow
+
+  it.each([
+    ['OUTRO', 'Outro'],
+    ['NAO_IDENTIFICADO', 'Não identificado'],
+  ])('tipo de documento %s fica fora da taxonomia', (tipo, rotulo) => {
+    expect(motivosDaRevisao(comTipo(tipo))).toContain(`Tipo de documento fora da taxonomia (${rotulo})`)
+  })
+
+  it('apelido de tipo aceito pelo backend não vira "fora da taxonomia"', () => {
+    expect(motivosDaRevisao(comTipo('LAUDO_LABORATORIAL')).some((m) => m.startsWith('Tipo de documento'))).toBe(false)
+  })
+
+  it('prioridade não identificada gera motivo, mesmo sem qualidade, sem duplicar a urgência deduzida', () => {
+    const base = RESPOSTAS_ESPERADAS.rotina
+    const t: TriagemMediFlow = {
+      ...base,
+      qualidade: null,
+      classificacao: { ...base.classificacao!, nivel_prioridade: 'NAO_IDENTIFICADA' },
+      dados_extraidos: { ...base.dados_extraidos!, urgencia: 'INDETERMINADO' },
+    }
+    expect(motivosDaRevisao(t)).toEqual(['Prioridade não identificada'])
+  })
+
+  it('urgência indeterminada com prioridade definida gera motivo', () => {
+    const base = RESPOSTAS_ESPERADAS.rotina
+    const t: TriagemMediFlow = { ...base, dados_extraidos: { ...base.dados_extraidos!, urgencia: 'INDETERMINADO' } }
+    expect(motivosDaRevisao(t)).toContain('Urgência clínica indeterminada')
+  })
+
+  it('sem nenhum motivo reconhecido, usa a justificativa do roteamento', () => {
+    const t = RESPOSTAS_ESPERADAS.rotina
+    expect(motivosDaRevisao(t)).toEqual([t.decisao_roteamento!.justificativa_roteamento])
+  })
+
+  it('sem motivo nem justificativa, usa o texto genérico', () => {
+    const base = RESPOSTAS_ESPERADAS.rotina
+    const t: TriagemMediFlow = { ...base, decisao_roteamento: { ...base.decisao_roteamento!, justificativa_roteamento: '' } }
+    expect(motivosDaRevisao(t)).toEqual([MOTIVO_REVISAO_GENERICO])
+  })
+
+  it('a justificativa não entra quando já há motivos', () => {
+    expect(motivosDaRevisao(CENARIOS_DEMO.ambiguo)).not.toContain(
+      CENARIOS_DEMO.ambiguo.decisao_roteamento!.justificativa_roteamento,
+    )
+  })
+})
+
+describe('situacaoDoAlerta', () => {
+  const urgente = CENARIOS_DEMO.urgente
+  const comNotificacao = (t: TriagemMediFlow, n: { gerada: boolean; status: string } | null): TriagemMediFlow => ({
+    ...t,
+    decisao_roteamento: {
+      ...t.decisao_roteamento!,
+      notificacao: n && { canal: 'SIMULADO_SLACK_PLANTAO', ...n },
+    },
+  })
+
+  it('gerada com status normal está registrada', () => {
+    expect(situacaoDoAlerta(urgente)).toEqual({ tipo: 'registrado', canal: 'SIMULADO_SLACK_PLANTAO' })
+  })
+
+  it('urgente sem notificação falhou, sem status no texto', () => {
+    const t = comNotificacao(urgente, null)
+    expect(situacaoDoAlerta(t)).toEqual({ tipo: 'falhou', status: null })
+    expect(textoFalhaAlerta(null)).not.toContain('status')
+  })
+
+  it.each(['FALHA_REGISTRO', 'erro_oci'])('status %s falha mesmo com gerada=true', (status) => {
+    const t = comNotificacao(urgente, { gerada: true, status })
+    expect(situacaoDoAlerta(t)).toEqual({ tipo: 'falhou', status })
+    expect(textoFalhaAlerta(status)).toContain(`(status ${status})`)
+  })
+
+  it('urgente com gerada=false e status padrão falhou, sem status no texto', () => {
+    const t = comNotificacao(urgente, { gerada: false, status: 'REGISTRADA' })
+    expect(situacaoDoAlerta(t)).toEqual({ tipo: 'falhou', status: null })
+  })
+
+  it('status que só contém "erro" no meio não é falha', () => {
+    const t = comNotificacao(urgente, { gerada: true, status: 'SEM_ERRO' })
+    expect(situacaoDoAlerta(t).tipo).toBe('registrado')
+  })
+
+  it('não urgente com status de falha não mostra falha de alerta', () => {
+    const t = comNotificacao(RESPOSTAS_ESPERADAS.rotina, { gerada: false, status: 'FALHA' })
+    expect(situacaoDoAlerta(t)).toEqual({ tipo: 'nenhum' })
+  })
+
+  it('não urgente sem notificação não tem alerta', () => {
+    expect(situacaoDoAlerta(RESPOSTAS_ESPERADAS.rotina)).toEqual({ tipo: 'nenhum' })
+  })
+
+  it('banner urgente usa o texto de falha na nota', () => {
+    const [banner] = bannersDe(comNotificacao(urgente, null))
+    expect(banner).toMatchObject({ tipo: 'urgente', nota: textoFalhaAlerta(null) })
+  })
+})
+
+describe('ordenarHistorico', () => {
+  const evento = (id: string, criado_em: string): EventoHistorico => ({
+    evento_id: id,
+    documento_id: 'DOC-1',
+    tipo_evento: 'X',
+    criado_em,
+    ator: 'API',
+    status_novo: 'PROCESSADO',
+    versao_esquema: '2.0.0',
+  })
+  const ids = (es: EventoHistorico[]) => es.map((e) => e.evento_id)
+
+  it('ordena por criado_em crescente sem alterar o array original', () => {
+    const entrada = [evento('b', '2026-10-21T13:49:10Z'), evento('a', '2026-10-21T13:49:02Z')]
+    expect(ids(ordenarHistorico(entrada))).toEqual(['a', 'b'])
+    expect(ids(entrada)).toEqual(['b', 'a'])
+  })
+
+  it('mantém a ordem de chegada em empates', () => {
+    const t = '2026-10-21T13:49:02Z'
+    expect(ids(ordenarHistorico([evento('1', t), evento('2', t), evento('0', '2026-10-21T13:00:00Z')]))).toEqual(['0', '1', '2'])
+  })
+
+  it('datas inválidas vão para o fim, na ordem original', () => {
+    const entrada = [evento('x', 'lixo'), evento('b', '2026-10-21T13:49:10Z'), evento('y', ''), evento('a', '2026-10-21T13:49:02Z')]
+    expect(ids(ordenarHistorico(entrada))).toEqual(['a', 'b', 'x', 'y'])
   })
 })
 
