@@ -3,7 +3,7 @@
 > **Hackathon ONE G10 — Oracle Next Education & Alura**  
 > **Projeto 2:** Agente Autônomo para Triagem, Extração e Roteamento de Documentos Clínicos  
 > **Manual de Referência:** `34aa946f-2883-4917-aec1-aae0df0f43d1.pdf`  
-> **Status da Aplicação:** 245 testes automatizados via Pytest (100% verde)  
+> **Status da Aplicação:** 298 testes automatizados via Pytest (100% verde)  
 
 Bem-vindo ao guia oficial de contribuição do **MediFlow**! Este documento foi desenhado para orientar os 5 integrantes da equipe no fluxo de trabalho diário com GitFlow, organização de pastas, responsabilidades por módulo e padrões de qualidade inegociáveis.
 
@@ -71,16 +71,22 @@ g10-brasil-equipe-15_mediflow/
 ├── scripts/                                    <- Utilitários de homologação e scripts de diagnóstico
 │   └── testar_oci.py                           <- Validação real ponta a ponta no bucket OCI Always Free
 │
-├── tests/                                      <- Suíte Oficial Pytest com 217 testes automatizados
+├── tests/                                      <- Suíte Oficial Pytest com 298 testes automatizados (100% verde)
 │   ├── fixtures/                               <- Base de 79 fixtures canônicos (demo, catalogo, manifest.csv)
+│   ├── test_workflow.py                        <- 85 testes: roteamento, arestas LangGraph e decisão
 │   ├── test_contrato_fixtures.py               <- 79 testes: ponto fixo dos fixtures e regras R1 a R8
-│   ├── test_workflow.py                        <- 73 testes: transições e arestas do LangGraph
+│   ├── test_api.py                             <- 35 testes: endpoints REST FastAPI e resiliência OCI
 │   ├── test_ingestion.py                       <- 18 testes: arquivos físicos reais e limites
-│   ├── test_api.py                             <- 16 testes: endpoints assíncronos e validações EPT
-│   ├── test_gemini_service.py                  <- 9 testes unitários do GeminiService (REST, timeout 15s e fallback)
+│   ├── test_extraction_adapter.py              <- 18 testes: adaptação do envelope Gemini e sinais
+│   ├── test_gemini_service.py                  <- 11 testes unitários do GeminiService (REST, timeout e fallback)
+│   ├── test_gemini_workflow_adapter.py         <- 11 testes: integração adapter-grafo com mocks
 │   ├── test_audit_items.py                     <- 8 testes dedicados de auditoria técnica e sanidade
 │   ├── test_oci_storage.py                     <- 8 testes: persistência OCI com SDK simulado (mock)
-│   └── test_schemas.py                         <- 7 testes: Pydantic v2 e envelopes de erro
+│   ├── test_schemas.py                         <- 7 testes: Pydantic v2 e envelopes de erro
+│   ├── test_streamlit_pipeline.py              <- 6 testes: integração da bancada Streamlit (HiTL)
+│   ├── test_gemini_prioridades_dosagem.py      <- 5 testes: prioridades e dosagens anômalas
+│   ├── test_pr13_persistencia_pendente.py      <- 4 testes: integridade 412 e persistência pendente OCI
+│   └── test_exemplos_extracao_workflow.py      <- 4 testes: exemplos práticos de extração clínica
 │
 ├── testar_gemini.py                            <- Script de validação manual da IA com Google Gemini
 ├── frontend/                                   <- Portal Web Corporativo em React SPA (Vite + TypeScript)
@@ -153,7 +159,7 @@ git commit -m "tipo(escopo): descrição da alteração no imperativo"
 ```bash
 python -m pytest
 ```
-> ⚠️ **Nenhum Pull Request será aceito se algum dos 208 testes estiver falhando.**
+> ⚠️ **Nenhum Pull Request será aceito se algum dos 298 testes estiver falhando.**
 
 ### Passo 5: Enviar as alterações para o GitHub
 ```bash

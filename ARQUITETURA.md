@@ -4,7 +4,7 @@
 > **Projeto 2:** Agente Autônomo para Triagem, Extração e Roteamento de Documentos Clínicos  
 > **Equipe 15:** MediFlow  
 > **Manual Oficial de Referência:** `34aa946f-2883-4917-aec1-aae0df0f43d1.pdf`  
-> **Implementação Central:** [`src/schemas/clinical.py`](src/schemas/clinical.py) | **Suíte de Testes:** 245 testes automatizados via Pytest (100% verde)  
+> **Implementação Central:** [`src/schemas/clinical.py`](src/schemas/clinical.py) | **Suíte de Testes:** 298 testes automatizados via Pytest (100% verde)  
 
 ---
 
@@ -354,9 +354,9 @@ mediflow-documentos/ (Bucket OCI Always Free - Tenancy izapalomaa)
 
 ---
 
-## 🧪 7. Engenharia de Qualidade e Suíte de Testes (245 Testes)
+## 🧪 7. Engenharia de Qualidade e Suíte de Testes (298 Testes)
 
-A conformidade do MediFlow com os requisitos funcionais e com o edital da Oracle é auditada por uma suíte de 245 testes automatizados no Pytest (100% verde):
+A conformidade do MediFlow com os requisitos funcionais e com o edital da Oracle é auditada por uma suíte de 298 testes automatizados no Pytest (100% verde):
 
 | Módulo de Teste | Quantidade | Escopo e Cobertura Técnica |
 | :--- | :---: | :--- |
@@ -392,7 +392,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # Configurar GEMINI_API_KEY e credenciais OCI Always Free
 
-# 5. Executar a suíte completa de 245 testes automatizados
+# 5. Executar a suíte completa de 298 testes automatizados
 python -m pytest
 
 # 6. Testes Manuais Opcionais (Cloud OCI e IA Gemini)
@@ -454,15 +454,21 @@ g10-brasil-equipe-15_mediflow/
 │   ├── testar_simulacao_oci.py                 <- Validação da simulação de falhas OCI do catálogo EPT v1.0 (§12)
 │   └── testar_oci.py                           <- Validação real ponta a ponta no bucket OCI Always Free
 │
-├── tests/                                      <- Suíte Oficial de Testes Automatizados (245 testes)
+├── tests/                                      <- Suíte Oficial de Testes Automatizados (298 testes)
+│   ├── test_workflow.py                        <- 85 testes: roteamento, arestas LangGraph e decisão
 │   ├── test_contrato_fixtures.py               <- 79 testes: ponto fixo dos fixtures e regras R1 a R8
-│   ├── test_workflow.py                        <- 73 testes: transições e arestas do LangGraph
+│   ├── test_api.py                             <- 35 testes: endpoints REST FastAPI e resiliência OCI
 │   ├── test_ingestion.py                       <- 18 testes: arquivos reais, PDF, JPG, WEBP e DOCX (415)
-│   ├── test_api.py                             <- 16 testes: endpoints REST FastAPI e EPT
-│   ├── test_gemini_service.py                  <- 9 testes unitários do GeminiService (REST, 15s e fallback)
+│   ├── test_extraction_adapter.py              <- 18 testes: adaptação do envelope Gemini e sinais
+│   ├── test_gemini_service.py                  <- 11 testes unitários do GeminiService (REST, 15s e fallback)
+│   ├── test_gemini_workflow_adapter.py         <- 11 testes: integração adapter-grafo com mocks
 │   ├── test_audit_items.py                     <- 8 testes dedicados de auditoria técnica e sanidade
 │   ├── test_oci_storage.py                     <- 8 testes: persistência OCI com SDK simulado (mock)
 │   ├── test_schemas.py                         <- 7 testes: Pydantic v2 e envelopes de erro Nível 1 e 2
+│   ├── test_streamlit_pipeline.py              <- 6 testes: integração da bancada Streamlit (HiTL)
+│   ├── test_gemini_prioridades_dosagem.py      <- 5 testes: prioridades e dosagens anômalas
+│   ├── test_pr13_persistencia_pendente.py      <- 4 testes: integridade 412 e persistência pendente OCI
+│   ├── test_exemplos_extracao_workflow.py      <- 4 testes: exemplos práticos de extração clínica
 │   └── fixtures/                               <- Base de 79 fixtures canônicos
 │       ├── demo/                               <- 12 casos essenciais para o pitch (TXT, PDF, JPG, JSON)
 │       ├── catalogo/                           <- 67 casos avançados (qualidade, borda, limites)
