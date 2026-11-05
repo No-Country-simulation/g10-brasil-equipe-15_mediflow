@@ -931,3 +931,67 @@ def test_retry_412_snapshot_recuperacao_preserva_evento(preparar, monkeypatch):
     assert [evento.model_dump(mode="json") for evento in eventos_finais] == (
         historico_gravado["eventos"]
     )
+
+
+def test_api_reenvio_mesmo_id_preserva_triagem_e_objetos(monkeypatch):
+    from unittest.mock import patch
+
+    from starlette.testclient import TestClient
+
+    from src.api import routes
+    from src.api.main import app
+
+    monkeypatch.setenv("OCI_OBRIGATORIO", "true")
+    monkeypatch.setenv("OCI_SIMULACAO_HABILITADA", "false")
+    monkeypatch.setenv("LIMIAR_CONFIANCA", "0.85")
+
+    storage = StorageEmMemoria()
+    service = TriagemService(storage=storage)
+    monkeypatch.setattr(routes, "triagem_service", service)
+
+    documento_id = "DOC-TESTE-REENVIO-API"
+    url = f"/api/v1/triagens/{documento_id}"
+    payload = {
+        "documento_id": documento_id,
+        "documento_texto": "Receituário médico fictício para teste de reenvio.",
+    }
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        with patch.object(
+            service._grafo, "invoke", wraps=service._grafo.invoke
+        ) as grafo:
+            primeiro = client.post("/api/v1/triagens", json=payload)
+            assert primeiro.status_code == 202
+            assert primeiro.json()["documento_id"] == documento_id
+
+            resultado_inicial = client.get(url)
+            assert resultado_inicial.status_code == 200
+            assert resultado_inicial.json()["status"] == "EM_REVISAO"
+            assert resultado_inicial.json()["armazenamento_oci"]["status_backup"] == (
+                "sucesso"
+            )
+
+            objetos_iniciais = dict(storage.objetos)
+            historico_inicial = client.get(f"{url}/historico").json()
+            referencia_inicial = service.obter_referencia_historico_oci(
+                documento_id
+            )
+            assert referencia_inicial in objetos_iniciais
+
+            reenvio = client.post("/api/v1/triagens", json=payload)
+            assert reenvio.status_code == 202
+            assert reenvio.json()["documento_id"] == documento_id
+
+            conflito = client.post(
+                "/api/v1/triagens",
+                json={**payload, "documento_texto": "Outro documento fictício."},
+            )
+            assert conflito.status_code == 409
+            assert "DOCUMENTO_ID_CONFLITANTE" in conflito.text
+
+            resultado_final = client.get(url)
+            assert resultado_final.status_code == 200
+            assert resultado_final.json() == resultado_inicial.json()
+            assert client.get(f"{url}/historico").json() == historico_inicial
+            assert storage.objetos == objetos_iniciais
+            assert grafo.call_count == 1

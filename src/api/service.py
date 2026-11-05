@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+from threading import Lock
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -49,6 +50,8 @@ class TriagemService:
         self._metadados: Dict[str, Dict[str, Any]] = {}
         self._grafo = criar_grafo()
         self._storage = storage
+        self._lock_submissao = Lock()
+        self._locks_processamento: Dict[str, Any] = {}
 
         # Refer?ncias dos hist?ricos confirmados e recupera??o em mem?ria.
         self._historicos_oci: Dict[str, str] = {}
@@ -107,6 +110,19 @@ class TriagemService:
         self._historico[documento_id].append(evento)
         return evento
 
+    def _reutilizar_documento(self, documento_id: str, conteudo: bytes) -> bool:
+        original = self._documentos_originais.get(documento_id)
+        if original is None:
+            return False
+
+        if original.conteudo_bytes != conteudo:
+            raise IngestaoError(
+                codigo="DOCUMENTO_ID_CONFLITANTE",
+                mensagem="O identificador já está associado a outro conteúdo.",
+            )
+
+        return True
+
     def submeter_texto(
         self,
         texto: str,
@@ -125,20 +141,23 @@ class TriagemService:
             if (metadados and isinstance(metadados, dict) and metadados.get("nome_arquivo"))
             else f"{doc_id}.txt"
         )
-        doc = DocumentLoader.carregar_bytes(bytes_txt, nome_arquivo=nome_arq_informado, documento_id=doc_id)
+        with self._lock_submissao:
+            if self._reutilizar_documento(doc_id, bytes_txt):
+                return doc_id
+            doc = DocumentLoader.carregar_bytes(bytes_txt, nome_arquivo=nome_arq_informado, documento_id=doc_id)
 
-        self._documentos_originais[doc_id] = doc
-        self._status_em_andamento[doc_id] = StatusTriagem.RECEBIDO
-        self._metadados[doc_id] = dict(metadados) if (metadados and isinstance(metadados, dict)) else {}
+            self._documentos_originais[doc_id] = doc
+            self._status_em_andamento[doc_id] = StatusTriagem.RECEBIDO
+            self._metadados[doc_id] = dict(metadados) if (metadados and isinstance(metadados, dict)) else {}
 
-        self.registrar_evento(
-            documento_id=doc_id,
-            tipo_evento="RECEBIDO",
-            status_novo=StatusTriagem.RECEBIDO,
-            ator="API_INGESTAO",
-            motivo=f"Texto recebido via canal {canal_origem}",
-        )
-        return doc_id
+            self.registrar_evento(
+                documento_id=doc_id,
+                tipo_evento="RECEBIDO",
+                status_novo=StatusTriagem.RECEBIDO,
+                ator="API_INGESTAO",
+                motivo=f"Texto recebido via canal {canal_origem}",
+            )
+            return doc_id
 
     def submeter_arquivo(
         self,
@@ -153,20 +172,23 @@ class TriagemService:
             raise IngestaoError(codigo="CAMPOS_INVALIDOS", mensagem="Arquivo vazio (0 bytes).")
 
         doc_id = documento_id.strip() if (documento_id and documento_id.strip()) else self.gerar_documento_id()
-        doc = DocumentLoader.carregar_bytes(conteudo, nome_arquivo=nome_arquivo, documento_id=doc_id)
+        with self._lock_submissao:
+            if self._reutilizar_documento(doc_id, conteudo):
+                return doc_id
+            doc = DocumentLoader.carregar_bytes(conteudo, nome_arquivo=nome_arquivo, documento_id=doc_id)
 
-        self._documentos_originais[doc_id] = doc
-        self._status_em_andamento[doc_id] = StatusTriagem.RECEBIDO
-        self._metadados[doc_id] = dict(metadados) if (metadados and isinstance(metadados, dict)) else {}
+            self._documentos_originais[doc_id] = doc
+            self._status_em_andamento[doc_id] = StatusTriagem.RECEBIDO
+            self._metadados[doc_id] = dict(metadados) if (metadados and isinstance(metadados, dict)) else {}
 
-        self.registrar_evento(
-            documento_id=doc_id,
-            tipo_evento="RECEBIDO",
-            status_novo=StatusTriagem.RECEBIDO,
-            ator="API_INGESTAO",
-            motivo=f"Arquivo {nome_arquivo} recebido com sucesso",
-        )
-        return doc_id
+            self.registrar_evento(
+                documento_id=doc_id,
+                tipo_evento="RECEBIDO",
+                status_novo=StatusTriagem.RECEBIDO,
+                ator="API_INGESTAO",
+                motivo=f"Arquivo {nome_arquivo} recebido com sucesso",
+            )
+            return doc_id
 
     def _detectar_simulacao_oci(self, doc: DocumentoIngerido) -> tuple[bool, Optional[str]]:
         """
@@ -257,62 +279,63 @@ class TriagemService:
         else:
             backup_status = "ignorado_ou_falha"
 
-        # 2. Extração de Entidades Clínicas (Heurística Robusta do MVP)
-        texto = doc.conteudo_texto or ""
-        tipo_doc = self._inferir_tipo_documento(texto, doc.nome_arquivo)
-        urgente = self._inferir_urgencia(texto)
-
-        dados_paciente = self._extrair_paciente(texto)
-        dados_medico = self._extrair_medico(texto)
-        diagnostico, cid = self._extrair_diagnostico_e_cid(texto)
-        medicamentos = self._extrair_medicamentos(texto)
-        exames = self._extrair_exames(texto)
-
-        # 3. Execução do Grafo LangGraph
-        score_classif = 0.95
-        score_extrac = 0.95
-        campos_ausentes: List[str] = []
-
-        if not dados_paciente.nome:
-            campos_ausentes.append("paciente.nome")
-        if dados_paciente.idade is None:
-            campos_ausentes.append("paciente.idade")
-        if not dados_medico.nome:
-            campos_ausentes.append("medico.nome")
-        if not (dados_medico.crm and dados_medico.crm.numero):
-            campos_ausentes.append("medico.crm")
-        if not diagnostico and tipo_doc != "LAUDO_EXAME_LABORATORIAL":
-            campos_ausentes.append("diagnostico")
-
-        dados_extraidos_obj = DadosExtraidos(
-            paciente=dados_paciente,
-            medico=dados_medico,
-            diagnostico=diagnostico,
-            cid=cid,
-            medicamentos=medicamentos,
-            exames=exames,
-            urgencia="SIM" if urgente else "NAO",
-        )
-
-        entrada_workflow = EntradaWorkflow(
-            documento_id=documento_id,
-            classificacao=ClassificacaoClinica(
-                tipo_documento=tipo_doc,
-                nivel_prioridade=NivelPrioridade.URGENTE if urgente else NivelPrioridade.ROTINA,
-                score_confianca_classificacao=score_classif,
-            ),
-            dados_extraidos=dados_extraidos_obj,
-            urgencia="SIM" if urgente else "NAO",
-            campos_ausentes=campos_ausentes,
-            campos_incertos=[],
-            conflitos=[],
-            limiar=float(os.getenv("LIMIAR_CONFIANCA", "0.85")),
-        )
-
+        urgente = False
         try:
+            # 2. Extração de Entidades Clínicas (Heurística Robusta do MVP)
+            texto = doc.conteudo_texto or ""
+            tipo_doc = self._inferir_tipo_documento(texto, doc.nome_arquivo)
+            urgente = self._inferir_urgencia(texto)
+
+            dados_paciente = self._extrair_paciente(texto)
+            dados_medico = self._extrair_medico(texto)
+            diagnostico, cid = self._extrair_diagnostico_e_cid(texto)
+            medicamentos = self._extrair_medicamentos(texto)
+            exames = self._extrair_exames(texto)
+
+            # 3. Execução do Grafo LangGraph
+            score_classif = 0.95
+            score_extrac = 0.95
+            campos_ausentes: List[str] = []
+
+            if not dados_paciente.nome:
+                campos_ausentes.append("paciente.nome")
+            if dados_paciente.idade is None:
+                campos_ausentes.append("paciente.idade")
+            if not dados_medico.nome:
+                campos_ausentes.append("medico.nome")
+            if not (dados_medico.crm and dados_medico.crm.numero):
+                campos_ausentes.append("medico.crm")
+            if not diagnostico and tipo_doc != "LAUDO_EXAME_LABORATORIAL":
+                campos_ausentes.append("diagnostico")
+
+            dados_extraidos_obj = DadosExtraidos(
+                paciente=dados_paciente,
+                medico=dados_medico,
+                diagnostico=diagnostico,
+                cid=cid,
+                medicamentos=medicamentos,
+                exames=exames,
+                urgencia="SIM" if urgente else "NAO",
+            )
+
+            entrada_workflow = EntradaWorkflow(
+                documento_id=documento_id,
+                classificacao=ClassificacaoClinica(
+                    tipo_documento=tipo_doc,
+                    nivel_prioridade=NivelPrioridade.URGENTE if urgente else NivelPrioridade.ROTINA,
+                    score_confianca_classificacao=score_classif,
+                ),
+                dados_extraidos=dados_extraidos_obj,
+                urgencia="SIM" if urgente else "NAO",
+                campos_ausentes=campos_ausentes,
+                campos_incertos=[],
+                conflitos=[],
+                limiar=float(os.getenv("LIMIAR_CONFIANCA", "0.85")),
+            )
+
             saida_workflow = self._grafo.invoke({"entrada": entrada_workflow})
         except Exception:
-            logger.exception("Falha no grafo da triagem %s", documento_id)
+            logger.exception("Falha na extração ou no grafo da triagem %s", documento_id)
             mensagem = "Não foi possível concluir o processamento do documento."
 
             triagem = TriagemMediFlow(
@@ -959,7 +982,21 @@ class TriagemService:
         )
         return triagem_com_erro
 
-    def executar_triagem(
+    def executar_triagem(self, documento_id: str) -> TriagemMediFlow:
+        """Executa uma triagem por ID e reutiliza o resultado registrado."""
+        with self._lock_submissao:
+            lock = self._locks_processamento.get(documento_id)
+            if lock is None:
+                lock = Lock()
+                self._locks_processamento[documento_id] = lock
+
+        with lock:
+            triagem = self.obter_triagem(documento_id)
+            if triagem is not None:
+                return triagem
+            return self._executar_triagem_e_persistir_historico(documento_id)
+
+    def _executar_triagem_e_persistir_historico(
         self,
         documento_id: str,
     ) -> TriagemMediFlow:

@@ -859,21 +859,29 @@ def test_retry_com_original_existente_divergente_retorna_502_conflito(client):
         triagem_service._storage = None
 
 
+@pytest.mark.parametrize("etapa", ["extracao", "grafo"])
 def test_falha_grafo_apos_202_fica_consultavel_sem_reanalise(
-    client, monkeypatch
+    client, monkeypatch, etapa
 ):
     from src.api.routes import triagem_service
 
     monkeypatch.setenv("OCI_OBRIGATORIO", "false")
     monkeypatch.setattr(triagem_service, "_obter_storage", lambda: None)
 
-    detalhe_interno = "detalhe interno ficticio do grafo"
+    detalhe_interno = "detalhe interno ficticio da etapa"
+
+    if etapa == "extracao":
+        alvo = triagem_service
+        metodo = "_extrair_paciente"
+    else:
+        alvo = triagem_service._grafo
+        metodo = "invoke"
 
     with patch.object(
-        triagem_service._grafo,
-        "invoke",
+        alvo,
+        metodo,
         side_effect=RuntimeError(detalhe_interno),
-    ) as executar_grafo:
+    ) as executar_etapa:
         envio = client.post(
             "/api/v1/triagens",
             json={
@@ -893,7 +901,7 @@ def test_falha_grafo_apos_202_fica_consultavel_sem_reanalise(
         consulta_repetida = client.get(rota)
         historico = client.get(f"{rota}/historico")
 
-        assert executar_grafo.call_count == 1
+        assert executar_etapa.call_count == 1
 
     assert status.status_code == 200
     assert status.json()["status"] == "ERRO_PROCESSAMENTO"

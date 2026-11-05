@@ -31,6 +31,7 @@ router = APIRouter(prefix="/api/v1", tags=["Triagem Clínica"])
     responses={
         202: {"description": "Documento aceito e enfileirado para processamento."},
         400: {"model": ErroEnvelope, "description": "Requisição ou JSON malformado."},
+        409: {"model": ErroEnvelope, "description": "Identificador em conflito."},
         413: {"model": ErroEnvelope, "description": "Arquivo maior que o limite (10 MB)."},
         415: {"model": ErroEnvelope, "description": "Formato não suportado ou MIME inválido."},
         422: {"model": ErroEnvelope, "description": "Campos obrigatórios ausentes ou arquivo vazio."},
@@ -312,6 +313,12 @@ def _tratar_erro_ingestao(erro: Exception) -> HTTPException:
     if hasattr(code, "value"):
         code = code.value
     code = str(code) if code else ""
+
+    if code == "DOCUMENTO_ID_CONFLITANTE":
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"codigo": code, "mensagem": msg},
+        )
 
     if "não suportado" in msg.lower() or "não suportada" in msg.lower() or code == CodigoErro.FORMATO_NAO_SUPORTADO.value:
         return HTTPException(
