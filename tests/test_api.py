@@ -231,26 +231,43 @@ def test_ct076_health_check_responde_200(client):
     assert "password" not in corpo_str
 
 
-def test_ct070_historico_devolve_eventos_ordenados(client):
-    """CT-070: Histórico devolve linha do tempo completa e ordenada por documento_id."""
+def test_ct070_historico_devolve_eventos_ordenados(client, monkeypatch):
+    """CT-070: Histórico devolve eventos em ordem pelo mesmo documento_id."""
+    from datetime import datetime
+
+    from src.api.routes import triagem_service
+
+    monkeypatch.setenv("OCI_OBRIGATORIO", "false")
+    monkeypatch.setattr(triagem_service, "_obter_storage", lambda: None)
+
     payload = {
-        "documento_texto": "Atestado Médico\nPaciente: Laura Lima, 30 anos.\nDr. Souza CRM: 55443/SP"
+        "documento_texto": (
+            "Atestado Médico\n"
+            "Paciente: Laura Lima, 30 anos.\n"
+            "Dr. Souza CRM: 55443/SP"
+        )
     }
     post_res = client.post("/api/v1/triagens", json=payload)
+    assert post_res.status_code == 202
     doc_id = post_res.json()["documento_id"]
 
-    # Força a finalização
-    client.get(f"/api/v1/triagens/{doc_id}")
+    resultado = client.get(f"/api/v1/triagens/{doc_id}")
+    assert resultado.status_code == 200
 
     hist_res = client.get(f"/api/v1/triagens/{doc_id}/historico")
     assert hist_res.status_code == 200
     eventos = hist_res.json()
-    assert len(eventos) >= 2
-    # Evento inicial deve ser RECEBIDO
-    assert eventos[0]["tipo_evento"] == "RECEBIDO"
+
+    tipos = [evento["tipo_evento"] for evento in eventos]
+    assert tipos[:1] == ["RECEBIDO"]
     assert eventos[0]["status_novo"] == StatusTriagem.RECEBIDO
-    # Evento posterior deve ser ROTEADO
-    assert any(e["tipo_evento"] == "ROTEADO" for e in eventos)
+    assert "PROCESSANDO" in tipos
+    assert "ROTEADO" in tipos
+    assert 0 < tipos.index("PROCESSANDO") < tipos.index("ROTEADO")
+    assert all(evento["documento_id"] == doc_id for evento in eventos)
+
+    datas = [datetime.fromisoformat(evento["criado_em"]) for evento in eventos]
+    assert datas == sorted(datas)
 
 
 def test_ct080_nenhuma_resposta_expoe_stacktrace(client):
