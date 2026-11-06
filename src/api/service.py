@@ -1153,12 +1153,20 @@ class TriagemService:
         return "OUTRO"
 
     def _inferir_urgencia(self, texto: str) -> bool:
-        t = texto.upper()
-        termos_urgencia = [
-            "URGENTE", "URGÊNCIA", "EMERGÊNCIA", "EMERGENCIA", "CRÍTICO", "CRITICO",
-            "TEP", "TROMBOEMBOLISMO", "INFARTO", "HEMORRAGIA", "SEPSE"
-        ]
-        return any(termo in t for termo in termos_urgencia)
+        termos_urgencia = (
+            r"URGENTE|URGÊNCIA|EMERGÊNCIA|EMERGENCIA|CR[IÍ]TICOS?|"
+            r"TEP|TROMBOEMBOLISMO|INFARTO|HEMORRAGIA|SEPSE"
+        )
+        prefixo_negado = (
+            r"(?:(?:NÃO|NAO)[ \t]+(?:HÁ|HA)[ \t]+(?:EVIDÊNCIA|EVIDENCIA)[ \t]+DE"
+            r"|SEM[ \t]+(?:EVIDÊNCIA|EVIDENCIA)[ \t]+DE)[ \t]+"
+        )
+        padrao = rf"\b(?P<negado>{prefixo_negado})?(?:{termos_urgencia})\b"
+
+        return any(
+            ocorrencia.group("negado") is None
+            for ocorrencia in re.finditer(padrao, texto, re.IGNORECASE)
+        )
 
     def _extrair_paciente(self, texto: str) -> Paciente:
         nome_match = re.search(r"Paciente:\s*([^\n\r,]+)", texto, re.IGNORECASE)

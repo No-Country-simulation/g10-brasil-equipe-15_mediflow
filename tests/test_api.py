@@ -939,3 +939,47 @@ def test_falha_grafo_apos_202_fica_consultavel_sem_reanalise(
     eventos = historico.json()
     assert sum(evento["tipo_evento"] == "PROCESSANDO" for evento in eventos) == 1
     assert eventos[-1]["status_novo"] == "ERRO_PROCESSAMENTO"
+
+
+@pytest.mark.parametrize(
+    ("achado", "urgente"),
+    [
+        pytest.param("Há evidência de TEP.", True, id="afirmado"),
+        pytest.param("Não há evidência de TEP.", False, id="negado"),
+        pytest.param("Achados críticos.", True, id="criticos-plural"),
+        pytest.param("Sem evidência de TEP.", False, id="sem-evidencia"),
+        pytest.param(
+            "Não há evidência de TEP, mas há hemorragia.",
+            True,
+            id="outro-achado-urgente",
+        ),
+    ],
+)
+def test_api_urgencia_respeita_negacao(client, monkeypatch, achado, urgente):
+    from src.api.service import triagem_service
+
+    monkeypatch.setenv("OCI_OBRIGATORIO", "false")
+    monkeypatch.setattr(triagem_service, "_obter_storage", lambda: None)
+
+    texto = (
+        "Laudo de Exame de Imagem\n"
+        "Paciente: Pessoa Fictícia\n"
+        "Idade: 42\n"
+        "Médico: Profissional Fictício\n"
+        "CRM/SP: 123456\n"
+        f"Diagnóstico: {achado}"
+    )
+
+    envio = client.post("/api/v1/triagens", json={"documento_texto": texto})
+    assert envio.status_code == 202
+
+    documento_id = envio.json()["documento_id"]
+    consulta = client.get(f"/api/v1/triagens/{documento_id}")
+    assert consulta.status_code == 200
+
+    resultado = consulta.json()
+    assert resultado["dados_extraidos"]["urgencia"] == ("SIM" if urgente else "NAO")
+
+    decisao = resultado["decisao_roteamento"]
+    assert ("FILA_URGENCIA_MEDICA" in decisao["destinos"]) is urgente
+    assert decisao["justificativa_roteamento"]
