@@ -1,0 +1,21 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Validacao_ArquivoGrande",
+  "documento_ficticio": true,
+  "tipo_de_teste": "negativo_tecnico",
+  "entrada": {
+    "requisicao": "POST /api/v1/triagens",
+    "arquivo": "Validacao_ArquivoGrande.pdf"
+  },
+  "resposta_esperada": {
+    "http": 413,
+    "codigo_funcional": "ARQUIVO_MAIOR_QUE_LIMITE",
+    "mensagem": "Arquivo de 25 MB: acima do limite de 10 MB fixado para o MVP (decisão A6)."
+  },
+  "assercoes": [
+    "Rejeitar pelo tamanho antes de qualquer inferência.",
+    "Nenhuma inferência é executada para entrada inválida",
+    "Mensagem de erro é segura, sem stack trace ou segredo"
+  ],
+  "observacoes": "O expected deste fixture é um envelope de erro, não um JSON de triagem."
+}

@@ -1,0 +1,33 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+LAUDO DE EXAME DE IMAGEM
+Tomografia computadorizada — pronto-socorro
+
+Fixture: Matriz_LaudoDeImagem_Pdf
+Paciente: Carlos Eduardo Mendes
+Idade: 52 anos
+Documento: DOC-IMG-2026-0004
+Data: 15/10/2026
+Origem: Pronto-Socorro
+
+EXAME REALIZADO
+Tomografia computadorizada de tórax com contraste intravenoso.
+
+INDICAÇÃO
+Suspeita de embolia pulmonar aguda; dispneia súbita e dor torácica.
+
+ACHADOS
+Falha de enchimento em artéria pulmonar principal direita, compatível com tromboembolismo pulmonar agudo. Derrame pleural laminar à direita. Parênquima pulmonar sem consolidações.
+
+CONCLUSÃO
+Tromboembolismo pulmonar agudo (TEP). Correlação clínica urgente.
+
+------------------------------------------------------------------------------
+Dra. Renata Silveira
+CRM 145892-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_LaudoDeImagem_Pdf · dados sintéticos · página 1 de 1

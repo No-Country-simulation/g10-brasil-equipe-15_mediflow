@@ -1,0 +1,55 @@
+{
+  "status": "EM_REVISAO",
+  "documento_id": "DOC-2026-003",
+  "classificacao": {
+    "tipo_documento": "RECEITUARIO_MEDICO",
+    "especialidade": "Clínica Médica",
+    "nivel_prioridade": "Rotina",
+    "score_confianca_classificacao": 0.7
+  },
+  "dados_extraidos": {
+    "paciente": {
+      "nome": "Maria de Fatima Oliveira",
+      "idade": 55,
+      "cpf": null
+    },
+    "medico_solicitante": {
+      "nome": null,
+      "crm": null,
+      "crm_detalhado": null
+    },
+    "exame_ou_procedimento": null,
+    "exames_laboratoriais": [],
+    "diagnostico_principal": "Hipertensão Arterial Sistêmica",
+    "cid_extraido": null,
+    "medicamentos": [],
+    "score_confianca_extracao": 0.65
+  },
+  "qualidade": {
+    "score_classificacao": 0.7,
+    "score_extracao": 0.65,
+    "score_combinado": 0.65,
+    "limiar_aplicado": 0.85,
+    "campos_ausentes": [
+      "medico_solicitante.nome",
+      "medico_solicitante.crm"
+    ],
+    "campos_incerto": [],
+    "conflitos": []
+  },
+  "decisao_roteamento": {
+    "destino_principal": "Fila_Revisao_Humana",
+    "destinos": [
+      "Fila_Revisao_Humana",
+      "Farmacia_Hospitalar"
+    ],
+    "requer_auditoria_humana": true,
+    "justificativa_roteamento": "Score de confiança de extração abaixo da régua de corte (0.65 < 0.85) devido a rasura no CRM e dosagem. Retido para revisão humana.",
+    "notificacao_gerada": null
+  },
+  "armazenamento_oci": {
+    "bucket": "mediflow-documentos-clinicos",
+    "caminho_objeto": "auditoria_humana/DOC-2026-003.json",
+    "status_backup": "sucesso"
+  }
+}
