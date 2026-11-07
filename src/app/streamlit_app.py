@@ -23,6 +23,7 @@ from src.services.gemini_service import GeminiService
 from src.workflow.graph import criar_grafo
 from src.workflow.state import EntradaWorkflow
 from src.app.triage_pipeline import processar_documento_com_agente
+from src.app.oci_persistence import executar_persistencia_triagem
 from src.schemas import (
     TriagemMediFlow,
     StatusTriagem,
@@ -35,6 +36,11 @@ from src.schemas import (
     Medico,
     Crm,
     NivelPrioridade,
+    Qualidade,
+    DecisaoRoteamento,
+    ArmazenamentoOCI,
+    ErroProcessamento,
+    CodigoErro,
 )
 
 load_dotenv(override=True)
@@ -261,6 +267,9 @@ if "doc_id_atual" not in st.session_state:
 if "resultado_ia" not in st.session_state:
     st.session_state.resultado_ia = None
 
+if "cache_persistencia_oci" not in st.session_state:
+    st.session_state.cache_persistencia_oci = {}
+
 # ==============================================================================
 # BARRA LATERAL (CONTROLES E INGESTÃO)
 # ==============================================================================
@@ -342,6 +351,7 @@ if doc_ingerido is not None:
         st.session_state.auditoria_aprovada = False
         st.session_state.dados_editados = None
         st.session_state.resultado_ia = None
+        st.session_state.cache_persistencia_oci = {}
 
     col_esquerda, col_direita = st.columns([1, 1], gap="medium")
 
@@ -624,6 +634,84 @@ if doc_ingerido is not None:
             # -----------------------------------------------------------------
             # 3. ABAS DE DETALHAMENTO CLÍNICO E OPERACIONAL (STREAMLIT NATIVO)
             # -----------------------------------------------------------------
+            caminho_final = "processados/DOC-CLIN-2026-AUDITADO.json" if foi_auditado else caminho_oci_alvo
+
+            crm_parsed = None
+            if crm_str and crm_str not in ("N/I", "") and "?" not in str(crm_str):
+                partes_crm = re.split(r"[-/]", re.sub(r"(?i)^crm[\s\:\/\.\-]*", "", str(crm_str)).strip())
+                if len(partes_crm) == 2 and partes_crm[0].isdigit():
+                    crm_parsed = Crm(numero=partes_crm[0].strip(), uf=partes_crm[1].strip().upper())
+                elif partes_crm[0].isdigit():
+                    crm_parsed = Crm(numero=partes_crm[0].strip(), uf="SP")
+
+            p_obj = Paciente(nome=p_nome if p_nome != "Não identificado" else None, idade=p_idade)
+            m_obj = Medico(nome=m_nome if m_nome != "Não identificado" else None, crm=crm_parsed)
+            dados_ext_obj = DadosExtraidos(
+                paciente=p_obj,
+                medico=m_obj,
+                diagnostico=diag_str if diag_str != "N/I" else None,
+                cid=cid_str if cid_str not in ("Não informado", "N/I") else None,
+                medicamentos=medicamentos_lista or [],
+            )
+
+            prio_enum = NivelPrioridade.URGENTE if "URGENTE" in prioridade_str.upper() else NivelPrioridade.ROTINA
+            classif_obj = Classificacao(
+                tipo_documento=tipo_doc_str,
+                nivel_prioridade=prio_enum,
+                score_classificacao=float(qualidade_wf.score_classificacao),
+            )
+
+            qualidade_obj = Qualidade(
+                score_combinado=float(qualidade_wf.score_combinado),
+                score_classificacao=float(qualidade_wf.score_classificacao),
+                score_extracao=float(qualidade_wf.score_extracao),
+                motivos_revisao=qualidade_wf.motivos_revisao or [],
+                campos_ausentes=qualidade_wf.campos_ausentes or [],
+                campos_incertos=qualidade_wf.campos_incertos or [],
+                conflitos=getattr(qualidade_wf, "conflitos", []) or [],
+                limiar_aplicado=float(qualidade_wf.limiar_aplicado),
+            )
+
+            decisao_obj = DecisaoRoteamento(
+                destinos=destinos_raw,
+                requer_auditoria_humana=bool(requer_auditoria and not foi_auditado),
+                justificativa_roteamento=decisao_wf.justificativa,
+            )
+
+            status_clinico = StatusTriagem.PROCESSADO if (foi_auditado or not requer_auditoria) else StatusTriagem.EM_REVISAO
+
+            triagem_previa = TriagemMediFlow(
+                status=status_clinico,
+                documento_id=doc_ingerido.documento_id,
+                canal_origem="Bancada_Streamlit",
+                classificacao=classif_obj,
+                dados_extraidos=dados_ext_obj,
+                qualidade=qualidade_obj,
+                decisao_roteamento=decisao_obj,
+                armazenamento_oci=ArmazenamentoOCI(
+                    bucket=os.getenv("OCI_BUCKET_NAME", "mediflow-documentos"),
+                    caminho_objeto=caminho_final,
+                    status_backup="pendente",
+                    modo_simulacao=bool(dados_mock is not None),
+                )
+            )
+            payload_saida_base = triagem_previa.model_dump(mode="json")
+
+            # Executa ou recupera persistência OCI real
+            chave_cache_oci = f"{doc_ingerido.documento_id}_{'auditado' if foi_auditado else 'triagem'}"
+            if chave_cache_oci not in st.session_state.cache_persistencia_oci:
+                res_oci = executar_persistencia_triagem(
+                    documento_id=doc_ingerido.documento_id,
+                    nome_arquivo=doc_ingerido.nome_arquivo,
+                    conteudo_original_bytes=doc_ingerido.conteudo_bytes,
+                    dados_triagem_json=payload_saida_base,
+                    caminho_resultado_alvo=caminho_final,
+                    forcar_simulado=bool(dados_mock is not None),
+                )
+                st.session_state.cache_persistencia_oci[chave_cache_oci] = res_oci
+            else:
+                res_oci = st.session_state.cache_persistencia_oci[chave_cache_oci]
+
             tab_clinico, tab_hitl, tab_oci, tab_json = st.tabs([
                 ":material/medical_services: Resumo Clínico & Qualidade",
                 ":material/assignment_ind: Intervenção Médica (HiTL)",
@@ -777,13 +865,34 @@ if doc_ingerido is not None:
 
             # --- ABA 3: LINHA DO TEMPO & SNAPSHOTS OCI (PR #22) ---
             with tab_oci:
-                caminho_final = "processados/DOC-CLIN-2026-AUDITADO.json" if foi_auditado else caminho_oci_alvo
                 with st.container(border=True):
                     st.markdown("#### ☁️ Armazenamento & Imutabilidade OCI Always Free")
-                    st.markdown(f"**Bucket OCI:** `{os.getenv('OCI_BUCKET_NAME', 'mediflow-documentos')}`")
+                    st.markdown(f"**Bucket OCI:** `{res_oci['bucket']}`")
                     st.markdown(f"**Caminho Original:** `recebidos/{doc_ingerido.documento_id}/{doc_ingerido.nome_arquivo}`")
-                    st.markdown(f"**Caminho do Resultado:** `{caminho_final}`")
-                    st.caption("Conforme a Arquitetura A5 e PR #22, o OCI armazena snapshots imutáveis com validação por hash SHA-256.")
+                    st.markdown(f"**Caminho do Resultado:** `{res_oci['caminho_objeto']}`")
+
+                    # Diagnóstico e Feedback Fiel à Realidade
+                    if res_oci["status_backup"] == "sucesso":
+                        st.success(
+                            f"**Snapshot Gravado com Sucesso no OCI!**\n\n"
+                            f"- **ETag:** `{res_oci.get('etag') or 'Confirmado'}`\n"
+                            f"- **Status:** Snapshot imutável gravado no bucket com validação por hash.",
+                            icon=":material/cloud_done:"
+                        )
+                    elif res_oci["status_backup"] == "falha":
+                        st.error(
+                            f"**Falha na Persistência com a Nuvem Oracle (OCI):**\n\n"
+                            f"- **Erro:** `{res_oci.get('erro')}`\n\n"
+                            f"> O documento foi processado pela inteligência clínica, mas a gravação na nuvem foi rejeitada. Verifique as credenciais ou duplicidade de objeto.",
+                            icon=":material/cloud_off:"
+                        )
+                    else:  # simulado
+                        st.warning(
+                            f"**Persistência em Modo Simulado / Local:**\n\n"
+                            f"- **Motivo:** {res_oci.get('detalhes')}\n\n"
+                            f"> Nenhum snapshot foi enviado para a nuvem Oracle.",
+                            icon=":material/cloud_sync:"
+                        )
 
                 with st.container(border=True):
                     st.markdown("#### 🕒 Linha do Tempo do Ciclo de Vida Documental")
@@ -792,52 +901,58 @@ if doc_ingerido is not None:
                     st.markdown(f"3. ⚖️ **ROTEADO** — Direcionado para `{destinos_str}` (Score A3: `{qualidade_wf.score_combinado:.2f}`).")
                     if foi_auditado:
                         st.markdown("4. 🧑‍⚕️ **HOMOLOGADO** — Dados validados e aprovados por Médico Auditor (HiTL).")
-                        st.markdown("5. 📦 **SNAPSHOT_OCI** — Snapshot imutável gravado no OCI Object Storage.")
+                        if res_oci["status_backup"] == "sucesso":
+                            st.markdown(f"5. 📦 **SNAPSHOT_OCI** — Snapshot homologado gravado no OCI (ETag: `{res_oci.get('etag')}`).")
+                        elif res_oci["status_backup"] == "falha":
+                            st.markdown(f"5. ⚠️ **ERRO_PERSISTENCIA** — Falha ao gravar snapshot homologado no OCI.")
+                        else:
+                            st.markdown("5. ℹ️ **PERSISTÊNCIA LOCAL** — Homologação salva localmente (Modo Simulado).")
                     elif requer_auditoria:
                         st.markdown("4. ⏳ **EM_REVISAO** — Retido para revisão médica obrigatória.")
                     else:
-                        st.markdown("4. 📦 **SNAPSHOT_OCI** — Snapshot aprovado gravado no OCI Object Storage.")
+                        if res_oci["status_backup"] == "sucesso":
+                            st.markdown(f"4. 📦 **SNAPSHOT_OCI** — Snapshot gravado com sucesso no OCI (ETag: `{res_oci.get('etag')}`).")
+                        elif res_oci["status_backup"] == "falha":
+                            st.markdown(f"4. ⚠️ **ERRO_PERSISTENCIA** — Falha ao gravar snapshot no OCI.")
+                        else:
+                            st.markdown("4. ℹ️ **PERSISTÊNCIA LOCAL** — Snapshot mantido localmente (Modo Simulado).")
 
             # --- ABA 4: CONTRATO JSON TÉCNICO (OCI) ---
             with tab_json:
-                payload_saida = {
-                    "status": "PROCESSADO" if foi_auditado or not requer_auditoria else "EM_REVISAO",
-                    "documento_id": doc_ingerido.documento_id,
-                    "arquivo_origem": doc_ingerido.nome_arquivo,
-                    "classificacao": {
-                        "tipo_documento": tipo_doc_str,
-                        "prioridade": prioridade_str,
-                        "score_confianca": qualidade_wf.score_combinado
-                    },
-                    "dados_extraidos": {
-                        "paciente": p_nome,
-                        "idade": p_idade,
-                        "medico": m_nome,
-                        "crm": crm_str,
-                        "diagnostico": diag_str,
-                        "cid": cid_str
-                    },
-                    "qualidade": {
-                        "score_combinado": qualidade_wf.score_combinado,
-                        "score_classificacao": qualidade_wf.score_classificacao,
-                        "score_extracao": qualidade_wf.score_extracao,
-                        "motivos_revisao": qualidade_wf.motivos_revisao,
-                        "campos_ausentes": qualidade_wf.campos_ausentes,
-                        "campos_incertos": qualidade_wf.campos_incertos,
-                        "conflitos": [c.model_dump(mode="json") if hasattr(c, "model_dump") else str(c) for c in getattr(qualidade_wf, "conflitos", [])],
-                        "limiar_aplicado": qualidade_wf.limiar_aplicado
-                    },
-                    "decisao_roteamento": {
-                        "destinos": destinos_raw,
-                        "requer_auditoria_humana": requer_auditoria and not foi_auditado,
-                        "justificativa": decisao_wf.justificativa
-                    },
-                    "armazenamento_oci": {
-                        "bucket": os.getenv("OCI_BUCKET_NAME", "mediflow-documentos"),
-                        "caminho_objeto": caminho_final,
-                        "status_backup": "sucesso"
-                    }
-                }
+                # Regra R1 do Pydantic: falha OCI atualiza status principal para ERRO_PERSISTENCIA
+                if res_oci["status_backup"] == "falha":
+                    status_final_doc = StatusTriagem.ERRO_PERSISTENCIA
+                    erro_doc = ErroProcessamento(
+                        codigo=CodigoErro.ERRO_PERSISTENCIA,
+                        mensagem=f"Falha na gravação do snapshot no OCI: {res_oci.get('erro', 'Erro de persistência')}"
+                    )
+                else:
+                    status_final_doc = status_clinico
+                    erro_doc = None
+
+                triagem_final = TriagemMediFlow(
+                    status=status_final_doc,
+                    documento_id=doc_ingerido.documento_id,
+                    canal_origem="Bancada_Streamlit",
+                    classificacao=classif_obj,
+                    dados_extraidos=dados_ext_obj,
+                    qualidade=qualidade_obj,
+                    decisao_roteamento=decisao_obj,
+                    armazenamento_oci=ArmazenamentoOCI(
+                        bucket=res_oci["bucket"],
+                        caminho_objeto=res_oci["caminho_objeto"],
+                        status_backup=res_oci["status_backup"],
+                        modo_simulacao=res_oci["modo_simulacao"],
+                    ),
+                    erro=erro_doc,
+                )
+
+                payload_saida = triagem_final.model_dump(mode="json")
+                if res_oci.get("etag"):
+                    payload_saida["armazenamento_oci"]["etag"] = res_oci["etag"]
+                if res_oci.get("detalhes"):
+                    payload_saida["armazenamento_oci"]["detalhes"] = res_oci["detalhes"]
+
                 st.json(payload_saida)
 
 else:
