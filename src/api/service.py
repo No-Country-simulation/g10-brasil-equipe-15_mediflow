@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+from threading import Lock
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -49,6 +50,20 @@ class TriagemService:
         self._metadados: Dict[str, Dict[str, Any]] = {}
         self._grafo = criar_grafo()
         self._storage = storage
+        self._lock_submissao = Lock()
+        self._locks_processamento: Dict[str, Any] = {}
+
+        # Refer?ncias dos hist?ricos confirmados e recupera??o em mem?ria.
+        self._historicos_oci: Dict[str, str] = {}
+        self._historicos_pendentes: Dict[str, TriagemMediFlow] = {}
+        self._historicos_eventos_confirmados: Dict[str, tuple[str, ...]] = {}
+        self._snapshots_historico_pendentes: Dict[
+            str, tuple[str, bytes, tuple[str, ...]]
+        ] = {}
+        self._eventos_recuperacao_historico: Dict[str, EventoHistorico] = {}
+        self._resultados_pendentes: Dict[
+            str, tuple[str, bytes, TriagemMediFlow]
+        ] = {}
 
     def _obter_storage(self) -> Optional[Any]:
         """Obtém cliente OCI Storage configurado ou injetado."""
@@ -95,6 +110,19 @@ class TriagemService:
         self._historico[documento_id].append(evento)
         return evento
 
+    def _reutilizar_documento(self, documento_id: str, conteudo: bytes) -> bool:
+        original = self._documentos_originais.get(documento_id)
+        if original is None:
+            return False
+
+        if original.conteudo_bytes != conteudo:
+            raise IngestaoError(
+                codigo="DOCUMENTO_ID_CONFLITANTE",
+                mensagem="O identificador já está associado a outro conteúdo.",
+            )
+
+        return True
+
     def submeter_texto(
         self,
         texto: str,
@@ -113,20 +141,23 @@ class TriagemService:
             if (metadados and isinstance(metadados, dict) and metadados.get("nome_arquivo"))
             else f"{doc_id}.txt"
         )
-        doc = DocumentLoader.carregar_bytes(bytes_txt, nome_arquivo=nome_arq_informado, documento_id=doc_id)
+        with self._lock_submissao:
+            if self._reutilizar_documento(doc_id, bytes_txt):
+                return doc_id
+            doc = DocumentLoader.carregar_bytes(bytes_txt, nome_arquivo=nome_arq_informado, documento_id=doc_id)
 
-        self._documentos_originais[doc_id] = doc
-        self._status_em_andamento[doc_id] = StatusTriagem.RECEBIDO
-        self._metadados[doc_id] = dict(metadados) if (metadados and isinstance(metadados, dict)) else {}
+            self._documentos_originais[doc_id] = doc
+            self._status_em_andamento[doc_id] = StatusTriagem.RECEBIDO
+            self._metadados[doc_id] = dict(metadados) if (metadados and isinstance(metadados, dict)) else {}
 
-        self.registrar_evento(
-            documento_id=doc_id,
-            tipo_evento="RECEBIDO",
-            status_novo=StatusTriagem.RECEBIDO,
-            ator="API_INGESTAO",
-            motivo=f"Texto recebido via canal {canal_origem}",
-        )
-        return doc_id
+            self.registrar_evento(
+                documento_id=doc_id,
+                tipo_evento="RECEBIDO",
+                status_novo=StatusTriagem.RECEBIDO,
+                ator="API_INGESTAO",
+                motivo=f"Texto recebido via canal {canal_origem}",
+            )
+            return doc_id
 
     def submeter_arquivo(
         self,
@@ -141,20 +172,23 @@ class TriagemService:
             raise IngestaoError(codigo="CAMPOS_INVALIDOS", mensagem="Arquivo vazio (0 bytes).")
 
         doc_id = documento_id.strip() if (documento_id and documento_id.strip()) else self.gerar_documento_id()
-        doc = DocumentLoader.carregar_bytes(conteudo, nome_arquivo=nome_arquivo, documento_id=doc_id)
+        with self._lock_submissao:
+            if self._reutilizar_documento(doc_id, conteudo):
+                return doc_id
+            doc = DocumentLoader.carregar_bytes(conteudo, nome_arquivo=nome_arquivo, documento_id=doc_id)
 
-        self._documentos_originais[doc_id] = doc
-        self._status_em_andamento[doc_id] = StatusTriagem.RECEBIDO
-        self._metadados[doc_id] = dict(metadados) if (metadados and isinstance(metadados, dict)) else {}
+            self._documentos_originais[doc_id] = doc
+            self._status_em_andamento[doc_id] = StatusTriagem.RECEBIDO
+            self._metadados[doc_id] = dict(metadados) if (metadados and isinstance(metadados, dict)) else {}
 
-        self.registrar_evento(
-            documento_id=doc_id,
-            tipo_evento="RECEBIDO",
-            status_novo=StatusTriagem.RECEBIDO,
-            ator="API_INGESTAO",
-            motivo=f"Arquivo {nome_arquivo} recebido com sucesso",
-        )
-        return doc_id
+            self.registrar_evento(
+                documento_id=doc_id,
+                tipo_evento="RECEBIDO",
+                status_novo=StatusTriagem.RECEBIDO,
+                ator="API_INGESTAO",
+                motivo=f"Arquivo {nome_arquivo} recebido com sucesso",
+            )
+            return doc_id
 
     def _detectar_simulacao_oci(self, doc: DocumentoIngerido) -> tuple[bool, Optional[str]]:
         """
@@ -195,7 +229,7 @@ class TriagemService:
 
         return False, None
 
-    def executar_triagem(self, documento_id: str) -> TriagemMediFlow:
+    def _executar_triagem_existente(self, documento_id: str) -> TriagemMediFlow:
         """
         Executa o pipeline completo de triagem:
         Persistência inicial OCI -> Extração clínica -> LangGraph -> Persistência final OCI.
@@ -245,59 +279,162 @@ class TriagemService:
         else:
             backup_status = "ignorado_ou_falha"
 
-        # 2. Extração de Entidades Clínicas (Heurística Robusta do MVP)
-        texto = doc.conteudo_texto or ""
-        tipo_doc = self._inferir_tipo_documento(texto, doc.nome_arquivo)
-        urgente = self._inferir_urgencia(texto)
+        urgente = False
+        try:
+            # 2. Extração de Entidades Clínicas (Heurística Robusta do MVP)
+            texto = doc.conteudo_texto or ""
+            tipo_doc = self._inferir_tipo_documento(texto, doc.nome_arquivo)
+            urgente = self._inferir_urgencia(texto)
 
-        dados_paciente = self._extrair_paciente(texto)
-        dados_medico = self._extrair_medico(texto)
-        diagnostico, cid = self._extrair_diagnostico_e_cid(texto)
-        medicamentos = self._extrair_medicamentos(texto)
-        exames = self._extrair_exames(texto)
+            dados_paciente = self._extrair_paciente(texto)
+            dados_medico = self._extrair_medico(texto)
+            diagnostico, cid = self._extrair_diagnostico_e_cid(texto)
+            medicamentos = self._extrair_medicamentos(texto)
+            exames = self._extrair_exames(texto)
 
-        # 3. Execução do Grafo LangGraph
-        score_classif = 0.95
-        score_extrac = 0.95
-        campos_ausentes: List[str] = []
+            # 3. Execução do Grafo LangGraph
+            score_classif = 0.95
+            score_extrac = 0.95
+            campos_ausentes: List[str] = []
 
-        if not dados_paciente.nome:
-            campos_ausentes.append("paciente.nome")
-        if dados_paciente.idade is None:
-            campos_ausentes.append("paciente.idade")
-        if not dados_medico.nome:
-            campos_ausentes.append("medico.nome")
-        if not (dados_medico.crm and dados_medico.crm.numero):
-            campos_ausentes.append("medico.crm")
-        if not diagnostico and tipo_doc != "LAUDO_EXAME_LABORATORIAL":
-            campos_ausentes.append("diagnostico")
+            if not dados_paciente.nome:
+                campos_ausentes.append("paciente.nome")
+            if dados_paciente.idade is None:
+                campos_ausentes.append("paciente.idade")
+            if not dados_medico.nome:
+                campos_ausentes.append("medico.nome")
+            if not (dados_medico.crm and dados_medico.crm.numero):
+                campos_ausentes.append("medico.crm")
+            if not diagnostico and tipo_doc != "LAUDO_EXAME_LABORATORIAL":
+                campos_ausentes.append("diagnostico")
 
-        dados_extraidos_obj = DadosExtraidos(
-            paciente=dados_paciente,
-            medico=dados_medico,
-            diagnostico=diagnostico,
-            cid=cid,
-            medicamentos=medicamentos,
-            exames=exames,
-            urgencia="SIM" if urgente else "NAO",
-        )
+            dados_extraidos_obj = DadosExtraidos(
+                paciente=dados_paciente,
+                medico=dados_medico,
+                diagnostico=diagnostico,
+                cid=cid,
+                medicamentos=medicamentos,
+                exames=exames,
+                urgencia="SIM" if urgente else "NAO",
+            )
 
-        entrada_workflow = EntradaWorkflow(
-            documento_id=documento_id,
-            classificacao=ClassificacaoClinica(
-                tipo_documento=tipo_doc,
-                nivel_prioridade=NivelPrioridade.URGENTE if urgente else NivelPrioridade.ROTINA,
-                score_confianca_classificacao=score_classif,
-            ),
-            dados_extraidos=dados_extraidos_obj,
-            urgencia="SIM" if urgente else "NAO",
-            campos_ausentes=campos_ausentes,
-            campos_incertos=[],
-            conflitos=[],
-            limiar=float(os.getenv("LIMIAR_CONFIANCA", "0.85")),
-        )
+            entrada_workflow = EntradaWorkflow(
+                documento_id=documento_id,
+                classificacao=ClassificacaoClinica(
+                    tipo_documento=tipo_doc,
+                    nivel_prioridade=NivelPrioridade.URGENTE if urgente else NivelPrioridade.ROTINA,
+                    score_confianca_classificacao=score_classif,
+                ),
+                dados_extraidos=dados_extraidos_obj,
+                urgencia="SIM" if urgente else "NAO",
+                campos_ausentes=campos_ausentes,
+                campos_incertos=[],
+                conflitos=[],
+                limiar=float(os.getenv("LIMIAR_CONFIANCA", "0.85")),
+            )
 
-        saida_workflow = self._grafo.invoke({"entrada": entrada_workflow})
+            saida_workflow = self._grafo.invoke({"entrada": entrada_workflow})
+        except Exception:
+            logger.exception("Falha na extração ou no grafo da triagem %s", documento_id)
+            mensagem = "Não foi possível concluir o processamento do documento."
+
+            triagem = TriagemMediFlow(
+                status=StatusTriagem.ERRO_PROCESSAMENTO,
+                documento_id=documento_id,
+                armazenamento_oci=ArmazenamentoOCI(
+                    bucket=bucket_nome,
+                    status_backup="pendente",
+                    modo_simulacao=eh_simulacao,
+                ),
+                erro=ErroProcessamento(
+                    codigo=CodigoErro.FALHA_WORKFLOW,
+                    mensagem=mensagem,
+                ),
+            )
+
+            self.registrar_evento(
+                documento_id=documento_id,
+                tipo_evento="ERRO_PROCESSAMENTO",
+                status_anterior=StatusTriagem.PROCESSANDO,
+                status_novo=StatusTriagem.ERRO_PROCESSAMENTO,
+                ator="WORKFLOW_ENGINE",
+                motivo=mensagem,
+            )
+            pasta_status = "urgentes/" if urgente else ""
+            caminho_resultado = (
+                f"processados/{pasta_status}{documento_id}/resultado.json"
+            )
+            resultado_para_gravar = triagem.model_copy(
+                update={
+                    "armazenamento_oci": ArmazenamentoOCI(
+                        bucket=bucket_nome,
+                        caminho_objeto=caminho_resultado,
+                        status_backup="sucesso",
+                        modo_simulacao=False,
+                    ),
+                },
+            )
+            json_bytes = resultado_para_gravar.model_dump_json(indent=2).encode("utf-8")
+            if not eh_simulacao and (storage is not None or falha_persistencia):
+                self._resultados_pendentes[documento_id] = (
+                    caminho_resultado, json_bytes, resultado_para_gravar
+                )
+            if not eh_simulacao and storage is not None and not falha_persistencia:
+                try:
+                    confirmacao = storage.enviar_bytes(
+                        caminho_resultado,
+                        json_bytes,
+                        tipo_conteudo="application/json",
+                    )
+                    if (
+                        not isinstance(confirmacao, dict)
+                        or confirmacao.get("status_backup") != "sucesso"
+                        or confirmacao.get("caminho_objeto") != caminho_resultado
+                    ):
+                        raise RuntimeError("Gravação do resultado não confirmada.")
+                except Exception:
+                    logger.exception(
+                        "Falha ao gravar o resultado de erro da triagem %s",
+                        documento_id,
+                    )
+                    falha_persistencia = "Gravação do resultado não confirmada."
+                else:
+                    triagem = resultado_para_gravar
+                    self._resultados_pendentes.pop(documento_id, None)
+
+            if falha_persistencia:
+                mensagem_persistencia = (
+                    "O processamento falhou e a gravação no OCI não foi confirmada."
+                )
+                triagem = triagem.model_copy(
+                    update={
+                        "status": StatusTriagem.ERRO_PERSISTENCIA,
+                        "armazenamento_oci": ArmazenamentoOCI(
+                            bucket=bucket_nome,
+                            caminho_objeto=(
+                                caminho_oci_original if backup_status == "sucesso" else None
+                            ),
+                            status_backup="falha",
+                            modo_simulacao=eh_simulacao,
+                        ),
+                        "erro": ErroProcessamento(
+                            codigo=CodigoErro.ERRO_PERSISTENCIA,
+                            mensagem=mensagem_persistencia,
+                        ),
+                    },
+                )
+                self.registrar_evento(
+                    documento_id=documento_id,
+                    tipo_evento="ERRO_PERSISTENCIA",
+                    status_anterior=StatusTriagem.ERRO_PROCESSAMENTO,
+                    status_novo=StatusTriagem.ERRO_PERSISTENCIA,
+                    ator="OCI_STORAGE_PERSISTENCE",
+                    motivo=mensagem_persistencia,
+                )
+
+            self._triagens[documento_id] = triagem
+            self._status_em_andamento[documento_id] = triagem.status
+            return triagem
         decisao_wf = saida_workflow.get("decisao")
         qualidade_wf = saida_workflow.get("qualidade")
 
@@ -409,6 +546,9 @@ class TriagemService:
                     erro=None,
                 )
                 json_bytes = triagem_temp.model_dump_json(indent=2).encode("utf-8")
+                self._resultados_pendentes[documento_id] = (
+                    caminho_oci_resultado, json_bytes, triagem_temp
+                )
                 storage.enviar_bytes(
                     caminho_oci_resultado,
                     json_bytes,
@@ -416,6 +556,7 @@ class TriagemService:
                 )
                 backup_status = "sucesso"
                 caminho_oci_final = caminho_oci_resultado
+                self._resultados_pendentes.pop(documento_id, None)
             except Exception as err:
                 logger.error("Falha ao persistir JSON do resultado no OCI: %s", err)
                 falha_persistencia = f"FALHA_GRAVACAO_RESULTADO: {str(err)}"
@@ -500,7 +641,7 @@ class TriagemService:
             )
         return triagem
 
-    def reprocessar_persistencia_oci(self, documento_id: str) -> TriagemMediFlow:
+    def _reprocessar_persistencia_existente(self, documento_id: str) -> TriagemMediFlow:
         """
         Retenta a persistência durável no OCI para triagens com ERRO_PERSISTENCIA (RF-28, RF-30).
         Preserva rigorosamente a decisão clínica e dados prévios sem reprocessar LLM ou LangGraph.
@@ -520,10 +661,15 @@ class TriagemService:
 
         bucket_nome = os.getenv("OCI_BUCKET_NAME", "mediflow-documentos")
         caminho_original = f"recebidos/{documento_id}/original.{doc.formato.lower()}"
-        requer_revisao = bool(triagem.decisao_roteamento and triagem.decisao_roteamento.requer_auditoria_humana)
-        status_restaurado = StatusTriagem.EM_REVISAO if requer_revisao else StatusTriagem.PROCESSADO
-        pasta_status = "urgentes/" if (triagem.classificacao.nivel_prioridade == "URGENTE") else ""
-        caminho_resultado = f"processados/{pasta_status}{documento_id}/resultado.json"
+        resultado_pendente = self._resultados_pendentes.get(documento_id)
+        if resultado_pendente is not None and not eh_simulacao:
+            caminho_resultado, json_bytes, triagem_atualizada = resultado_pendente
+            status_restaurado = triagem_atualizada.status
+        else:
+            requer_revisao = bool(triagem.decisao_roteamento and triagem.decisao_roteamento.requer_auditoria_humana)
+            status_restaurado = StatusTriagem.EM_REVISAO if requer_revisao else StatusTriagem.PROCESSADO
+            pasta_status = "urgentes/" if (triagem.classificacao.nivel_prioridade == "URGENTE") else ""
+            caminho_resultado = f"processados/{pasta_status}{documento_id}/resultado.json"
 
         # -------------------------------------------------------------
         # CASO 1: SIMULAÇÃO EXPLÍCITA DO CATÁLOGO EPT v1.0 (§12)
@@ -614,30 +760,50 @@ class TriagemService:
                 else:
                     raise
 
-            # 2. Monta o contrato atualizado com persistência confirmada
-            triagem_atualizada = TriagemMediFlow(
-                status=status_restaurado,
-                documento_id=documento_id,
-                classificacao=triagem.classificacao,
-                dados_extraidos=triagem.dados_extraidos,
-                qualidade=triagem.qualidade,
-                decisao_roteamento=triagem.decisao_roteamento,
-                armazenamento_oci=ArmazenamentoOCI(
-                    bucket=bucket_nome,
-                    caminho_objeto=caminho_resultado,
-                    status_backup="sucesso",
-                    modo_simulacao=False,
-                ),
-                erro=None,
-            )
+            if resultado_pendente is None:
+                triagem_atualizada = TriagemMediFlow(
+                    status=status_restaurado,
+                    documento_id=documento_id,
+                    classificacao=triagem.classificacao,
+                    dados_extraidos=triagem.dados_extraidos,
+                    qualidade=triagem.qualidade,
+                    decisao_roteamento=triagem.decisao_roteamento,
+                    armazenamento_oci=ArmazenamentoOCI(
+                        bucket=bucket_nome,
+                        caminho_objeto=caminho_resultado,
+                        status_backup="sucesso",
+                        modo_simulacao=False,
+                    ),
+                    erro=None,
+                )
 
-            # 3. Regravação do JSON do resultado no OCI
-            json_bytes = triagem_atualizada.model_dump_json(indent=2).encode("utf-8")
-            storage.enviar_bytes(
-                caminho_resultado,
-                json_bytes,
-                tipo_conteudo="application/json",
-            )
+                json_bytes = triagem_atualizada.model_dump_json(indent=2).encode("utf-8")
+                self._resultados_pendentes[documento_id] = (
+                    caminho_resultado, json_bytes, triagem_atualizada
+                )
+
+            try:
+                confirmacao = storage.enviar_bytes(
+                    caminho_resultado, json_bytes, tipo_conteudo="application/json"
+                )
+            except Exception as erro_envio:
+                if (
+                    str(getattr(erro_envio, "status", "")) != "412"
+                    and getattr(erro_envio, "code", None) != "PreconditionFailed"
+                ):
+                    raise
+                ler_bytes = getattr(storage, "ler_bytes", None)
+                if not callable(ler_bytes):
+                    raise RuntimeError("Leitura do resultado existente indisponivel.") from erro_envio
+                if ler_bytes(caminho_resultado) != json_bytes:
+                    raise RuntimeError("Conteudo do resultado existente nao confirmado.") from erro_envio
+            else:
+                if (
+                    not isinstance(confirmacao, dict)
+                    or confirmacao.get("status_backup") != "sucesso"
+                    or confirmacao.get("caminho_objeto") != caminho_resultado
+                ):
+                    raise RuntimeError("Gravacao do resultado nao confirmada.")
         except Exception as err:
             logger.error("Falha física durante gravação OCI na retentativa para documento %s: %s", documento_id, err)
             self.registrar_evento(
@@ -650,6 +816,7 @@ class TriagemService:
             )
             raise RuntimeError(f"Falha na gravação dos objetos no bucket OCI: {str(err)}")
 
+        self._resultados_pendentes.pop(documento_id, None)
         self._triagens[documento_id] = triagem_atualizada
         self._status_em_andamento[documento_id] = status_restaurado
         self.registrar_evento(
@@ -661,6 +828,303 @@ class TriagemService:
             motivo=f"Objetos gravados com sucesso no bucket {bucket_nome}",
         )
         return triagem_atualizada
+
+    def obter_referencia_historico_oci(
+        self,
+        documento_id: str,
+    ) -> Optional[str]:
+        """Retorna o caminho do último snapshot confirmado."""
+        return self._historicos_oci.get(documento_id)
+
+    def persistir_historico_oci(self, documento_id: str) -> str:
+        """Persiste os eventos atuais em snapshots imutáveis."""
+        if not self._historico.get(documento_id):
+            raise ValueError("Não há histórico para persistir.")
+
+        doc = self._documentos_originais.get(documento_id)
+        if doc is not None and self._detectar_simulacao_oci(doc)[0]:
+            raise RuntimeError(
+                "Histórico em modo de simulação não confirma gravação real."
+            )
+
+        storage = self._obter_storage()
+        if storage is None:
+            raise RuntimeError(
+                "Conector OCI indisponível para gravar o histórico."
+            )
+
+        while True:
+            eventos = tuple(self._historico[documento_id])
+            ids_atuais = tuple(evento.evento_id for evento in eventos)
+            pendente = self._snapshots_historico_pendentes.get(documento_id)
+
+            if pendente is None:
+                referencia = self._historicos_oci.get(documento_id)
+                ids_confirmados = self._historicos_eventos_confirmados.get(
+                    documento_id
+                )
+                if referencia is not None and ids_confirmados == ids_atuais:
+                    return referencia
+
+                snapshot_id = uuid4().hex
+                caminho = f"historico/{documento_id}/{snapshot_id}.json"
+                payload = {
+                    "versao_esquema": "2.0.0",
+                    "documento_id": documento_id,
+                    "snapshot_id": snapshot_id,
+                    "eventos": [
+                        evento.model_dump(mode="json") for evento in eventos
+                    ],
+                }
+                conteudo = json.dumps(
+                    payload, ensure_ascii=False, indent=2
+                ).encode("utf-8")
+                pendente = (caminho, conteudo, ids_atuais)
+                self._snapshots_historico_pendentes[documento_id] = pendente
+
+            caminho, conteudo, ids_enviados = pendente
+
+            try:
+                confirmacao = storage.enviar_bytes(
+                    caminho,
+                    conteudo,
+                    tipo_conteudo="application/json",
+                )
+            except Exception as erro_envio:
+                status_oci = getattr(erro_envio, "status", None)
+                codigo_oci = getattr(erro_envio, "code", None)
+                if str(status_oci) != "412" and codigo_oci != "PreconditionFailed":
+                    raise
+
+                ler_bytes = getattr(storage, "ler_bytes", None)
+                if not callable(ler_bytes):
+                    raise RuntimeError(
+                        "Leitura do snapshot existente indisponível."
+                    ) from erro_envio
+
+                try:
+                    conteudo_existente = ler_bytes(caminho)
+                except Exception as erro_leitura:
+                    raise RuntimeError(
+                        "Não foi possível conferir o snapshot existente."
+                    ) from erro_leitura
+
+                if conteudo_existente != conteudo:
+                    raise RuntimeError(
+                        "O conteúdo do snapshot existente não foi confirmado."
+                    ) from erro_envio
+            else:
+                if (
+                    not isinstance(confirmacao, dict)
+                    or confirmacao.get("status_backup") != "sucesso"
+                    or confirmacao.get("caminho_objeto") != caminho
+                ):
+                    raise RuntimeError(
+                        "O conector não confirmou a gravação do histórico."
+                    )
+
+            self._historicos_oci[documento_id] = caminho
+            self._historicos_eventos_confirmados[documento_id] = ids_enviados
+            del self._snapshots_historico_pendentes[documento_id]
+
+            # Se novos eventos chegaram, grava outro snapshot na próxima volta.
+
+    def _marcar_falha_historico(
+        self,
+        documento_id: str,
+        triagem: TriagemMediFlow,
+    ) -> TriagemMediFlow:
+        """
+        Preserva a decisão, mas sinaliza a pendência do histórico.
+
+        O resultado anterior é mantido para recuperação sem
+        nova análise ou reenvio dos documentos.
+        """
+        self._historicos_pendentes[
+            documento_id
+        ] = triagem.model_copy(deep=True)
+
+        armazenamento = triagem.armazenamento_oci.model_copy(
+            update={"status_backup": "falha"},
+            deep=True,
+        )
+        triagem_com_erro = triagem.model_copy(
+            update={
+                "status": StatusTriagem.ERRO_PERSISTENCIA,
+                "armazenamento_oci": armazenamento,
+                "erro": ErroProcessamento(
+                    codigo=CodigoErro.ERRO_PERSISTENCIA,
+                    mensagem=(
+                        "Original e resultado preservados. "
+                        "A gravação do histórico não foi "
+                        "confirmada; é necessária nova tentativa."
+                    ),
+                ),
+            },
+            deep=True,
+        )
+
+        self._triagens[documento_id] = triagem_com_erro
+        self._status_em_andamento[
+            documento_id
+        ] = StatusTriagem.ERRO_PERSISTENCIA
+
+        self.registrar_evento(
+            documento_id=documento_id,
+            tipo_evento="HISTORICO_PERSISTENCIA_FALHA",
+            status_anterior=triagem.status,
+            status_novo=StatusTriagem.ERRO_PERSISTENCIA,
+            ator="OCI_STORAGE_HISTORY",
+            motivo=(
+                "Gravação do histórico não confirmada. "
+                "Evento mantido em memória para nova tentativa."
+            ),
+        )
+        return triagem_com_erro
+
+    def executar_triagem(self, documento_id: str) -> TriagemMediFlow:
+        """Executa uma triagem por ID e reutiliza o resultado registrado."""
+        with self._lock_submissao:
+            lock = self._locks_processamento.get(documento_id)
+            if lock is None:
+                lock = Lock()
+                self._locks_processamento[documento_id] = lock
+
+        with lock:
+            triagem = self.obter_triagem(documento_id)
+            if triagem is not None:
+                return triagem
+            return self._executar_triagem_e_persistir_historico(documento_id)
+
+    def _executar_triagem_e_persistir_historico(
+        self,
+        documento_id: str,
+    ) -> TriagemMediFlow:
+        """Executa o fluxo existente e persiste o histórico."""
+        triagem = self._executar_triagem_existente(
+            documento_id
+        )
+
+        doc = self._documentos_originais.get(documento_id)
+        if (
+            doc is not None
+            and self._detectar_simulacao_oci(doc)[0]
+        ):
+            return triagem
+
+        # Se original ou resultado falharam, mantém o erro
+        # e os eventos em memória. A recuperação existente
+        # deverá confirmar os documentos antes do histórico.
+        if triagem.status == StatusTriagem.ERRO_PERSISTENCIA:
+            return triagem
+
+        if (
+            triagem.armazenamento_oci.status_backup
+            != "sucesso"
+        ):
+            return triagem
+
+        try:
+            self.persistir_historico_oci(documento_id)
+        except Exception:
+            logger.exception(
+                "Gravação do histórico não confirmada para %s",
+                documento_id,
+            )
+            return self._marcar_falha_historico(
+                documento_id,
+                triagem,
+            )
+
+        return triagem
+
+    def reprocessar_persistencia_oci(
+        self,
+        documento_id: str,
+    ) -> TriagemMediFlow:
+        """
+        Recupera a persistência sem repetir a análise clínica.
+
+        Se somente o histórico falhou, grava apenas o histórico.
+        """
+        pendente = self._historicos_pendentes.get(
+            documento_id
+        )
+
+        if pendente is not None:
+            evento = self._eventos_recuperacao_historico.get(documento_id)
+            if evento is None:
+                evento = self.registrar_evento(
+                    documento_id=documento_id,
+                    tipo_evento="HISTORICO_PERSISTENCIA_RECUPERADA",
+                    status_anterior=StatusTriagem.ERRO_PERSISTENCIA,
+                    status_novo=pendente.status,
+                    ator="OCI_STORAGE_HISTORY",
+                    motivo=(
+                        "Recuperação da gravação do histórico, "
+                        "preservando original e resultado."
+                    ),
+                )
+                self._eventos_recuperacao_historico[documento_id] = evento
+            else:
+                self._historico[documento_id].append(evento)
+
+            try:
+                self.persistir_historico_oci(documento_id)
+
+            except Exception as err:
+                # Retira o evento de recuperação porque
+                # a gravação não foi confirmada.
+                self._historico[documento_id] = [
+                    item
+                    for item in self._historico[documento_id]
+                    if item.evento_id != evento.evento_id
+                ]
+                logger.exception(
+                    "Nova tentativa do histórico falhou para %s",
+                    documento_id,
+                )
+                raise RuntimeError(
+                    "A gravação do histórico continua pendente."
+                ) from err
+
+            self._triagens[documento_id] = pendente
+            self._status_em_andamento[
+                documento_id
+            ] = pendente.status
+
+            del self._historicos_pendentes[documento_id]
+            self._eventos_recuperacao_historico.pop(documento_id, None)
+            return pendente
+
+        triagem = self._reprocessar_persistencia_existente(
+            documento_id
+        )
+
+        doc = self._documentos_originais.get(documento_id)
+        if (
+            doc is not None
+            and self._detectar_simulacao_oci(doc)[0]
+        ):
+            return triagem
+
+        if triagem.status == StatusTriagem.ERRO_PERSISTENCIA:
+            return triagem
+
+        try:
+            self.persistir_historico_oci(documento_id)
+
+        except Exception as err:
+            self._marcar_falha_historico(
+                documento_id,
+                triagem,
+            )
+            raise RuntimeError(
+                "Documentos preservados, "
+                "mas o histórico continua pendente."
+            ) from err
+
+        return triagem
 
     def obter_triagem(self, documento_id: str) -> Optional[TriagemMediFlow]:
         return self._triagens.get(documento_id)
@@ -689,12 +1153,20 @@ class TriagemService:
         return "OUTRO"
 
     def _inferir_urgencia(self, texto: str) -> bool:
-        t = texto.upper()
-        termos_urgencia = [
-            "URGENTE", "URGÊNCIA", "EMERGÊNCIA", "EMERGENCIA", "CRÍTICO", "CRITICO",
-            "TEP", "TROMBOEMBOLISMO", "INFARTO", "HEMORRAGIA", "SEPSE"
-        ]
-        return any(termo in t for termo in termos_urgencia)
+        termos_urgencia = (
+            r"URGENTE|URGÊNCIA|EMERGÊNCIA|EMERGENCIA|CR[IÍ]TICOS?|"
+            r"TEP|TROMBOEMBOLISMO|INFARTO|HEMORRAGIA|SEPSE"
+        )
+        prefixo_negado = (
+            r"(?:(?:NÃO|NAO)[ \t]+(?:HÁ|HA)[ \t]+(?:EVIDÊNCIA|EVIDENCIA)[ \t]+DE"
+            r"|SEM[ \t]+(?:EVIDÊNCIA|EVIDENCIA)[ \t]+DE)[ \t]+"
+        )
+        padrao = rf"\b(?P<negado>{prefixo_negado})?(?:{termos_urgencia})\b"
+
+        return any(
+            ocorrencia.group("negado") is None
+            for ocorrencia in re.finditer(padrao, texto, re.IGNORECASE)
+        )
 
     def _extrair_paciente(self, texto: str) -> Paciente:
         nome_match = re.search(r"Paciente:\s*([^\n\r,]+)", texto, re.IGNORECASE)

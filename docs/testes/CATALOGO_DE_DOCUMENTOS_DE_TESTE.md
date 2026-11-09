@@ -421,3 +421,68 @@ Como o bloco vem primeiro, ordenar a pasta por nome já agrupa os casos por assu
 - `MediFlow_-_Análise_de_Requisitos_v1.1.pdf` — visão geral, requisitos RF/RNF/RN e decisões do time.
 - `MediFlow_Especificacao_Funcional_v1.0.pdf` — §5 (vocabulário), §6 (fluxo), §7 (RF-01 a RF-30), §8 (regras e tabela de decisão), §9 (modelo de dados), §10 (API), §12 (erros), §16 (critérios de aceite) e §15 (pendências).
 - [`tests/fixtures/manifest.csv`](../../tests/fixtures/manifest.csv) — os 79 fixtures em formato de máquina.
+
+## 16. Correspondência com os casos ING, CLA e EXT
+
+Esta seção relaciona os casos de ingestão, classificação e extração aos insumos descritos neste catálogo.
+
+**Situação do mapeamento:**
+
+- **Mapeado no catálogo:** existe uma fixture descrita compatível com o objetivo do caso. Falta conferir o caminho no manifesto e identificar o teste correspondente.
+- **Parcial:** os insumos identificados cobrem parte das variantes do caso.
+- **Pendente de confirmação:** falta identificar a entrada ou alinhar a definição com o responsável por QA.
+
+Esta tabela representa **rastreabilidade documental**. Não comprova, isoladamente, execução da ingestão, classificação ou extração real. Validar um `expected.json` contra o contrato também não comprova que o pipeline produziu esse resultado.
+
+### 16.1 Ingestão — ING
+
+| Caso | Objetivo | Fixture ou entrada relacionada | Resultado a verificar | Situação e pendência |
+| --- | --- | --- | --- | --- |
+| **ING-01** | Receber texto por envelope JSON | `Matriz_Receituario_Texto`, enviado em `documento_texto` | Envelope aceito; documento recebido e encaminhado ao processamento | **Mapeado no catálogo.** Conferir caminho do TXT e teste de submissão JSON |
+| **ING-02** | Ler PDF digital | `Matriz_Receituario_Pdf` | Extração da camada de texto e encaminhamento ao processamento | **Mapeado no catálogo.** Conferir caminho do PDF e teste de leitura |
+| **ING-03** | Processar PDF digitalizado | `Qualidade_Pdf_SemTexto`; complementado pelo bloco `Escaneado` | PDF sem camada textual segue pelo caminho multimodal, sem ser tratado como documento vazio apenas por não possuir texto extraível | **Mapeado no catálogo.** Identificar teste do caminho multimodal e distinguir simulação de chamada real |
+| **ING-04** | Receber imagem de receita ou laudo | `Matriz_Receituario_Imagem` e `Matriz_LaudoLaboratorial_Imagem`; `Limite_Formato_Png` para PNG | Imagem aceita e encaminhada ao processamento; formato preservado corretamente | **Mapeado no catálogo.** Conferir arquivos JPG/PNG e testes correspondentes |
+| **ING-05** | Rejeitar entrada sem campo obrigatório | `Validacao_EnvelopeVazio` e `Validacao_SemConteudo` | Rejeitar envelope JSON vazio ou requisição sem arquivo e sem texto, com HTTP `422` e código `CAMPOS_INVALIDOS` | **Parcial.** As fixtures e seus `expected.json` estão em `tests/fixtures/catalogo/`. Em `tests/test_api.py`, `test_ct007_requisicao_sem_arquivo_sem_texto_retorna_422` usa `data={}` e `test_ct012_envelope_json_vazio_retorna_422` usa `json={}`. Ambos verificam HTTP `422` e `CAMPOS_INVALIDOS`, em concordância com os resultados esperados. Os testes constroem os próprios payloads. Fica pendente conferir diretamente o conteúdo das fixtures e as asserções adicionais da EPT, como a mensagem segura. |
+| **ING-06** | Rejeitar formato não suportado | `Validacao_ArquivoDocx` e `Validacao_ArquivoZip`. A entrada EXE é construída no teste | Rejeitar os formatos não suportados. Na API, o caso DOCX deve retornar HTTP `415` e código `FORMATO_NAO_SUPORTADO` | **Parcial.** Os `expected.json` de DOCX e ZIP indicam `FORMATO_NAO_SUPORTADO`. O teste `tests/test_api.py::test_ct009_formato_nao_suportado_docx_retorna_415` usa bytes fictícios com extensão `.docx` e verifica HTTP `415` e o código funcional. Em `tests/test_ingestion.py`, `test_ingestao_fixture_william_docx_nao_suportado` lê a fixture DOCX e espera `ValueError`. `test_formato_invalido` envia `arquivo.exe` ao carregador e também espera `ValueError`. Ficam pendentes a execução específica da fixture ZIP e a verificação das asserções adicionais da EPT sobre mensagem segura e ausência de chamada à IA. |
+| **ING-07** | Tratar conteúdo vazio, apenas espaços ou corrompido | `Validacao_ArquivoVazio`, `Qualidade_Pdf_Corrompido` e TXT com espaços, tabulações e quebras de linha construído no teste | Rejeitar entradas inválidas na submissão. Para falhas de processamento detectadas após o aceite, informar `ERRO_PROCESSAMENTO` | **Parcial.** A fixture `Validacao_ArquivoVazio.pdf` tem 0 bytes. Em `tests/test_audit_items.py`, `test_item6_rejeicao_arquivo_vazio` e `test_item6_rejeicao_txt_somente_espacos` passaram e verificam `IngestaoError` com `VAZIO` no código. Na API, `test_ct010_arquivo_zero_bytes_retorna_422` verifica HTTP `422` e `CAMPOS_INVALIDOS` para bytes vazios. `test_ct079_pdf_protegido_e_corrompido_retornam_codigos_distintos` verifica HTTP `422` e `PDF_CORROMPIDO` para PDF corrompido detectado na submissão. Esses testes da API constroem as próprias entradas. Na ingestão, `test_pdf_corrompido` usa bytes em memória e `test_ingestao_fixture_william_corrompido` lê a fixture. Conforme alinhado com William, o `ERRO_PROCESSAMENTO` do `expected.json` se refere à falha após o aceite, cujo tratamento é acompanhado no PR #22. Fica pendente verificar diretamente o mapeamento dos códigos do carregador na API para arquivo vazio e TXT só com espaços. |
+
+**Observação sobre ING-01:** JSON é o envelope de transporte. A fixture utilizada continua representando um documento de texto.
+
+### 16.2 Classificação — CLA
+
+| Caso | Objetivo | Fixture relacionada | Resultado a verificar | Situação e pendência |
+| --- | --- | --- | --- | --- |
+| **CLA-01** | Classificar receituário médico | `Matriz_Receituario_Texto` e `Matriz_Receituario_Pdf` | `RECEITUARIO_MEDICO` | **Mapeado no catálogo.** Conferir entradas, resultados esperados e teste de classificação |
+| **CLA-02** | Classificar laudo laboratorial | `Matriz_LaudoLaboratorial_Pdf` | `LAUDO_EXAME_LABORATORIAL` | **Mapeado no catálogo.** Conferir entrada e resultado esperado |
+| **CLA-03** | Classificar laudo de imagem | `Matriz_LaudoDeImagem_Pdf` | `LAUDO_EXAME_IMAGEM` | **Mapeado no catálogo.** Conferir entrada e resultado esperado |
+| **CLA-04** | Classificar guia de solicitação de procedimento | `Matriz_Guia_Pdf` | `GUIA_PROCEDIMENTO` | **Mapeado no catálogo.** Confirmar se o conteúdo da fixture atende às variantes TISS/TUSS exigidas na EPT |
+| **CLA-05** | Classificar relatório de alta ou internação | `Matriz_RelatorioDeAlta_Pdf` e `Matriz_RelatorioDeAlta_Imagem` | `RELATORIO_ALTA_INTERNACAO` | **Mapeado no catálogo.** Conferir conteúdo e resultado esperado de cada variante |
+| **CLA-06** | Classificar atestado médico | `Matriz_Atestado_Texto` e `Matriz_Atestado_Pdf` | `ATESTADO_MEDICO` | **Mapeado no catálogo.** Conferir entradas e resultados esperados |
+| **CLA-07** | Classificar pedido de exames complementares e relatório cirúrgico | Fixtures específicas ainda não identificadas | Classificar pedido de exames complementares como `GUIA_PROCEDIMENTO` e relatório cirúrgico como `RELATORIO_ALTA_INTERNACAO` | **Parcial.** William confirmou o enquadramento das duas variantes na taxonomia atual. Falta identificar ou preparar as fixtures específicas e vincular os testes correspondentes. |
+| **CLA-08** | Tratar documento não clínico ou de tipo não identificado | `Matriz_Outro_Texto` e `Matriz_NaoIdentificado_Texto` | Classificar como `OUTRO` quando o documento estiver legível e fora das categorias previstas. Usar `NAO_IDENTIFICADO` quando o tipo não puder ser determinado | **Mapeado no catálogo.** As fixtures representam, respectivamente, um texto administrativo e uma lista de compras, com encaminhamento para revisão conforme os resultados esperados do catálogo. William confirmou que uma fixture específica de nota fiscal é dispensável. Falta vincular a evidência de execução dos casos de classificação. |
+| **CLA-09** | Tratar documento híbrido, confuso ou ilegível | `Matriz_NaoIdentificado_Imagem` e `Qualidade_Foto_Desfocada` para ilegibilidade. Fixture de documento híbrido pendente | Preservar ausências e incertezas e encaminhar para revisão humana quando a classificação for inconclusiva | **Parcial.** As fixtures identificadas representam ilegibilidade. Para a variante híbrida, falta preparar ou identificar uma fixture própria, registrar o resultado esperado e vincular o teste. |
+
+**Observação:** documentos ilegíveis, híbridos e não clínicos não são situações equivalentes. A associação parcial não deve ser registrada como cobertura integral dessas variantes.
+
+### 16.3 Extração — EXT
+
+| Caso | Objetivo | Fixture relacionada | Resultado a verificar | Situação e pendência |
+| --- | --- | --- | --- | --- |
+| **EXT-01** | Extrair nome e idade do paciente | `Matriz_Receituario_Texto`; complementos `Ausencia_Paciente_Nome` e `Ausencia_Paciente_Idade` | Valores presentes correspondem ao documento; ausências não são preenchidas por inferência | **Mapeado no catálogo.** Conferir valores no documento e no `expected.json` |
+| **EXT-02** | Extrair nome do médico e CRM | `Matriz_Receituario_Texto`; complementos `Ausencia_Medico_Nome` e `Ausencia_Medico_Crm` | Nome, número e UF preservados conforme a origem; representação normalizada conforme o contrato | **Mapeado no catálogo.** Conferir campos e testes de formato. Não representa consulta ao conselho profissional |
+| **EXT-03** | Extrair diagnóstico e CID-10 | `Matriz_Guia_Pdf`; complementos `Ausencia_SomenteCid` e `Conflito_Cid_Diagnostico` | Extração dos valores explícitos; CID ausente permanece nulo; conflito é preservado e tratado conforme regra aprovada | **Mapeado no catálogo.** Confirmar a evidência específica de coerência entre diagnóstico e CID. Extração literal e validação de coerência são verificações distintas |
+| **EXT-04** | Extrair todos os medicamentos sem trocar doses | `Matriz_Receituario_Pdf`, descrita com dois medicamentos, e `Matriz_Receituario_Texto`; complemento `Conflito_Dose` | Lista completa; nome, dose e frequência associados ao medicamento correto; valores suspeitos preservados, sem correção silenciosa | **Mapeado no catálogo.** Conferir os itens individualmente no documento e no `expected.json`, incluindo ausência ou ilegibilidade de dose/frequência conforme o contrato |
+
+### 16.4 Pendências para conferência com QA
+
+- [ ] Confirmar se os IDs e objetivos ING, CLA e EXT desta seção correspondem à versão atual da EPT.
+- [ ] Conferir no `manifest.csv` os caminhos reais das fixtures citadas e suas rendições.
+- [ ] Relacionar os respectivos `expected.json` e testes automatizados, distinguindo validação de contrato de execução do pipeline.
+- [ ] Identificar o payload e o teste de campo obrigatório ausente do ING-05.
+- [ ] Confirmar se DOCX basta para ING-06 ou se a EPT exige também EXE.
+- [ ] Identificar os testes de entrada vazia e apenas espaços do ING-07.
+- [ ] Confirmar o enquadramento e os insumos de pedido de exames e relatório cirúrgico do CLA-07.
+- [ ] Confirmar a distinção `OUTRO` versus `NAO_IDENTIFICADO` no CLA-08 e a necessidade de nota fiscal.
+- [ ] Confirmar a necessidade de documento híbrido específico no CLA-09.
+- [ ] Conferir a verificação de coerência diagnóstico × CID do EXT-03.
+- [ ] Conferir a extração completa e a associação correta das doses aos medicamentos do EXT-04.

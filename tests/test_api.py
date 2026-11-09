@@ -231,26 +231,43 @@ def test_ct076_health_check_responde_200(client):
     assert "password" not in corpo_str
 
 
-def test_ct070_historico_devolve_eventos_ordenados(client):
-    """CT-070: Histórico devolve linha do tempo completa e ordenada por documento_id."""
+def test_ct070_historico_devolve_eventos_ordenados(client, monkeypatch):
+    """CT-070: Histórico devolve eventos em ordem pelo mesmo documento_id."""
+    from datetime import datetime
+
+    from src.api.routes import triagem_service
+
+    monkeypatch.setenv("OCI_OBRIGATORIO", "false")
+    monkeypatch.setattr(triagem_service, "_obter_storage", lambda: None)
+
     payload = {
-        "documento_texto": "Atestado Médico\nPaciente: Laura Lima, 30 anos.\nDr. Souza CRM: 55443/SP"
+        "documento_texto": (
+            "Atestado Médico\n"
+            "Paciente: Laura Lima, 30 anos.\n"
+            "Dr. Souza CRM: 55443/SP"
+        )
     }
     post_res = client.post("/api/v1/triagens", json=payload)
+    assert post_res.status_code == 202
     doc_id = post_res.json()["documento_id"]
 
-    # Força a finalização
-    client.get(f"/api/v1/triagens/{doc_id}")
+    resultado = client.get(f"/api/v1/triagens/{doc_id}")
+    assert resultado.status_code == 200
 
     hist_res = client.get(f"/api/v1/triagens/{doc_id}/historico")
     assert hist_res.status_code == 200
     eventos = hist_res.json()
-    assert len(eventos) >= 2
-    # Evento inicial deve ser RECEBIDO
-    assert eventos[0]["tipo_evento"] == "RECEBIDO"
+
+    tipos = [evento["tipo_evento"] for evento in eventos]
+    assert tipos[:1] == ["RECEBIDO"]
     assert eventos[0]["status_novo"] == StatusTriagem.RECEBIDO
-    # Evento posterior deve ser ROTEADO
-    assert any(e["tipo_evento"] == "ROTEADO" for e in eventos)
+    assert "PROCESSANDO" in tipos
+    assert "ROTEADO" in tipos
+    assert 0 < tipos.index("PROCESSANDO") < tipos.index("ROTEADO")
+    assert all(evento["documento_id"] == doc_id for evento in eventos)
+
+    datas = [datetime.fromisoformat(evento["criado_em"]) for evento in eventos]
+    assert datas == sorted(datas)
 
 
 def test_ct080_nenhuma_resposta_expoe_stacktrace(client):
@@ -496,8 +513,18 @@ def test_reprocessar_persistencia_oci_via_api_com_sucesso(client):
         assert res_status.json()["concluido"] is True
 
         # 2. Restaura OCI (sem side_effect) e dispara retentativa
-        storage_mock.enviar_bytes.side_effect = None
-        storage_mock.enviar_bytes.return_value = {"status_backup": "sucesso"}
+        def confirmar_gravacao(
+            caminho,
+            conteudo,
+            tipo_conteudo="application/octet-stream",
+        ):
+            return {
+                "bucket": "mediflow-documentos",
+                "caminho_objeto": caminho,
+                "status_backup": "sucesso",
+            }
+
+        storage_mock.enviar_bytes.side_effect = confirmar_gravacao
 
         res_retry = client.post(f"/api/v1/triagens/{doc_id}/reprocessar-persistencia")
         assert res_retry.status_code == 200
@@ -507,6 +534,24 @@ def test_reprocessar_persistencia_oci_via_api_com_sucesso(client):
         assert data_retry["armazenamento_oci"]["status_backup"] == "sucesso"
         assert "resultado.json" in data_retry["armazenamento_oci"]["caminho_objeto"]
         assert data_retry["dados_extraidos"]["paciente"]["nome"] == "Maria Clara"
+
+        referencia_historico = (
+            triagem_service.obter_referencia_historico_oci(
+                doc_id
+            )
+        )
+
+        assert referencia_historico is not None
+        assert referencia_historico.startswith(
+            f"historico/{doc_id}/"
+        )
+
+        assert any(
+            chamada.args[0] == referencia_historico
+            for chamada in (
+                storage_mock.enviar_bytes.call_args_list
+            )
+        )
     finally:
         triagem_service._storage = None
 
@@ -829,3 +874,112 @@ def test_retry_com_original_existente_divergente_retorna_502_conflito(client):
         assert triagem_final.status.value == "ERRO_PERSISTENCIA"
     finally:
         triagem_service._storage = None
+
+
+@pytest.mark.parametrize("etapa", ["extracao", "grafo"])
+def test_falha_grafo_apos_202_fica_consultavel_sem_reanalise(
+    client, monkeypatch, etapa
+):
+    from src.api.routes import triagem_service
+
+    monkeypatch.setenv("OCI_OBRIGATORIO", "false")
+    monkeypatch.setattr(triagem_service, "_obter_storage", lambda: None)
+
+    detalhe_interno = "detalhe interno ficticio da etapa"
+
+    if etapa == "extracao":
+        alvo = triagem_service
+        metodo = "_extrair_paciente"
+    else:
+        alvo = triagem_service._grafo
+        metodo = "invoke"
+
+    with patch.object(
+        alvo,
+        metodo,
+        side_effect=RuntimeError(detalhe_interno),
+    ) as executar_etapa:
+        envio = client.post(
+            "/api/v1/triagens",
+            json={
+                "documento_texto": (
+                    "Receituário médico fictício para teste "
+                    "de falha após o aceite."
+                ),
+                "canal_origem": "TESTE",
+            },
+        )
+        assert envio.status_code == 202
+        documento_id = envio.json()["documento_id"]
+        rota = f"/api/v1/triagens/{documento_id}"
+
+        status = client.get(f"{rota}/status")
+        resultado = client.get(rota)
+        consulta_repetida = client.get(rota)
+        historico = client.get(f"{rota}/historico")
+
+        assert executar_etapa.call_count == 1
+
+    assert status.status_code == 200
+    assert status.json()["status"] == "ERRO_PROCESSAMENTO"
+    assert status.json()["concluido"] is True
+
+    assert resultado.status_code == 200
+    dados = resultado.json()
+    assert dados["documento_id"] == documento_id
+    assert dados["status"] == "ERRO_PROCESSAMENTO"
+    assert dados["erro"]["codigo"]
+    assert dados["erro"]["mensagem"]
+    assert detalhe_interno not in resultado.text
+
+    assert consulta_repetida.status_code == 200
+    assert consulta_repetida.json() == dados
+
+    assert historico.status_code == 200
+    eventos = historico.json()
+    assert sum(evento["tipo_evento"] == "PROCESSANDO" for evento in eventos) == 1
+    assert eventos[-1]["status_novo"] == "ERRO_PROCESSAMENTO"
+
+
+@pytest.mark.parametrize(
+    ("achado", "urgente"),
+    [
+        pytest.param("Há evidência de TEP.", True, id="afirmado"),
+        pytest.param("Não há evidência de TEP.", False, id="negado"),
+        pytest.param("Achados críticos.", True, id="criticos-plural"),
+        pytest.param("Sem evidência de TEP.", False, id="sem-evidencia"),
+        pytest.param(
+            "Não há evidência de TEP, mas há hemorragia.",
+            True,
+            id="outro-achado-urgente",
+        ),
+    ],
+)
+def test_api_urgencia_respeita_negacao(client, monkeypatch, achado, urgente):
+    from src.api.service import triagem_service
+
+    monkeypatch.setenv("OCI_OBRIGATORIO", "false")
+    monkeypatch.setattr(triagem_service, "_obter_storage", lambda: None)
+
+    texto = (
+        "Laudo de Exame de Imagem\n"
+        "Paciente: Pessoa Fictícia\n"
+        "Idade: 42\n"
+        "Médico: Profissional Fictício\n"
+        "CRM/SP: 123456\n"
+        f"Diagnóstico: {achado}"
+    )
+
+    envio = client.post("/api/v1/triagens", json={"documento_texto": texto})
+    assert envio.status_code == 202
+
+    documento_id = envio.json()["documento_id"]
+    consulta = client.get(f"/api/v1/triagens/{documento_id}")
+    assert consulta.status_code == 200
+
+    resultado = consulta.json()
+    assert resultado["dados_extraidos"]["urgencia"] == ("SIM" if urgente else "NAO")
+
+    decisao = resultado["decisao_roteamento"]
+    assert ("FILA_URGENCIA_MEDICA" in decisao["destinos"]) is urgente
+    assert decisao["justificativa_roteamento"]
