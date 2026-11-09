@@ -143,7 +143,7 @@ describe('ResultadoPage', () => {
     expect(within(card('Medicamentos')).getByText('Nenhum medicamento identificado no documento.')).toBeInTheDocument()
     expect(within(card('Decisão de roteamento')).getByText('PRONTUARIO_ELETRONICO')).toBeInTheDocument()
     expect(within(card('Decisão de roteamento')).getByText('Nenhum alerta gerado')).toBeInTheDocument()
-    expect(within(card('Confiança')).getByText(/Igual ou acima do limiar 0,85/)).toBeInTheDocument()
+    expect(within(card('Confiança')).getByText('Score atingiu o limiar 0,85')).toBeInTheDocument()
     expect(within(card('Histórico')).getAllByRole('listitem')).toHaveLength(2)
     expect(within(card('Histórico')).getByText('PROCESSANDO → PROCESSADO')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Triagens e filas' })).toHaveAttribute('href', '/triagens')
@@ -198,6 +198,29 @@ describe('ResultadoPage', () => {
     expect(within(roteamento).getByText('FILA_URGENCIA_MEDICA')).toBeInTheDocument()
     expect(within(roteamento).getByText('FILA_REVISAO_HUMANA')).toBeInTheDocument()
     expect(within(roteamento).getByText('Sim')).toBeInTheDocument()
+  })
+
+  it('score acima do limiar com revisão obrigatória: card neutro e encaminhamento segue a API', async () => {
+    const base = urgenteRevisao.resposta_esperada
+    triagem = {
+      ...base,
+      classificacao: { ...base.classificacao, score_classificacao: 0.95 },
+      qualidade: { ...base.qualidade, score_extracao: 0.92, score_combinado: 0.92 },
+      decisao_roteamento: {
+        ...base.decisao_roteamento,
+        justificativa_roteamento: 'Urgência: revisão humana obrigatória pela regra de negócio.',
+      },
+    }
+    await abrir()
+
+    const confianca = card('Confiança')
+    expect(within(confianca).getByText('Score atingiu o limiar 0,85')).toBeInTheDocument()
+    expect(within(confianca).queryByText(/fluxo automático/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/fluxo automático permitido/i)).not.toBeInTheDocument()
+    const roteamento = card('Decisão de roteamento')
+    expect(within(roteamento).getByText('FILA_REVISAO_HUMANA')).toBeInTheDocument()
+    expect(within(roteamento).getByText('Sim')).toBeInTheDocument()
+    expect(screen.getByText('Em revisão · encaminhado à fila de revisão humana')).toBeInTheDocument()
   })
 
   it('03d ambíguo: campos ausentes com tag, score abaixo do limiar e motivos da revisão', async () => {

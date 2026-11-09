@@ -167,7 +167,7 @@ describe('ListaTriagensPage', () => {
     await screen.findByText('· 2 documentos')
 
     expect(screen.getAllByRole('heading', { name: 'Meus documentos' })).toHaveLength(2)
-    expect(screen.getByText('Você vê somente os documentos vinculados ao seu CRM.')).toBeInTheDocument()
+    expect(screen.getByText('Filtro por CRM aplicado só neste navegador, sobre os dados da demo. A API não restringe o acesso.')).toBeInTheDocument()
     expect(screen.getByText('Dra. Renata Silveira')).toBeInTheDocument()
     // DOC-URG e DOC-SIM são da Dra. Renata; rotina e ambíguo são de outros médicos.
     expect(card('Meus documentos')).toHaveTextContent('2')

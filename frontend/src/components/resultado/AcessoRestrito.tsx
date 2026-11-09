@@ -32,8 +32,8 @@ export function AcessoRestrito({ documentoId, crmDocumento, crmSessao }: AcessoR
             Acesso restrito
           </h1>
           <p className="m-0 text-body text-text-secondary">
-            Este documento está vinculado a outro médico solicitante. Você só pode visualizar documentos vinculados ao seu
-            CRM.
+            Este documento está vinculado a outro médico solicitante. Na demonstração, este navegador mostra só os
+            documentos do seu CRM; a API ainda não controla esse acesso.
           </p>
         </div>
         <dl className="m-0 flex flex-col gap-2.5 rounded-md border border-border-subtle bg-subtle px-4 py-3.5">

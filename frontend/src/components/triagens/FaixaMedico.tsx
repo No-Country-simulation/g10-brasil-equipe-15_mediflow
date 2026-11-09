@@ -18,7 +18,7 @@ export function FaixaMedico() {
       <div className="flex-1" />
       <div className="flex items-center gap-2 text-sm text-info-panel-text">
         <Icon name="lock" size={18} className="shrink-0" />
-        Você vê somente os documentos vinculados ao seu CRM.
+        Filtro por CRM aplicado só neste navegador, sobre os dados da demo. A API não restringe o acesso.
       </div>
     </div>
   )

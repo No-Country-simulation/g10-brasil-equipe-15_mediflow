@@ -59,7 +59,7 @@ export function CardConfianca({ triagem }: { triagem: TriagemMediFlow }) {
         <p className={cx('m-0 text-caption font-medium', c.abaixoDoLimiar ? 'text-status-warning-fg' : 'text-status-info-fg')}>
           {c.abaixoDoLimiar
             ? `Abaixo do limiar ${limiar} — exige revisão humana`
-            : `Igual ou acima do limiar ${limiar} — fluxo automático permitido`}
+            : `Score atingiu o limiar ${limiar}`}
         </p>
       </div>
       {c.formula && (

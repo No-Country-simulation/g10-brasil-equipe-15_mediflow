@@ -11,7 +11,7 @@ import { CONTA_DEMO } from '../lib/sessao'
 const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO']
 
 const PONTOS = [
-  'Cada médico vê apenas os documentos vinculados ao seu CRM',
+  'Login de demonstração, validado só neste navegador (a API não autentica)',
   'Urgências e casos ambíguos sempre chegam à fila certa',
   'Dados fictícios · ambiente de demonstração',
 ]
@@ -221,8 +221,8 @@ export function LoginPage() {
           </div>
 
           <ContaDemo>
-            CRM {CONTA_DEMO.crm} / {CONTA_DEMO.uf} · {CONTA_DEMO.medico.nome}. Cada CRM enxerga apenas os documentos em
-            que consta como solicitante.
+            CRM {CONTA_DEMO.crm} / {CONTA_DEMO.uf} · {CONTA_DEMO.medico.nome}. O login é validado só no frontend: a API
+            ainda não tem autenticação nem controla o acesso por CRM.
             <br />
             Senha: <span className="font-mono">{CONTA_DEMO.senha}</span>
           </ContaDemo>
