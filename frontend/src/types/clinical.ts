@@ -43,6 +43,7 @@ export type CodigoErro =
   | 'PDF_PROTEGIDO'
   | 'PDF_CORROMPIDO'
   | 'ERRO_PERSISTENCIA'
+  | 'FALHA_WORKFLOW'
 
 export interface Paciente {
   nome?: string | null

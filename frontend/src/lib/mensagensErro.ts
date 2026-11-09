@@ -7,6 +7,8 @@ const POR_CODIGO: Record<string, string> = {
   PDF_PROTEGIDO: 'PDF protegido por senha não pode ser processado.',
   PDF_CORROMPIDO: 'O PDF está corrompido ou truncado.',
   DOCUMENTO_NAO_ENCONTRADO: 'Documento não encontrado. Confira o ID ou envie uma nova triagem.',
+  DOCUMENTO_ID_CONFLITANTE:
+    'Este ID já foi usado para outro documento. Deixe o campo vazio para gerar um novo ID ou informe outro.',
 }
 
 /** Texto amigável para exibir ao usuário a partir de um erro da API ou de rede. */

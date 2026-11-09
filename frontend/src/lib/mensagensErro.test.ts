@@ -16,6 +16,12 @@ describe('mensagemDeErro', () => {
     )
   })
 
+  it('explica o conflito de ID de documento (409)', () => {
+    expect(mensagemDeErro(new ApiError(409, 'DOCUMENTO_ID_CONFLITANTE', 'x'))).toBe(
+      'Este ID já foi usado para outro documento. Deixe o campo vazio para gerar um novo ID ou informe outro.',
+    )
+  })
+
   it('repassa a mensagem da API em erros 400/422 sem código mapeado', () => {
     expect(mensagemDeErro(new ApiError(422, 'CAMPOS_INVALIDOS', 'Arquivo vazio (0 bytes).'))).toBe(
       'Arquivo vazio (0 bytes).',

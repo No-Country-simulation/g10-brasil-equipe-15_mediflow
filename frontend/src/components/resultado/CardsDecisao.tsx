@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { cx } from '../../lib/cx'
 import { confiancaDe, formatarScore, situacaoDoAlerta, textoFalhaAlerta, TOM_DESTINO } from '../../lib/resultadoTriagem'
-import { ROTULO_DESTINO, ROTULO_GRAVIDADE } from '../../lib/rotulos'
+import { ROTULO_DESTINO, ROTULO_GRAVIDADE, rotuloStatusBackup } from '../../lib/rotulos'
 import type { Destino, TriagemMediFlow } from '../../types/clinical'
 import { Icon } from '../ui'
 import { Card, Tag } from './Card'
@@ -171,7 +171,7 @@ export function CardArmazenamento({ triagem }: { triagem: TriagemMediFlow }) {
             <dt className="w-16 shrink-0 text-text-secondary">Status</dt>
             <dd className={cx('m-0 inline-flex items-center gap-1.5 font-semibold', salvo ? 'text-status-success-fg' : 'text-text')}>
               {salvo && <Icon name="check" size={16} />}
-              {salvo ? 'Salvo' : oci.status_backup || '—'}
+              {rotuloStatusBackup(oci.status_backup)}
               {oci.modo_simulacao && <span className="font-normal text-text-secondary">(simulado)</span>}
             </dd>
           </div>

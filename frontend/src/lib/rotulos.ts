@@ -57,4 +57,17 @@ export const CAMPOS_OBRIGATORIOS: ReadonlySet<string> = new Set([
   'diagnostico',
 ])
 
+/** Texto do `armazenamento_oci.status_backup` (valores da API; desconhecido volta como veio). */
+const ROTULO_STATUS_BACKUP: Record<string, string> = {
+  sucesso: 'Salvo',
+  ignorado_ou_falha: 'Não gravado no OCI (ambiente sem armazenamento configurado)',
+  falha: 'Falha ao gravar',
+  pendente: 'Gravação pendente',
+}
+
+export function rotuloStatusBackup(status: string | null | undefined): string {
+  if (!status) return '—'
+  return ROTULO_STATUS_BACKUP[status.toLowerCase()] ?? status
+}
+
 export const ROTULO_GRAVIDADE = { ALTA: 'Gravidade alta', MEDIA: 'Gravidade média', BAIXA: 'Gravidade baixa' } as const
