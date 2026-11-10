@@ -24,6 +24,7 @@ from src.workflow.graph import criar_grafo
 from src.workflow.state import EntradaWorkflow
 from src.app.triage_pipeline import processar_documento_com_agente
 from src.app.oci_persistence import executar_persistencia_triagem
+from src.app.quality_indicator import calcular_indicadores_qualidade_e_roteamento
 from src.schemas import (
     TriagemMediFlow,
     StatusTriagem,
@@ -744,20 +745,34 @@ if doc_ingerido is not None:
                         if incertos_lista:
                             st.caption(f"Campos com baixa confiança: `{', '.join(incertos_lista)}`")
 
-                # Avaliação de Qualidade (Fórmula Determinística A3)
+                # Avaliação de Qualidade (Fórmula Determinística A3) & Roteamento
                 with st.container(border=True):
                     st.markdown("#### 📊 Avaliação de Qualidade (Fórmula Determinística A3)")
-                    sc1, sc2, sc3 = st.columns(3)
-                    score_c = qualidade_wf.score_combinado
+                    indicadores = calcular_indicadores_qualidade_e_roteamento(
+                        qualidade_wf=qualidade_wf,
+                        decisao_wf=decisao_wf,
+                        foi_auditado=foi_auditado,
+                    )
+                    sc1, sc2, sc3, sc4 = st.columns(4)
                     sc1.metric(
                         "Score Combinado",
-                        f"{score_c:.2f}",
-                        delta="Aprovado" if score_c >= 0.85 else "Retido",
-                        delta_color="normal" if score_c >= 0.85 else "inverse",
-                        help="Limiar oficial de aprovação clínica direta: >= 0.85",
+                        f"{indicadores.score_combinado:.2f}",
+                        delta=indicadores.delta_score,
+                        delta_color=indicadores.delta_score_cor,
+                        help=f"Fórmula A3 (0.4 * Classificação + 0.6 * Extração - penalidades). Limiar aplicado: {indicadores.limiar_aplicado:.2f}",
                     )
-                    sc2.metric("Classificação", f"{qualidade_wf.score_classificacao:.2f}")
-                    sc3.metric("Extração", f"{qualidade_wf.score_extracao:.2f}")
+                    sc2.metric("Classificação", f"{indicadores.score_classificacao:.2f}")
+                    sc3.metric("Extração", f"{indicadores.score_extracao:.2f}")
+                    sc4.metric(
+                        "Revisão Médica",
+                        indicadores.revisao_humana_status,
+                        delta=indicadores.revisao_humana_motivo,
+                        delta_color=indicadores.revisao_humana_cor,
+                        help="Decisão de auditoria baseada em regras clínicas determinísticas",
+                    )
+
+                    if indicadores.requer_atencao_mista and indicadores.aviso_misto:
+                        st.info(indicadores.aviso_misto, icon=":material/info:")
 
                 # Dados Clínicos Extraídos
                 with st.container(border=True):
@@ -861,7 +876,8 @@ if doc_ingerido is not None:
                 elif foi_auditado:
                     st.success("Triagem já foi auditada e homologada por profissional médico (Human-in-the-Loop).", icon=":material/verified:")
                 else:
-                    st.info("Este documento cumpriu todos os critérios de qualidade clínica (Score >= 0.85) e foi processado diretamente sem necessidade de intervenção humana.", icon=":material/check_circle:")
+                    limiar_disp = getattr(qualidade_wf, "limiar_aplicado", 0.85)
+                    st.info(f"Este documento cumpriu todos os critérios de qualidade clínica (Score {qualidade_wf.score_combinado:.2f} >= {limiar_disp:.2f}) e foi processado diretamente sem necessidade de intervenção humana.", icon=":material/check_circle:")
 
             # --- ABA 3: LINHA DO TEMPO & SNAPSHOTS OCI (PR #22) ---
             with tab_oci:
