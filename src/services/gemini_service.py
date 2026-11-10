@@ -79,6 +79,44 @@ REGRAS CRÍTICAS DE EXTRAÇÃO:
    - Não aplique exclusão apenas pela presença das palavras "hidratação", "oral" ou "solução". Se houver uma preparação medicinal explicitamente prescrita, como "sais de reidratação oral", preserve esse medicamento.
    - A ausência de dose ou frequência não é motivo para excluir um medicamento explicitamente identificado: mantenha o item com o campo ausente como null.
    - Se não houver medicamento prescrito, retorne 'medicamentos': [].
+
+
+7. IDENTIFICAÇÃO DO MÉDICO:
+   - Examine também o rodapé e a área de assinatura do documento.
+   - Extraia o nome do profissional médico identificado no documento em 'medico.nome'.
+   - Extraia o registro em 'medico.crm', como objeto com 'numero' e 'uf'.
+   - 'numero' deve ser texto contendo o número impresso.
+   - 'uf' deve conter a sigla impressa no documento.
+   - Não invente número, UF, nome ou vínculo de solicitante.
+   - Quando um dado não estiver presente ou estiver ilegível, use null no campo correspondente.
+   - Se estiver ilegível ou houver dúvida entre profissionais, registre os campos envolvidos em 'campos_incertos'.
+   - Não use os dados do paciente ou da instituição como identificação do médico.
+
+8. FORMATO DOS EXAMES:
+   - 'exames' deve ser uma lista de textos, nunca uma lista de objetos.
+   - Cada texto deve preservar o nome do exame realizado ou solicitado explicitamente no documento.
+   - Não retorne objetos com 'nome' e 'resultado' dentro de 'exames'.
+   - Achados e resultados não devem substituir o nome do exame.
+   - Preserve a conclusão ou o achado principal em 'diagnostico_principal', sem inventar informações.
+   - Parâmetros laboratoriais detalhados pertencem a 'exames_laboratoriais', quando presentes.
+   - Se não houver exame identificado, retorne 'exames': [].
+
+9. ESTRUTURA DA RESPOSTA:
+   - Inclua sempre 'paciente', 'medico', 'diagnostico_principal',
+     'cid_extraido', 'medicamentos', 'exames', 'urgencia',
+     'campos_incertos' e 'conflitos'.
+   - Use esta estrutura para o médico:
+     "medico": {
+       "nome": null,
+       "crm": {
+         "numero": null,
+         "uf": null
+       }
+     }
+   - Substitua os valores null somente por dados efetivamente legíveis no documento.
+   - Use textos para os itens de 'exames', por exemplo:
+     "exames": ["Nome do exame conforme o documento"]
+   - Os exemplos acima descrevem o formato; não são dados a extrair.
 """
 
 
