@@ -55,7 +55,13 @@ REGRAS CRÍTICAS DE EXTRAÇÃO:
    - Não deduza nem complete diagnóstico ou CID ausente.
 
 3. SINAIS PARA O AGENTE (MUITO IMPORTANTE):
-   - 'urgencia': Retorne 'SIM' se houver achado crítico de emergência, 'NAO' se for de rotina/estável, ou 'INDETERMINADO' se houver dúvida/rasura.
+   - 'urgencia': Avalie cada achado no contexto em que aparece. A negação se aplica somente ao achado negado. Em frases com "mas", "porém" ou "contudo", avalie também o achado afirmado no outro trecho.
+   - Retorne 'SIM' se houver um achado crítico de emergência afirmado, mesmo quando outro achado estiver negado.
+   - Retorne 'NAO' se o documento indicar rotina ou estabilidade, ou se o achado urgente citado estiver explicitamente negado e não houver outro sinal de urgência afirmado.
+   - Retorne 'INDETERMINADO' se dúvida, rasura ou informação insuficiente impedir a determinação e não houver um achado urgente afirmado. Uma negação explícita, por si só, não é incerteza.
+   - Exemplos fictícios:
+     "Não há evidência de TEP." → 'NAO'
+     "Não há evidência de TEP, mas há hemorragia." → 'SIM'
    - 'campos_incertos': Retorne uma lista de strings com os nomes dos campos rasurados ou duvidosos (ex: ["dosagem_amoxicilina"]). Retorne [] se não houver.
    - 'conflitos': Retorne uma lista de OBJETOS no formato:
      [{"tipo": "dosagem_incompativel", "gravidade": "ALTA", "descricao": "Dose excede limite diário", "campos": ["dosagem"]}]
