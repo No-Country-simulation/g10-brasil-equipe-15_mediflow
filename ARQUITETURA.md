@@ -202,27 +202,25 @@ stateDiagram-v2
 
 ### 4.2 O Grafo de Decisão Clínica (LangGraph)
 
-O fluxo de decisão segue um grafo determinístico modelado com o **LangGraph**:
+O LangGraph avalia a qualidade antes de decidir o destino. O score combinado é comparado ao limiar configurado para a execução, cujo valor padrão é `0.85`.
 
 ```mermaid
 graph TD
-    Start(["Início da Triagem"]) --> NodeExtract["Nó: Extração & Validação Pydantic"]
-    NodeExtract --> NodeRules["Nó: Avaliação de Regras Clínicas & Conflitos"]
-    NodeRules --> CondScore{"Avaliação Condicional:<br/>Score Combinado >= 0.85 &<br/>5 Campos Vitais Presentes?"}
-
-    CondScore -- "NÃO: Score < 0.85 OU Ausência de Vital" --> CondUrgenciaNegativa{"Urgência Clínica Declarada?"}
-    CondUrgenciaNegativa -- "Não Urgente" --> NodeRevisao["Destino: FILA_REVISAO_HUMANA<br/>Status: EM_REVISAO"]
-    CondUrgenciaNegativa -- "Urgente" --> NodeMisto["Destino Duplo: FILA_URGENCIA_MEDICA + FILA_REVISAO_HUMANA<br/>Status: EM_REVISAO + Alerta Plantão"]
-
-    CondScore -- "SIM: Alta Confiança & Completo" --> CondTipo{"Avaliação de Prioridade & Tipo Documental"}
-    CondTipo -- "Prioridade URGENTE" --> NodeUrgencia["Destino: FILA_URGENCIA_MEDICA<br/>Status: PROCESSADO + Notificação Imediata"]
-    CondTipo -- "RECEITUARIO_MEDICO" --> NodeFarmacia["Destino: FARMACIA_HOSPITALAR<br/>Status: PROCESSADO"]
-    CondTipo -- "GUIA_PROCEDIMENTO" --> NodeAuditoria["Destino: AUDITORIA_AUTORIZACOES<br/>Status: PROCESSADO"]
-    CondTipo -- "Outros Tipos de Rotina" --> NodeProntuario["Destino: PRONTUARIO_ELETRONICO<br/>Status: PROCESSADO"]
-
-    NodeRevisao --> EndNode(["Fim da Triagem"])
-    NodeMisto --> EndNode
+    Start(["Início da Triagem"]) --> NodeExtract["Extração e validação Pydantic"]
+    NodeExtract --> NodeRules["Avaliar qualidade e registrar motivos de revisão<br/>Campos obrigatórios ausentes, campos ou sinais incertos,<br/>conflitos impeditivos, sinais contraditórios,<br/>score abaixo do limiar ou tipo que exige revisão"]
+    NodeRules --> CondUrgencia{"Há sinal estruturado de urgência?"}
+    CondUrgencia -- "Sim" --> RevisaoUrgente{"Há motivos de revisão?"}
+    RevisaoUrgente -- "Sim" --> NodeMisto["FILA_URGENCIA_MEDICA + FILA_REVISAO_HUMANA<br/>Alerta simulado"]
+    RevisaoUrgente -- "Não" --> NodeUrgencia["FILA_URGENCIA_MEDICA<br/>Alerta simulado"]
+    CondUrgencia -- "Não" --> RevisaoRotina{"Há motivos de revisão?"}
+    RevisaoRotina -- "Sim" --> NodeRevisao["FILA_REVISAO_HUMANA"]
+    RevisaoRotina -- "Não" --> CondTipo{"Qual é o tipo documental?"}
+    CondTipo -- "RECEITUARIO_MEDICO" --> NodeFarmacia["FARMACIA_HOSPITALAR"]
+    CondTipo -- "GUIA_PROCEDIMENTO" --> NodeAuditoria["AUDITORIA_AUTORIZACOES"]
+    CondTipo -- "Demais tipos de rotina mapeados" --> NodeProntuario["PRONTUARIO_ELETRONICO"]
+    NodeMisto --> EndNode(["Decisão calculada"])
     NodeUrgencia --> EndNode
+    NodeRevisao --> EndNode
     NodeFarmacia --> EndNode
     NodeAuditoria --> EndNode
     NodeProntuario --> EndNode
