@@ -1067,3 +1067,172 @@ def test_rastreabilidade_regras_e_versoes_resultado_e_historico(
         "extrator": "heuristica_local",
         "versao_prompt": None,
     }
+
+
+# ==============================================================================
+# SUÍTE: INTEGRAÇÃO MULTIMODAL GEMINI NA API REST (RF-04, RF-14, RF-24, E.F. §12)
+# ==============================================================================
+
+def test_api_triagem_com_gemini_imagem_multimodal(client, monkeypatch):
+    """
+    Valida processamento de imagem escaneada (.jpg) via API com GeminiService ativo:
+    - Extração clínica multimodal com entidade preenchida (paciente, urgência, CID).
+    - Roteamento para FILA_URGENCIA_MEDICA.
+    - Metadados de auditoria registram extrator='gemini_service' e versao_prompt='1.0.0'.
+    - MIME type 'image/jpeg' é repassado corretamente ao serviço Gemini.
+    """
+    from unittest.mock import MagicMock
+    from src.api.service import triagem_service
+    from src.schemas.clinical import (
+        ClassificacaoDocumento,
+        DadosClinicosExtraidos,
+        Paciente,
+        Medico,
+        Crm,
+        Urgencia,
+    )
+    from src.services.gemini_service import VERSAO_PROMPT
+
+    gemini_mock = MagicMock()
+    gemini_mock.classificar_documento.return_value = ClassificacaoDocumento(
+        tipo_documento="LAUDO_EXAME_IMAGEM",
+        nivel_prioridade="URGENTE",
+        score_confianca_classificacao=0.96,
+    )
+    gemini_mock.extrair_dados_clinicos_envelope.return_value = {
+        "dados_clinicos": DadosClinicosExtraidos(
+            paciente=Paciente(nome="Maria Eduarda Santos", idade=42),
+            medico=Medico(nome="Dr. Roberto", crm=Crm(numero="12345", uf="SP")),
+            diagnostico="Tromboembolismo Pulmonar Agudo",
+            cid="I26.9",
+            urgencia=Urgencia.SIM,
+            exames=["Angiotomografia de Tórax"],
+            score_confianca_extracao=0.95,
+        ),
+        "urgencia": "SIM",
+        "campos_incertos": [],
+        "conflitos": [],
+    }
+
+    monkeypatch.setattr(triagem_service, "_obter_storage", lambda: None)
+    monkeypatch.setattr(triagem_service, "_obter_gemini_service", lambda: gemini_mock)
+
+    bytes_imagem = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xdb"
+    files = {"file": ("tomografia_pulmao.jpg", io.BytesIO(bytes_imagem), "image/jpeg")}
+
+    res_envio = client.post("/api/v1/triagens", files=files)
+    assert res_envio.status_code == 202
+    doc_id = res_envio.json()["documento_id"]
+
+    res_triagem = client.get(f"/api/v1/triagens/{doc_id}")
+    assert res_triagem.status_code == 200
+    triagem = res_triagem.json()
+
+    assert triagem["status"] == "PROCESSADO"
+    assert triagem["classificacao"]["tipo_documento"] == "LAUDO_EXAME_IMAGEM"
+    assert triagem["dados_extraidos"]["paciente"]["nome"] == "Maria Eduarda Santos"
+    assert triagem["dados_extraidos"]["diagnostico"] == "Tromboembolismo Pulmonar Agudo"
+    assert triagem["dados_extraidos"]["cid"] == "I26.9"
+    assert triagem["decisao_roteamento"]["destino_principal"] == "FILA_URGENCIA_MEDICA"
+
+    # Confirma parâmetros de chamada ao Gemini
+    assert gemini_mock.classificar_documento.called
+    kwargs_classif = gemini_mock.classificar_documento.call_args[1]
+    assert kwargs_classif["mime_type"] == "image/jpeg"
+    assert kwargs_classif["conteudo_bytes"] == bytes_imagem
+
+    # Confirma metadados do histórico
+    res_hist = client.get(f"/api/v1/triagens/{doc_id}/historico")
+    assert res_hist.status_code == 200
+    eventos = res_hist.json()
+    evento_roteado = next(e for e in eventos if e["tipo_evento"] == "ROTEADO")
+    assert evento_roteado["metadados"]["extrator"] == "gemini_service"
+    assert evento_roteado["metadados"]["versao_prompt"] == VERSAO_PROMPT
+    assert "fallback_llm" not in evento_roteado["metadados"]
+
+
+def test_api_triagem_com_gemini_failsafe_revisao(client, monkeypatch):
+    """
+    Valida fail-safe do GeminiService na API REST (Seção 12 da E.F. v1.2):
+    - Quando Gemini falha e retorna NAO_IDENTIFICADO com score 0.0,
+      o sistema encaminha com segurança para EM_REVISAO / FILA_REVISAO_HUMANA.
+    - Metadados registram extrator='gemini_service' e fallback_llm=True.
+    """
+    from unittest.mock import MagicMock
+    from src.api.service import triagem_service
+    from src.schemas.clinical import (
+        ClassificacaoDocumento,
+        DadosClinicosExtraidos,
+    )
+    from src.services.gemini_service import VERSAO_PROMPT
+
+    gemini_mock = MagicMock()
+    gemini_mock.classificar_documento.return_value = ClassificacaoDocumento(
+        tipo_documento="NAO_IDENTIFICADO",
+        nivel_prioridade="NAO_IDENTIFICADA",
+        score_confianca_classificacao=0.0,
+    )
+    gemini_mock.extrair_dados_clinicos_envelope.return_value = {
+        "dados_clinicos": DadosClinicosExtraidos(
+            diagnostico=None,
+            score_confianca_extracao=0.0,
+        ),
+        "urgencia": "INDETERMINADO",
+        "campos_incertos": [],
+        "conflitos": [],
+    }
+
+    monkeypatch.setattr(triagem_service, "_obter_storage", lambda: None)
+    monkeypatch.setattr(triagem_service, "_obter_gemini_service", lambda: gemini_mock)
+
+    bytes_doc = b"Documento indecifravel com falha de modelo"
+    files = {"file": ("documento_falho.txt", io.BytesIO(bytes_doc), "text/plain")}
+
+    res_envio = client.post("/api/v1/triagens", files=files)
+    assert res_envio.status_code == 202
+    doc_id = res_envio.json()["documento_id"]
+
+    res_triagem = client.get(f"/api/v1/triagens/{doc_id}")
+    assert res_triagem.status_code == 200
+    triagem = res_triagem.json()
+
+    assert triagem["status"] == "EM_REVISAO"
+    assert triagem["decisao_roteamento"]["destino_principal"] == "FILA_REVISAO_HUMANA"
+    assert triagem["decisao_roteamento"]["requer_auditoria_humana"] is True
+
+    res_hist = client.get(f"/api/v1/triagens/{doc_id}/historico")
+    assert res_hist.status_code == 200
+    eventos = res_hist.json()
+    evento_roteado = next(e for e in eventos if e["tipo_evento"] == "ROTEADO")
+    assert evento_roteado["metadados"]["extrator"] == "gemini_service"
+    assert evento_roteado["metadados"]["versao_prompt"] == VERSAO_PROMPT
+    assert evento_roteado["metadados"]["fallback_llm"] is True
+
+
+def test_api_triagem_gemini_desabilitado_por_env(monkeypatch):
+    """
+    Valida suporte a API_USAR_GEMINI=false e bypass em ambiente de teste:
+    - Se API_USAR_GEMINI for false, _obter_gemini_service retorna None.
+    - Se TESTING for true, _obter_gemini_service retorna None por segurança.
+    """
+    from src.api.service import TriagemService
+
+    svc = TriagemService()
+
+    # 1. Teste de flag explícita API_USAR_GEMINI=false
+    monkeypatch.delenv("TESTING", raising=False)
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setenv("API_USAR_GEMINI", "false")
+    monkeypatch.setenv("GEMINI_API_KEY", "chave-ficticia")
+    assert svc._obter_gemini_service() is None
+
+    # 2. Teste de flag TESTING=true
+    monkeypatch.setenv("API_USAR_GEMINI", "true")
+    monkeypatch.setenv("TESTING", "true")
+    assert svc._obter_gemini_service() is None
+
+    # 3. Teste de serviço injetado explicitamente (tem precedência)
+    mock_injetado = object()
+    svc_injetado = TriagemService(gemini_service=mock_injetado)
+    assert svc_injetado._obter_gemini_service() is mock_injetado
+
