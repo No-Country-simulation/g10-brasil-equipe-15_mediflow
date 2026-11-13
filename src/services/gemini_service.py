@@ -22,6 +22,10 @@ logger = logging.getLogger("mediflow.gemini_service")
 # INSTRUÇÕES DE SISTEMA (PROMPTS DE BLINDAGEM E CONTRATO)
 # =============================================================================
 
+VERSAO_PROMPT_CLASSIFICACAO = "1.0.0"
+VERSAO_PROMPT_EXTRACAO = "1.0.0"
+VERSAO_PROMPT = "1.0.0"
+
 SYSTEM_INSTRUCTION_CLASSIFICACAO = """
 Você é o componente classificador de documentos do MediFlow.
 Analise o documento e retorne estritamente o JSON com o tipo documental e a prioridade inicial:

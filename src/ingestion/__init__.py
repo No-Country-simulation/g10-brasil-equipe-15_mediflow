@@ -8,6 +8,8 @@ from .loader import (
     TamanhoExcedidoError,
     DocumentoProtegidoError,
     DocumentoCorrompidoError,
+    MIME_POR_FORMATO,
+    resolver_mime_type,
 )
 
 __all__ = [
@@ -17,4 +19,6 @@ __all__ = [
     "TamanhoExcedidoError",
     "DocumentoProtegidoError",
     "DocumentoCorrompidoError",
+    "MIME_POR_FORMATO",
+    "resolver_mime_type",
 ]
