@@ -38,7 +38,7 @@ function CaixaAviso({ aviso }: { aviso: Aviso }) {
 
 function PainelMarca() {
   return (
-    <aside className="flex w-140 shrink-0 flex-col justify-between bg-sidebar p-14">
+    <aside className="flex w-full shrink-0 flex-col justify-between gap-8 bg-sidebar p-6 sm:p-10 lg:w-140 lg:p-14">
       <div className="flex items-center gap-2.5">
         <Icon name="logo-marca" size={32} />
         <span className="text-xl font-semibold tracking-[-0.2px] text-sidebar-text-strong">MediFlow</span>
@@ -107,14 +107,15 @@ export function LoginPage() {
   const bordaErro = errou ? 'border-2 border-status-danger-fg' : undefined
 
   return (
-    <div className="flex min-h-screen bg-app">
+    // Abaixo de 1024px o painel da marca vai para cima do formulário (fora do Figma, que é só desktop).
+    <div className="flex min-h-screen flex-col bg-app lg:flex-row">
       <PainelMarca />
-      <main className="flex flex-1 items-center justify-center p-12">
+      <main className="flex flex-1 items-center justify-center p-4 sm:p-12">
         <form
           noValidate
           onSubmit={aoEntrar}
           aria-labelledby="titulo-login"
-          className="flex w-110 flex-col gap-6 rounded-lg border border-border bg-surface p-9"
+          className="flex w-full max-w-110 flex-col gap-6 rounded-lg border border-border bg-surface p-6 sm:p-9"
         >
           <div className="flex flex-col gap-1.5">
             <h1 id="titulo-login" className="text-heading font-semibold text-text">

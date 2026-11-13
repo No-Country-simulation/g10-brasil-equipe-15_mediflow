@@ -14,7 +14,7 @@ export function CasosTestePanel({ selecionadoId, carregando, erro, onSelecionar 
     <aside
       aria-label="Casos de teste"
       aria-busy={carregando}
-      className="flex w-91.5 shrink-0 flex-col gap-3 rounded-lg border border-border bg-surface p-5"
+      className="flex w-full shrink-0 flex-col xl:w-91.5 gap-3 rounded-lg border border-border bg-surface p-5"
     >
       <div className="flex flex-col gap-1">
         <h2 className="m-0 text-base leading-tight font-semibold text-text">Casos de teste</h2>

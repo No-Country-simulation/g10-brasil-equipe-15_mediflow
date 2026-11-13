@@ -41,10 +41,11 @@ export function ProcessamentoPage() {
         Nova triagem
       </Link>
 
-      <div className="flex items-start gap-6">
+      {/* Abaixo de 1280px o card do envio vai para baixo (fora do Figma, que é só desktop). */}
+      <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
         <section
           aria-labelledby="titulo-status"
-          className="flex min-w-0 flex-1 flex-col gap-6 rounded-lg border border-border bg-surface p-7"
+          className="flex min-w-0 flex-1 flex-col gap-6 rounded-lg border border-border bg-surface p-4 sm:p-7"
         >
           <h1 id="titulo-status" className="sr-only">
             Status da triagem
@@ -91,7 +92,7 @@ export function ProcessamentoPage() {
 
           <ListaEtapas etapas={progresso.etapas} />
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {podeVerResultado && (
               <Button withIcon onClick={() => navigate(`/resultado/${encodeURIComponent(documentoId ?? '')}`)}>
                 Ver resultado
@@ -103,7 +104,7 @@ export function ProcessamentoPage() {
           </div>
         </section>
 
-        <div className="flex w-91.5 shrink-0 flex-col gap-4">
+        <div className="flex w-full shrink-0 flex-col gap-4 xl:w-91.5">
           <CardEnvio documentoId={documentoId ?? ''} envio={envio} enviadoEm={acompanhamento.enviadoEm} />
           <AvisoSaidaDaTela />
         </div>

@@ -45,7 +45,7 @@ export function ResultadoPage() {
   const navigate = useNavigate()
   const idPainel = useId()
   const [mostrarJson, setMostrarJson] = useState(false)
-  const { estado, recarregar, reprocessar, reprocessamento } = useResultadoTriagem(documentoId)
+  const { estado, recarregar, recarregarHistorico, reprocessar, reprocessamento } = useResultadoTriagem(documentoId)
   const { sessao } = useSessao()
 
   const voltar = (
@@ -110,7 +110,8 @@ export function ResultadoPage() {
     return <AcessoRestrito documentoId={triagem.documento_id} crmDocumento={acesso.crmDocumento} crmSessao={`CRM ${numero} / ${uf}`} />
   }
   const alerta = alertaDeErro(triagem)
-  const recebidoEm = historico.find((e) => e.tipo_evento === 'RECEBIDO')?.criado_em ?? null
+  const eventos = historico.fase === 'ok' ? historico.eventos : []
+  const recebidoEm = eventos.find((e) => e.tipo_evento === 'RECEBIDO')?.criado_em ?? null
   const metadado = [
     recebidoEm ? `Recebido ${formatarDataHora(recebidoEm)}` : null,
     triagem.canal_origem,
@@ -123,7 +124,7 @@ export function ResultadoPage() {
     <div className="flex flex-col gap-5">
       {voltar}
 
-      <header className="flex items-end justify-between gap-4">
+      <header className="flex flex-col items-start gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex min-w-0 flex-col gap-2">
           <h1 className="m-0 text-caption font-medium text-text-secondary">Resultado da triagem</h1>
           <div className="flex flex-wrap items-center gap-3">
@@ -161,14 +162,15 @@ export function ResultadoPage() {
           {bannersDe(triagem).map((banner) => (
             <BannerResultado key={banner.tipo} banner={banner} />
           ))}
-          <div className="flex items-start gap-5">
+          {/* Abaixo de 1024px as duas colunas viram uma (fora do Figma, que é só desktop). */}
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
             <div className="flex min-w-0 flex-1 flex-col gap-5">
               <CardClassificacao triagem={triagem} />
               <CardDadosExtraidos triagem={triagem} />
               <CardMedicamentos triagem={triagem} />
               <CardExames triagem={triagem} />
             </div>
-            <div className="flex w-93 shrink-0 flex-col gap-5">
+            <div className="flex w-full shrink-0 flex-col gap-5 lg:w-93">
               <CardConfianca triagem={triagem} />
               <CardConflitos triagem={triagem} />
               <CardRoteamento triagem={triagem} />
@@ -178,7 +180,7 @@ export function ResultadoPage() {
         </>
       )}
 
-      <Historico eventos={historico} />
+      <Historico estado={historico} onTentarNovamente={() => void recarregarHistorico()} />
     </div>
   )
 }

@@ -69,7 +69,7 @@ export function ListaTriagensPage({ variante }: { variante: Variante }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex items-end justify-between gap-4">
+      <header className="flex flex-col items-start gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-1.5">
           <h1 className="text-heading font-semibold text-text">{textos.titulo}</h1>
           <p className="m-0 text-body text-text-secondary">{textos.subtitulo}</p>
@@ -88,14 +88,14 @@ export function ListaTriagensPage({ variante }: { variante: Variante }) {
       <CardsFila filas={filas} contagens={contagens} ativa={fila} onSelecionar={selecionarFila} />
 
       <section aria-labelledby="titulo-tabela" className="overflow-clip rounded-lg border border-border bg-surface">
-        <div className="flex items-center justify-between gap-4 border-b border-border-subtle px-5 py-4.5">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border-subtle px-5 py-4.5">
           <div className="flex items-baseline gap-1.5">
             <h2 id="titulo-tabela" className="m-0 text-[17px] font-semibold text-text">
               {filaAtual.titulo}
             </h2>
             <span className="text-body text-text-secondary">{contadorDocumentos(visiveis.length)}</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full items-center gap-2 sm:w-auto">
             <label htmlFor={idBusca} className="text-sm text-text-secondary">
               Buscar ID
             </label>
@@ -106,7 +106,7 @@ export function ListaTriagensPage({ variante }: { variante: Variante }) {
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               autoComplete="off"
-              className="h-10 w-65 rounded-sm"
+              className="h-10 w-full rounded-sm sm:w-65"
             />
           </div>
         </div>

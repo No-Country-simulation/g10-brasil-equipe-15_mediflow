@@ -55,6 +55,7 @@ describe('ResultadoPage', () => {
   let falhaStatus: 404 | 'REDE' | null
   let reprocessoOk: boolean
   let historico: unknown[]
+  let falhaHistorico: boolean
 
   beforeEach(() => {
     localStorage.clear()
@@ -75,6 +76,7 @@ describe('ResultadoPage', () => {
     falhaStatus = null
     reprocessoOk = true
     historico = historicoPadrao
+    falhaHistorico = false
     fetchMock.mockReset()
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -94,7 +96,10 @@ describe('ResultadoPage', () => {
           concluido: TERMINAIS.includes(status),
         })
       }
-      if (url.endsWith('/historico')) return json(200, historico)
+      if (url.endsWith('/historico')) {
+        if (falhaHistorico) return json(503, { codigo: 'SERVICO_INDISPONIVEL', mensagem: 'x' })
+        return json(200, historico)
+      }
       if (url.endsWith('/reprocessar-persistencia') && init?.method === 'POST') {
         if (!reprocessoOk)
           return json(502, {
@@ -185,6 +190,37 @@ describe('ResultadoPage', () => {
     const tipos = within(card('Histórico')).getAllByRole('listitem').map((li) => li.textContent)
     expect(tipos[0]).toContain('RECEBIDO')
     expect(tipos[1]).toContain('ROTEADO')
+  })
+
+  it('histórico indisponível: avisa, mantém o resultado e recarrega só o histórico', async () => {
+    falhaHistorico = true
+    const user = await abrir()
+
+    const historicoCard = card('Histórico')
+    expect(within(historicoCard).getByRole('alert')).toHaveTextContent('Histórico indisponível no momento')
+    expect(within(historicoCard).queryByText('Nenhum evento registrado.')).not.toBeInTheDocument()
+    // O resultado continua na tela.
+    expect(within(card('Classificação')).getByText('Laudo de exame de imagem')).toBeInTheDocument()
+    expect(within(card('Decisão de roteamento')).getByText('PRONTUARIO_ELETRONICO')).toBeInTheDocument()
+
+    falhaHistorico = false
+    const chamadasResultado = () =>
+      fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/triagens/DOC-1')).length
+    const antes = chamadasResultado()
+    await user.click(within(historicoCard).getByRole('button', { name: 'Tentar carregar o histórico' }))
+
+    expect(await within(card('Histórico')).findByText('PROCESSANDO → PROCESSADO')).toBeInTheDocument()
+    expect(within(card('Histórico')).queryByRole('alert')).not.toBeInTheDocument()
+    expect(chamadasResultado()).toBe(antes)
+    expect(within(card('Classificação')).getByText('Laudo de exame de imagem')).toBeInTheDocument()
+  })
+
+  it('histórico vazio continua mostrando "Nenhum evento registrado"', async () => {
+    historico = []
+    await abrir()
+
+    expect(within(card('Histórico')).getByText('Nenhum evento registrado.')).toBeInTheDocument()
+    expect(within(card('Histórico')).queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('03c urgente + revisão: dois banners e dois destinos', async () => {

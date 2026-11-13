@@ -6,6 +6,9 @@ import { ApiError, obterHistorico, obterStatus, obterTriagem, reprocessarPersist
 import type { EventoHistorico } from '../types/api'
 import type { StatusTriagem, TriagemMediFlow } from '../types/clinical'
 
+/** O histórico carrega à parte: se falhar, o resultado continua na tela. */
+export type EstadoHistorico = { fase: 'ok'; eventos: EventoHistorico[] } | { fase: 'carregando' } | { fase: 'indisponivel' }
+
 export type EstadoResultado =
   | { fase: 'carregando' }
   /** A triagem ainda não terminou: a página não pede o resultado (a API executaria o pipeline na hora). */
@@ -16,7 +19,7 @@ export type EstadoResultado =
       triagem: TriagemMediFlow
       /** Resposta da API como veio, para o painel "Ver JSON da resposta". */
       bruto: unknown
-      historico: EventoHistorico[]
+      historico: EstadoHistorico
     }
 
 export type Reprocessamento = { fase: 'ocioso' } | { fase: 'enviando' } | { fase: 'erro'; mensagem: string }
@@ -25,6 +28,14 @@ type Guardado = { chave: string; estado: EstadoResultado }
 
 function erroDe(e: unknown): EstadoResultado {
   return { fase: 'erro', mensagem: mensagemDeErro(e), codigo: e instanceof ApiError ? e.codigo : 'DESCONHECIDO' }
+}
+
+async function carregarHistorico(documentoId: string, signal?: AbortSignal): Promise<EstadoHistorico> {
+  try {
+    return { fase: 'ok', eventos: await obterHistorico(documentoId, signal) }
+  } catch {
+    return { fase: 'indisponivel' }
+  }
 }
 
 /** Carrega o resultado completo e o histórico de uma triagem já concluída. */
@@ -52,7 +63,7 @@ export function useResultadoTriagem(documentoId: string | undefined) {
         }
         const [bruto, historico] = await Promise.all([
           obterTriagem(documentoId, signal),
-          obterHistorico(documentoId, signal).catch(() => [] as EventoHistorico[]),
+          carregarHistorico(documentoId, signal),
         ])
         definir({ fase: 'pronto', triagem: normalizarTriagem(bruto), bruto, historico })
       } catch (e) {
@@ -65,6 +76,17 @@ export function useResultadoTriagem(documentoId: string | undefined) {
   }, [documentoId, chave])
 
   const recarregar = useCallback(() => setVersao((v) => v + 1), [])
+
+  /** Tenta de novo só o histórico, sem recarregar o resultado. */
+  const recarregarHistorico = useCallback(async () => {
+    if (!documentoId) return
+    const trocar = (historico: EstadoHistorico) =>
+      setGuardado((g) =>
+        g.chave === chave && g.estado.fase === 'pronto' ? { chave, estado: { ...g.estado, historico } } : g,
+      )
+    trocar({ fase: 'carregando' })
+    trocar(await carregarHistorico(documentoId))
+  }, [documentoId, chave])
 
   /** "Tentar salvar de novo" (03e): refaz a gravação no OCI e recarrega a página. */
   const reprocessar = useCallback(async () => {
@@ -79,5 +101,5 @@ export function useResultadoTriagem(documentoId: string | undefined) {
     }
   }, [documentoId])
 
-  return { estado, recarregar, reprocessar, reprocessamento }
+  return { estado, recarregar, recarregarHistorico, reprocessar, reprocessamento }
 }

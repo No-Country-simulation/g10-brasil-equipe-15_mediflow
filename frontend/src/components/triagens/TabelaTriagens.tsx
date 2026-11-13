@@ -32,7 +32,8 @@ export function TabelaTriagens({ linhas, vazio }: TabelaTriagensProps) {
   }
 
   return (
-    <div className="overflow-x-auto">
+    // relative: o sr-only (absolute) da coluna Ação fica dentro da rolagem e não alarga a página.
+    <div className="relative overflow-x-auto">
       <table className="w-full min-w-277.5 table-fixed border-collapse">
         <thead className="bg-subtle">
           <tr>

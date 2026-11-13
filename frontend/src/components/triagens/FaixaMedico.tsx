@@ -4,7 +4,7 @@ import { Icon } from '../ui'
 /** Faixa azul do Figma 04c: médico identificado e aviso de privacidade. */
 export function FaixaMedico() {
   return (
-    <div className="flex items-center gap-3.5 rounded-lg border border-border-info bg-selected px-4.5 py-3.5">
+    <div className="flex flex-wrap items-center gap-3.5 rounded-lg border border-border-info bg-selected px-4.5 py-3.5">
       <div
         aria-hidden="true"
         className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-[13px] font-medium text-on-primary"

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import { cx } from '../../lib/cx'
 import { ACCEPT_INPUT, formatarTamanho, validarArquivo } from '../../lib/validacaoArquivo'
@@ -14,10 +14,20 @@ const NOTA = 'PDF, JPG, PNG, WEBP ou TXT · até 10 MB · até 20 páginas'
 
 export function Dropzone({ arquivo, onArquivoChange }: DropzoneProps) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const trocarRef = useRef<HTMLButtonElement>(null)
+  const selecionarRef = useRef<HTMLButtonElement>(null)
+  // O botão que tinha o foco some quando o arquivo entra ou sai; o foco vai para o botão que o substitui.
+  const focarDepois = useRef(false)
   const [arrastando, setArrastando] = useState(false)
   const [erroInterno, setErro] = useState<string | null>(null)
   // Um arquivo carregado de fora (ex.: caso de teste) invalida um erro antigo do dropzone.
   const erro = arquivo ? null : erroInterno
+
+  useEffect(() => {
+    if (!focarDepois.current) return
+    focarDepois.current = false
+    ;(arquivo ? trocarRef : selecionarRef).current?.focus()
+  }, [arquivo])
 
   function abrirSeletor() {
     inputRef.current?.click()
@@ -32,11 +42,15 @@ export function Dropzone({ arquivo, onArquivoChange }: DropzoneProps) {
     const candidato = arquivos[0]
     const mensagem = validarArquivo(candidato)
     setErro(mensagem)
-    if (!mensagem) onArquivoChange(candidato)
+    if (!mensagem) {
+      focarDepois.current = true
+      onArquivoChange(candidato)
+    }
   }
 
   function remover() {
     setErro(null)
+    focarDepois.current = true
     onArquivoChange(null)
     if (inputRef.current) inputRef.current.value = ''
   }
@@ -90,7 +104,7 @@ export function Dropzone({ arquivo, onArquivoChange }: DropzoneProps) {
             </p>
             <p className="m-0 font-mono text-sm text-text-secondary">{formatarTamanho(arquivo.size)}</p>
             <div className="mt-2 flex gap-2">
-              <Button variant="secondary" size="S" onClick={abrirSeletor}>
+              <Button ref={trocarRef} variant="secondary" size="S" onClick={abrirSeletor}>
                 Trocar arquivo
               </Button>
               <Button variant="secondary" size="S" onClick={remover}>
@@ -107,6 +121,7 @@ export function Dropzone({ arquivo, onArquivoChange }: DropzoneProps) {
             <p className="m-0 text-sm text-text-secondary">
               ou{' '}
               <button
+                ref={selecionarRef}
                 type="button"
                 onClick={abrirSeletor}
                 className="cursor-pointer font-semibold text-link underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"

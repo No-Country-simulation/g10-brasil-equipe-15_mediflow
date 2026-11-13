@@ -11,7 +11,7 @@ type CardsFilaProps = {
 /** Cards de contagem clicáveis (seleção única), como no Figma 04a–04c. */
 export function CardsFila({ filas, contagens, ativa, onSelecionar }: CardsFilaProps) {
   return (
-    <div role="group" aria-label="Filtrar por fila" className="flex gap-3">
+    <div role="group" aria-label="Filtrar por fila" className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:flex">
       {filas.map((fila) => {
         const selecionada = fila.id === ativa
         return (

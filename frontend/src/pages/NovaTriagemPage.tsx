@@ -114,9 +114,10 @@ export function NovaTriagemPage() {
         subtitle="Envie um documento clínico ou cole o texto. O MediFlow classifica, extrai os dados e decide o destino."
       />
 
-      <div className="flex items-start gap-6">
+      {/* Abaixo de 1280px os casos de teste vão para baixo do formulário (fora do Figma, que é só desktop). */}
+      <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
         <form
-          className="flex min-w-0 flex-1 flex-col gap-6 rounded-lg border border-border bg-surface p-7"
+          className="flex min-w-0 flex-1 flex-col gap-6 rounded-lg border border-border bg-surface p-4 sm:p-7"
           onSubmit={aoEnviar}
         >
           <div>
@@ -134,7 +135,7 @@ export function NovaTriagemPage() {
             <TextoClinicoInput value={texto} onChange={editar(setTexto)} />
           )}
 
-          <div className="flex gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row">
             <Field label="Canal de origem" htmlFor={idCanal}>
               <Select
                 id={idCanal}
@@ -159,8 +160,10 @@ export function NovaTriagemPage() {
             </Field>
           </div>
 
-          <div className="flex items-center gap-3 border-t border-border-subtle pt-5">
-            <Button type="submit" disabled={!podeEnviar}>
+          <div className="flex flex-wrap items-center gap-3 border-t border-border-subtle pt-5">
+            {/* Durante o envio o botão fica aria-disabled, não disabled: assim o foco não se perde e,
+                se o envio falhar, Enter reenvia dali mesmo. O aoEnviar já ignora o clique repetido. */}
+            <Button type="submit" disabled={!temConteudo} aria-disabled={enviando || undefined}>
               {enviando ? 'Enviando…' : 'Enviar para triagem'}
             </Button>
             <p className="m-0 text-caption text-text-placeholder">{podeEnviar ? AJUDA_PRONTO : AJUDA_SEM_CONTEUDO[tipo]}</p>

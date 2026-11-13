@@ -1,8 +1,8 @@
-import type { ButtonHTMLAttributes } from 'react'
+import type { ComponentPropsWithRef } from 'react'
 import { cx } from '../../lib/cx'
 import { Icon } from './Icon'
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+type ButtonProps = ComponentPropsWithRef<'button'> & {
   /** `primary` = botão principal do formulário; `secondary` = botão com borda. */
   variant?: 'primary' | 'secondary'
   /** Só vale para `secondary` (M = 48px, S = 36px). */
@@ -49,7 +49,7 @@ export function Button({
         base,
         'h-12 gap-2.5 rounded-md px-5.5 text-base',
         'bg-primary text-on-primary hover:bg-primary-hover',
-        'disabled:cursor-not-allowed disabled:bg-disabled disabled:text-text-secondary',
+        'disabled:cursor-not-allowed disabled:bg-disabled disabled:text-text-secondary aria-disabled:cursor-wait',
         className,
       )}
       {...props}
