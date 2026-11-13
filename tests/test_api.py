@@ -983,3 +983,87 @@ def test_api_urgencia_respeita_negacao(client, monkeypatch, achado, urgente):
     decisao = resultado["decisao_roteamento"]
     assert ("FILA_URGENCIA_MEDICA" in decisao["destinos"]) is urgente
     assert decisao["justificativa_roteamento"]
+
+
+@pytest.mark.parametrize(
+    "texto,regras_esperadas,evento_terminal,metadados_envio",
+    [
+        pytest.param(
+            (
+                "Laudo de Exame de Imagem\n"
+                "Paciente: Carlos Eduardo Mendes\n"
+                "Idade: 58\n"
+                "Médico: Dra. Camila Alencar\n"
+                "CRM/SP: 987654\n"
+                "Diagnóstico: Tromboembolismo Pulmonar Agudo URGENTE."
+            ),
+            ["URGENCIA"],
+            "ROTEADO",
+            {},
+            id="urgencia-roteado",
+        ),
+        pytest.param(
+            "Receituário Médico\nDr. Renato CRM: 14589/SP",
+            ["REVISAO"],
+            "ROTEADO",
+            {},
+            id="revisao-roteado",
+        ),
+        pytest.param(
+            (
+                "Receita Médica\n"
+                "Paciente: João da Silva\n"
+                "Idade: 40\n"
+                "Médico: Dr. Renato Silva\n"
+                "CRM/SP: 145890\n"
+                "Diagnóstico: Cefaleia tensional."
+            ),
+            ["ROTINA"],
+            "ERRO_PERSISTENCIA",
+            {"simular_falha_oci": "RESULTADO"},
+            id="rotina-erro-persistencia",
+        ),
+    ],
+)
+def test_rastreabilidade_regras_e_versoes_resultado_e_historico(
+    client, monkeypatch, texto, regras_esperadas, evento_terminal, metadados_envio
+):
+    """Critério 12 (§16): resultado e /historico preservam regras acionadas e versões de configuração."""
+    from src.api.service import triagem_service
+    from src.workflow.graph import VERSAO_REGRAS
+
+    monkeypatch.setenv("OCI_OBRIGATORIO", "false")
+    monkeypatch.setattr(triagem_service, "_obter_storage", lambda: None)
+
+    envio = client.post(
+        "/api/v1/triagens",
+        json={"documento_texto": texto, "metadados": metadados_envio},
+    )
+    assert envio.status_code == 202
+    doc_id = envio.json()["documento_id"]
+
+    res_triagem = client.get(f"/api/v1/triagens/{doc_id}")
+    assert res_triagem.status_code == 200
+    triagem = res_triagem.json()
+
+    regras_fmt = ", ".join(regras_esperadas)
+    justificativa = triagem["decisao_roteamento"]["justificativa_roteamento"]
+    assert f"[Regras: {regras_fmt} | Versão regras: {VERSAO_REGRAS}]" in justificativa
+    assert triagem["versao_esquema"] == "2.0.0"
+    assert triagem["qualidade"]["limiar_aplicado"] == 0.85
+
+    res_hist = client.get(f"/api/v1/triagens/{doc_id}/historico")
+    assert res_hist.status_code == 200
+    eventos = res_hist.json()
+
+    terminais = [e for e in eventos if e["tipo_evento"] == evento_terminal]
+    assert len(terminais) == 1
+    meta = terminais[0]["metadados"]
+    assert meta == {
+        "regras_acionadas": regras_esperadas,
+        "versao_esquema": "2.0.0",
+        "versao_regras": VERSAO_REGRAS,
+        "limiar_aplicado": 0.85,
+        "extrator": "heuristica_local",
+        "versao_prompt": None,
+    }

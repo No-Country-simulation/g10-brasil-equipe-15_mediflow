@@ -30,7 +30,7 @@ from src.schemas import (
     Conflito,
     Gravidade,
 )
-from src.workflow.graph import criar_grafo
+from src.workflow.graph import VERSAO_REGRAS, criar_grafo
 from src.workflow.state import ConflitoWorkflow, EntradaWorkflow
 from src.schemas.clinical import ClassificacaoClinica, NivelPrioridade
 from src.api.schemas import EventoHistorico
@@ -93,6 +93,7 @@ class TriagemService:
         ator: str,
         status_anterior: Optional[str] = None,
         motivo: Optional[str] = None,
+        metadados: Optional[Dict[str, Any]] = None,
     ) -> EventoHistorico:
         """Registra um evento cronológico na linha do tempo de auditoria (CT-070 a CT-072)."""
         evento = EventoHistorico(
@@ -104,6 +105,7 @@ class TriagemService:
             status_novo=status_novo,
             motivo=motivo,
             versao_esquema="2.0.0",
+            metadados=metadados,
         )
         if documento_id not in self._historico:
             self._historico[documento_id] = []
@@ -318,6 +320,7 @@ class TriagemService:
                 urgencia="SIM" if urgente else "NAO",
             )
 
+            limiar_efetivo = float(os.getenv("LIMIAR_CONFIANCA", "0.85"))
             entrada_workflow = EntradaWorkflow(
                 documento_id=documento_id,
                 classificacao=ClassificacaoClinica(
@@ -330,7 +333,7 @@ class TriagemService:
                 campos_ausentes=campos_ausentes,
                 campos_incertos=[],
                 conflitos=[],
-                limiar=float(os.getenv("LIMIAR_CONFIANCA", "0.85")),
+                limiar=limiar_efetivo,
             )
 
             saida_workflow = self._grafo.invoke({"entrada": entrada_workflow})
@@ -443,6 +446,11 @@ class TriagemService:
             status_final = StatusTriagem.EM_REVISAO
 
         destinos_finais = [Destino(d.value) for d in decisao_wf.destinos] if decisao_wf else [Destino.FILA_REVISAO_HUMANA]
+        regras_acionadas = (
+            list(decisao_wf.regras_acionadas)
+            if (decisao_wf and getattr(decisao_wf, "regras_acionadas", None))
+            else []
+        )
         justificativa = decisao_wf.justificativa if decisao_wf else "Processamento concluído."
 
         # Preserva os motivos de revisão humana levantados pelo agente (CT-057 e §16 item 12)
@@ -525,7 +533,7 @@ class TriagemService:
                     qualidade=Qualidade(
                         score_extracao=score_extrac_final,
                         score_combinado=score_combinado_final,
-                        limiar_aplicado=float(os.getenv("LIMIAR_CONFIANCA", "0.85")),
+                        limiar_aplicado=limiar_efetivo,
                         campos_ausentes=campos_ausentes_finais,
                         campos_incertos=campos_incertos_finais,
                         conflitos=conflitos_finais,
@@ -597,7 +605,7 @@ class TriagemService:
             qualidade=Qualidade(
                 score_extracao=score_extrac_final,
                 score_combinado=score_combinado_final,
-                limiar_aplicado=float(os.getenv("LIMIAR_CONFIANCA", "0.85")),
+                limiar_aplicado=limiar_efetivo,
                 campos_ausentes=campos_ausentes_finais,
                 campos_incertos=campos_incertos_finais,
                 conflitos=conflitos_finais,
@@ -621,6 +629,15 @@ class TriagemService:
         self._triagens[documento_id] = triagem
         self._status_em_andamento[documento_id] = status_efetivo
 
+        metadados_auditoria = {
+            "regras_acionadas": regras_acionadas,
+            "versao_esquema": "2.0.0",
+            "versao_regras": VERSAO_REGRAS,
+            "limiar_aplicado": limiar_efetivo,
+            "extrator": "heuristica_local",
+            "versao_prompt": None,
+        }
+
         if falha_persistencia:
             self.registrar_evento(
                 documento_id=documento_id,
@@ -629,6 +646,7 @@ class TriagemService:
                 status_novo=StatusTriagem.ERRO_PERSISTENCIA,
                 ator="OCI_STORAGE_PERSISTENCE",
                 motivo=f"Falha de gravação durável no OCI: {falha_persistencia}. Decisão clínica e qualidade preservadas.",
+                metadados=metadados_auditoria,
             )
         else:
             self.registrar_evento(
@@ -638,6 +656,7 @@ class TriagemService:
                 status_novo=status_final,
                 ator="LANGGRAPH_ROUTER",
                 motivo=justificativa,
+                metadados=metadados_auditoria,
             )
         return triagem
 
