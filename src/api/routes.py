@@ -3,6 +3,7 @@ MediFlow — Rotas da API REST (/api/v1)
 Implementa os endpoints assíncronos de triagem, consulta de status, histórico e health check.
 """
 import json
+import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, Response, UploadFile, status
@@ -19,6 +20,8 @@ from src.api.schemas import (
     ErroEnvelope,
 )
 from src.api.service import triagem_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["Triagem Clínica"])
 
@@ -259,12 +262,22 @@ def reprocessar_persistencia_triagem(documento_id: str):
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"codigo": CodigoErro.REQUISICAO_INVALIDA.value, "mensagem": str(e)},
+            detail={
+                "codigo": CodigoErro.REQUISICAO_INVALIDA.value,
+                "mensagem": str(e),
+            },
         )
-    except Exception as e:
+    except Exception:
+        logger.exception(
+            "Falha na retentativa de persistência OCI para documento %s",
+            documento_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={"codigo": CodigoErro.ERRO_PERSISTENCIA.value, "mensagem": f"Falha na retentativa OCI: {str(e)}"},
+            detail={
+                "codigo": CodigoErro.ERRO_PERSISTENCIA.value,
+                "mensagem": "Não foi possível concluir a retentativa de persistência.",
+            },
         )
 
 
