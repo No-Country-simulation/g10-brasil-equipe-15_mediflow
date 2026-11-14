@@ -149,7 +149,8 @@ class DocumentLoader:
         else:
             # Imagens (PNG/JPG/JPEG/WEBP): Validação de assinatura/magic bytes e preparação multimodal
             cls._validar_imagem_blindada(conteudo_bytes, extensao)
-            texto, total_paginas, requer_ocr, meta = "", 1, True, {"tipo": "imagem", "mime": f"image/{extensao.replace('.', '')}"}
+            mime_img = "image/jpeg" if extensao in (".jpg", ".jpeg") else f"image/{extensao.replace('.', '')}"
+            texto, total_paginas, requer_ocr, meta = "", 1, True, {"tipo": "imagem", "mime": mime_img}
 
         return DocumentoIngerido(
             documento_id=doc_id,
@@ -260,4 +261,24 @@ class DocumentLoader:
             "total_caracteres": len(texto_decodificado)
         }
         return texto_decodificado, 1, False, metadados
+
+
+MIME_POR_FORMATO: Dict[str, str] = {
+    "PDF": "application/pdf",
+    "JPG": "image/jpeg",
+    "JPEG": "image/jpeg",
+    "PNG": "image/png",
+    "WEBP": "image/webp",
+    "TXT": "text/plain",
+}
+
+
+def resolver_mime_type(doc: DocumentoIngerido) -> str:
+    """Resolve o MIME type canônico a partir dos metadados ou formato do documento."""
+    mime_meta = (doc.metadados or {}).get("mime")
+    if isinstance(mime_meta, str) and mime_meta.strip():
+        if mime_meta.strip().lower() == "image/jpg":
+            return "image/jpeg"
+        return mime_meta.strip()
+    return MIME_POR_FORMATO.get((doc.formato or "").upper(), "application/octet-stream")
 

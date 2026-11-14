@@ -66,6 +66,10 @@ class EventoHistorico(BaseModel):
     status_novo: str
     motivo: Optional[str] = None
     versao_esquema: str = "2.0.0"
+    metadados: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Metadados estruturados de rastreabilidade (regras acionadas e versões de configuração).",
+    )
 
 
 class HealthResponse(BaseModel):

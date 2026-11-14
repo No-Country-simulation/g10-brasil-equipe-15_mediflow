@@ -19,6 +19,22 @@ from .state import (
     QualidadeWorkflow,
 )
 
+VERSAO_REGRAS = "1.0.0"
+
+
+def _formatar_justificativa_rastreavel(
+    base: str,
+    observacoes: list[str],
+    regras: list[str],
+) -> str:
+    """Compõe a justificativa clínica anexando observações, regras acionadas e versão."""
+    partes = [base.strip()] if base and base.strip() else []
+    if observacoes:
+        partes.append("Observações: " + "; ".join(observacoes))
+    regras_fmt = ", ".join(regras) if regras else "NENHUMA"
+    partes.append(f"[Regras: {regras_fmt} | Versão regras: {VERSAO_REGRAS}]")
+    return " ".join(partes)
+
 def normalizar_tipo(valor: str) -> str:
     texto = unicodedata.normalize("NFKD", valor)
 
@@ -330,23 +346,23 @@ def decidir_urgencia(estado: EstadoWorkflow) -> dict:
             + "; ".join(motivos)
         )
 
+    regras = ["URGENCIA", "REVISAO"] if requer_revisao else ["URGENCIA"]
     observacoes = estado["qualidade"].observacoes
     return {
         "decisao": DecisaoWorkflow(
             destinos=destinos,
             requer_auditoria_humana=requer_revisao,
-            justificativa=justificativa + (" Observações: " + "; ".join(observacoes) if observacoes else ""),
-            regras_acionadas=(
-                ["URGENCIA", "REVISAO"]
-                if requer_revisao
-                else ["URGENCIA"]
+            justificativa=_formatar_justificativa_rastreavel(
+                justificativa, observacoes, regras
             ),
+            regras_acionadas=regras,
             alerta_simulado=True,
         )
     }
 
 
 def decidir_revisao(estado: EstadoWorkflow) -> dict:
+    regras = ["REVISAO"]
     observacoes = estado["qualidade"].observacoes
     return {
         "decisao": DecisaoWorkflow(
@@ -354,10 +370,12 @@ def decidir_revisao(estado: EstadoWorkflow) -> dict:
                 DestinoRoteamento.REVISAO_HUMANA
             ],
             requer_auditoria_humana=True,
-            justificativa="; ".join(
-                estado["qualidade"].motivos_revisao + observacoes
+            justificativa=_formatar_justificativa_rastreavel(
+                "; ".join(estado["qualidade"].motivos_revisao),
+                observacoes,
+                regras,
             ),
-            regras_acionadas=["REVISAO"],
+            regras_acionadas=regras,
             alerta_simulado=False,
         )
     }
@@ -373,17 +391,18 @@ def decidir_rotina(estado: EstadoWorkflow) -> dict:
             "Destino de rotina não mapeado."
         )
 
+    regras = ["ROTINA"]
     observacoes = estado["qualidade"].observacoes
     return {
         "decisao": DecisaoWorkflow(
             destinos=[destino],
             requer_auditoria_humana=False,
-            justificativa=(
-                "Documento de rotina sem impedimentos "
-                "para encaminhamento."
-                + (" Observações: " + "; ".join(observacoes) if observacoes else "")
+            justificativa=_formatar_justificativa_rastreavel(
+                "Documento de rotina sem impedimentos para encaminhamento.",
+                observacoes,
+                regras,
             ),
-            regras_acionadas=["ROTINA"],
+            regras_acionadas=regras,
             alerta_simulado=False,
         )
     }

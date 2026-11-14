@@ -10,6 +10,8 @@ from src.ingestion import (
     TamanhoExcedidoError,
     DocumentoProtegidoError,
     DocumentoCorrompidoError,
+    resolver_mime_type,
+    MIME_POR_FORMATO,
 )
 
 try:
@@ -240,3 +242,91 @@ def test_ingestao_fixture_william_imagem_webp():
     assert doc.conteudo_bytes is not None
     assert doc.metadados["mime"] == "image/webp"
     assert len(doc.conteudo_bytes) > 0
+
+
+def test_resolver_mime_type_formatos_padrao():
+    """Valida resolução de MIME types canônicos por formato padrão."""
+    doc_pdf = DocumentoIngerido(
+        documento_id="DOC-TEST-01",
+        nome_arquivo="laudo.pdf",
+        tamanho_bytes=100,
+        formato="PDF",
+        conteudo_bytes=b"%PDF-1.4",
+        conteudo_texto="Laudo",
+        total_paginas=1,
+    )
+    assert resolver_mime_type(doc_pdf) == "application/pdf"
+
+    doc_jpg = DocumentoIngerido(
+        documento_id="DOC-TEST-02",
+        nome_arquivo="foto.jpg",
+        tamanho_bytes=100,
+        formato="JPG",
+        conteudo_bytes=b"\xff\xd8\xff",
+        conteudo_texto="",
+        total_paginas=1,
+    )
+    assert resolver_mime_type(doc_jpg) == "image/jpeg"
+
+    doc_png = DocumentoIngerido(
+        documento_id="DOC-TEST-03",
+        nome_arquivo="foto.png",
+        tamanho_bytes=100,
+        formato="PNG",
+        conteudo_bytes=b"\x89PNG",
+        conteudo_texto="",
+        total_paginas=1,
+    )
+    assert resolver_mime_type(doc_png) == "image/png"
+
+    doc_webp = DocumentoIngerido(
+        documento_id="DOC-TEST-04",
+        nome_arquivo="foto.webp",
+        tamanho_bytes=100,
+        formato="WEBP",
+        conteudo_bytes=b"RIFF....WEBP",
+        conteudo_texto="",
+        total_paginas=1,
+    )
+    assert resolver_mime_type(doc_webp) == "image/webp"
+
+    doc_txt = DocumentoIngerido(
+        documento_id="DOC-TEST-05",
+        nome_arquivo="texto.txt",
+        tamanho_bytes=100,
+        formato="TXT",
+        conteudo_bytes=b"Texto clinico",
+        conteudo_texto="Texto clinico",
+        total_paginas=1,
+    )
+    assert resolver_mime_type(doc_txt) == "text/plain"
+
+
+def test_resolver_mime_type_preferencia_metadados():
+    """Valida que metadados['mime'] explícito tem precedência sobre a extensão."""
+    doc_custom = DocumentoIngerido(
+        documento_id="DOC-TEST-06",
+        nome_arquivo="custom.bin",
+        tamanho_bytes=100,
+        formato="OCTET",
+        conteudo_bytes=b"...",
+        conteudo_texto="",
+        total_paginas=1,
+        metadados={"mime": "image/tiff"},
+    )
+    assert resolver_mime_type(doc_custom) == "image/tiff"
+
+
+def test_resolver_mime_type_formato_desconhecido():
+    """Valida fallback para application/octet-stream quando formato não é mapeado."""
+    doc_desconhecido = DocumentoIngerido(
+        documento_id="DOC-TEST-07",
+        nome_arquivo="arquivo.xyz",
+        tamanho_bytes=100,
+        formato="XYZ",
+        conteudo_bytes=b"raw",
+        conteudo_texto="",
+        total_paginas=1,
+    )
+    assert resolver_mime_type(doc_desconhecido) == "application/octet-stream"
+
