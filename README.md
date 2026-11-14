@@ -25,7 +25,8 @@
     <a href="#-estrutura-do-repositório">Estrutura</a> •
     <a href="#-equipe-15---hackathon-one-g10">Time</a> •
     <a href="#-como-executar-o-projeto-localmente">Como Rodar</a> •
-    <a href="ARQUITETURA.md"><b>Guia de Arquitetura</b></a>
+    <a href="ARQUITETURA.md"><b>Guia de Arquitetura</b></a> •
+    <a href="docs/GUIA_INTEGRACAO_API.md"><b>Guia da API (Frontend)</b></a>
   </p>
 
   ---
@@ -123,8 +124,11 @@ Testamos a robustez do **MediFlow** através dos 3 cenários clínicos obrigató
 
 ## 🛠️ Endpoints da API REST
 
+> [!TIP]
+> **Manual de Integração com o Frontend:** Para especificações completas de requisições multipart, polling de status, linha do tempo de auditoria, contratos TypeScript e exemplos práticos com **Fetch nativo** (padrão PR #24), consulte o [**Guia de Integração da API MediFlow para o Frontend**](docs/GUIA_INTEGRACAO_API.md).
+
 <details>
-<summary><b>🔍 Clique aqui para expandir a especificação técnica dos endpoints da API</b></summary>
+<summary><b>🔍 Clique aqui para expandir a especificação rápida dos endpoints da API</b></summary>
 
 <br>
 
@@ -171,6 +175,7 @@ Testamos a robustez do **MediFlow** através dos 3 cenários clínicos obrigató
 g10-brasil-equipe-15_mediflow/
 ├── data/                                       # Amostras clínicas dos 3 cenários do edital (PDF/JSON)
 ├── docs/                                       # Governança de testes, contratos de dados e guias
+│   ├── GUIA_INTEGRACAO_API.md                  # Guia de integração da API REST para o Frontend React / Streamlit
 │   └── testes/                                 # Contrato Canônico, Catálogo dos 79 Fixtures e Auditorias
 ├── src/                                        # Código-fonte da aplicação (Python Backend & IA)
 │   ├── agents/                                 # Agentes e Prompts de Inteligência Multimodal
