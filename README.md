@@ -244,6 +244,11 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
+> ⚙️ **Variáveis de Ambiente Essenciais (`.env`):**
+> - `GEMINI_API_KEY`: Chave da API do Google AI Studio para o extrator multimodal.
+> - `LIMIAR_CONFIANCA`: Ponto de corte do score de confiança combinado (padrão `0.85`). Documentos com score abaixo desse valor são retidos compulsoriamente em `EM_REVISAO` (`FILA_REVISAO_HUMANA`), e o valor aplicado é retornado pela API em `qualidade.limiar_aplicado`.
+> - Credenciais OCI (opcionais em modo demo/simulação local).
+
 ### 2️⃣ Executar a Bateria de 245 Testes Automatizados
 ```bash
 python -m pytest

@@ -267,6 +267,7 @@ Utilizado quando o texto já foi digitado ou copiado no prontuário.
     "score_classificacao": 0.98,
     "score_extracao": 0.95,
     "score_combinado": 0.95,
+    "limiar_aplicado": 0.85,
     "requer_auditoria_humana": false,
     "conflitos": []
   },
