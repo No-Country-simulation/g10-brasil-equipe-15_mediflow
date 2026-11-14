@@ -272,7 +272,9 @@ class TriagemService:
             except Exception as err:
                 logger.error("Falha ao persistir documento original no OCI: %s", err)
                 backup_status = "falha"
-                falha_persistencia = f"FALHA_GRAVACAO_ORIGINAL: {str(err)}"
+                falha_persistencia = (
+                    "FALHA_GRAVACAO_ORIGINAL: Não foi possível gravar o documento original."
+                )
         elif os.getenv("OCI_OBRIGATORIO", "false").lower() in ("true", "1"):
             falha_persistencia = "OCI_OBRIGATORIO: Conector OCI não configurado"
             backup_status = "falha"
@@ -559,7 +561,9 @@ class TriagemService:
                 self._resultados_pendentes.pop(documento_id, None)
             except Exception as err:
                 logger.error("Falha ao persistir JSON do resultado no OCI: %s", err)
-                falha_persistencia = f"FALHA_GRAVACAO_RESULTADO: {str(err)}"
+                falha_persistencia = (
+                    "FALHA_GRAVACAO_RESULTADO: Não foi possível gravar o resultado da triagem."
+                )
                 backup_status = "falha"
                 caminho_oci_final = caminho_oci_original
         else:
