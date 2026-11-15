@@ -1,0 +1,65 @@
+# MediFlow — Orquestração de Contêineres de Produção (Docker Compose)
+# Stack completa: Nginx (Porta 80) -> FastAPI (8000) & Streamlit (8501)
+
+services:
+  mediflow-api:
+    container_name: mediflow-api
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 2
+    env_file:
+      - ../.env
+    environment:
+      - PYTHONPATH=/app
+      - ENVIRONMENT=production
+    restart: unless-stopped
+    networks:
+      - mediflow-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  mediflow-streamlit:
+    container_name: mediflow-streamlit
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: streamlit run src/app/streamlit_app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true --browser.gatherUsageStats=false
+    env_file:
+      - ../.env
+    environment:
+      - PYTHONPATH=/app
+      - ENVIRONMENT=production
+    restart: unless-stopped
+    networks:
+      - mediflow-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  mediflow-nginx:
+    container_name: mediflow-nginx
+    image: nginx:1.25-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      mediflow-api:
+        condition: service_started
+      mediflow-streamlit:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - mediflow-net
+
+networks:
+  mediflow-net:
+    driver: bridge
