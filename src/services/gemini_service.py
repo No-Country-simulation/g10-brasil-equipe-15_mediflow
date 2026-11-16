@@ -165,44 +165,54 @@ def normalizar_payload_extracao(payload: Any) -> Dict[str, Any]:
         raise ValueError("A extração deve retornar um objeto JSON.")
 
     normalizado = normalizar_idade_extracao(payload)
-    campos_diagnostico = ("diagnostico", "diagnostico_principal")
+    campos_diagnostico = (
+        "diagnostico", "diagnostico_principal", "hipotese", "hipotese_diagnostica", "hd"
+    )
+    campos_descricao = {"descricao", "hipotese", "texto", "termo"}
+    descricoes = set()
     cids_encontrados = []
     encontrou_objeto = False
+    encontrou_diagnostico = False
 
     for campo in campos_diagnostico:
-        valor = payload.get(campo)
-
-        if not isinstance(valor, dict):
+        if campo not in payload:
             continue
+        encontrou_diagnostico = True
+        valor = normalizado.pop(campo)
+        valores_descricao = [valor]
 
-        encontrou_objeto = True
+        if isinstance(valor, dict):
+            encontrou_objeto = True
+            if not campos_descricao.intersection(valor) or set(valor) - (
+                campos_descricao | {"cid_extraido"}
+            ):
+                raise ValueError("Estrutura de diagnóstico não reconhecida.")
 
-        if (
-            "descricao" not in valor
-            or set(valor) - {"descricao", "cid_extraido"}
-        ):
-            raise ValueError("Estrutura de diagnóstico não reconhecida.")
+            valores_descricao = [
+                descricao for chave, descricao in valor.items()
+                if chave in campos_descricao
+            ]
+            cid = valor.get("cid_extraido")
+            if cid is not None:
+                if not isinstance(cid, str):
+                    raise ValueError("CID do diagnóstico deve ser texto ou null.")
+                cids_encontrados.append(cid)
 
-        descricao = valor["descricao"]
-        cid = valor.get("cid_extraido")
+        for descricao in valores_descricao:
+            if descricao is None:
+                continue
+            if not isinstance(descricao, str):
+                raise ValueError("Descrição do diagnóstico deve ser texto ou null.")
+            descricao = descricao.strip()
+            if descricao:
+                descricoes.add(descricao)
 
-        if descricao is not None and not isinstance(descricao, str):
-            raise ValueError("Descrição do diagnóstico deve ser texto ou null.")
-
-        if cid is not None and not isinstance(cid, str):
-            raise ValueError("CID do diagnóstico deve ser texto ou null.")
-
-        normalizado[campo] = descricao
-
-        if cid is not None:
-            cids_encontrados.append(cid)
-
+    if len(descricoes) > 1:
+        raise ValueError("Diagnósticos conflitantes na resposta.")
+    if encontrou_diagnostico:
+        normalizado["diagnostico"] = next(iter(descricoes), None)
     if not encontrou_objeto:
         return normalizado
-
-    if all(campo in normalizado for campo in campos_diagnostico):
-        if normalizado["diagnostico"] != normalizado["diagnostico_principal"]:
-            raise ValueError("Diagnósticos conflitantes na resposta.")
 
     for campo in ("cid", "cid_extraido", "cid_sugerido"):
         cid = payload.get(campo)

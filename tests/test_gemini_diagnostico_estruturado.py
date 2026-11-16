@@ -304,3 +304,38 @@ def test_idade_fora_da_faixa_continua_rejeitada_pelo_schema():
 
     with pytest.raises(ValidationError):
         modulo.DadosClinicosExtraidos.model_validate(normalizado)
+
+
+@pytest.mark.parametrize(
+    "payload, esperado",
+    [
+        ({"hipotese_diagnostica": " Hipótese fictícia. "}, "Hipótese fictícia."),
+        ({"hd": {"hipotese": "Hipótese fictícia."}}, "Hipótese fictícia."),
+        ({"hipotese": {"texto": "Hipótese fictícia."}}, "Hipótese fictícia."),
+        ({"diagnostico_principal": {"termo": "Hipótese fictícia."}}, "Hipótese fictícia."),
+        ({"diagnostico": {"descricao": "   "}}, None),
+        ({"diagnostico": ""}, None),
+        ({"diagnostico": "", "hd": "Hipótese fictícia."}, "Hipótese fictícia."),
+    ],
+)
+def test_normaliza_aliases_de_hipotese_e_descricoes_vazias(payload, esperado):
+    original = deepcopy(payload)
+
+    normalizado = modulo.normalizar_payload_extracao(payload)
+    dados = modulo.DadosClinicosExtraidos.model_validate(normalizado)
+
+    assert normalizado["diagnostico"] == esperado
+    assert dados.diagnostico == esperado
+    assert payload == original
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"diagnostico": "Descrição A.", "hd": "Descrição B."},
+        {"diagnostico": {"descricao": "Descrição A.", "termo": "Descrição B."}},
+    ],
+)
+def test_rejeita_hipoteses_diagnosticas_conflitantes(payload):
+    with pytest.raises(ValueError, match="Diagnósticos conflitantes"):
+        modulo.normalizar_payload_extracao(payload)
