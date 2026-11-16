@@ -1,0 +1,85 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Borda_Score_084",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "demo/Borda_Score_084/Borda_Score_084.txt",
+      "pdf": "demo/Borda_Score_084/Borda_Score_084.pdf",
+      "jpg": "demo/Borda_Score_084/Borda_Score_084.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-932B35B3",
+    "classificacao": {
+      "tipo_documento": "RECEITUARIO_MEDICO",
+      "especialidade": [
+        "Clínica Médica"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.92
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Fernanda Lima Rocha",
+        "idade": 37
+      },
+      "medico": {
+        "nome": "Dr. André Luiz Barbosa",
+        "crm": {
+          "numero": "165432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Lombalgia aguda",
+      "cid": "M54.5",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Ibuprofeno",
+          "dosagem": "400 mg",
+          "frequencia": null
+        }
+      ],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.84,
+      "score_combinado": 0.84,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: score combinado 0.84 < limiar 0.85.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "modo_fixture": {
+    "score_forcado": {
+      "score_classificacao": 0.92,
+      "score_extracao": 0.84
+    }
+  },
+  "assercoes": [
+    "Score combinado 0,84 < 0,85 força revisão",
+    "A classificação e a extração em si estão corretas",
+    "Exige FIXTURE_MODE para forçar os scores"
+  ],
+  "observacoes": "O documento é uma receita de rotina legível. O desfecho de revisão vem exclusivamente do score forçado, não do conteúdo."
+}

@@ -1,0 +1,71 @@
+{
+  "status": "EM_REVISAO",
+  "documento_id": "DOC-CLIN-2026-76E038E1",
+  "canal_origem": null,
+  "classificacao": {
+    "tipo_documento": "LAUDO_EXAME_IMAGEM",
+    "especialidade": [
+      "Clínica Médica"
+    ],
+    "nivel_prioridade": "URGENTE",
+    "score_classificacao": 0.95
+  },
+  "dados_extraidos": {
+    "paciente": {
+      "nome": "Carlos Eduardo Mendes",
+      "idade": 52,
+      "cpf": null
+    },
+    "medico": {
+      "nome": null,
+      "crm": null
+    },
+    "diagnostico": null,
+    "cid": null,
+    "exames": [],
+    "exames_laboratoriais": [],
+    "medicamentos": [],
+    "urgencia": "SIM",
+    "score_confianca_extracao": 0.9,
+    "achados_criticos": null,
+    "inconsistencias_detectadas": []
+  },
+  "qualidade": {
+    "score_extracao": 0.4,
+    "score_combinado": 0.4,
+    "limiar_aplicado": 0.85,
+    "campos_ausentes": [
+      "cid",
+      "diagnostico",
+      "exames",
+      "medicamentos",
+      "medico.crm",
+      "medico.nome"
+    ],
+    "campos_incertos": [],
+    "conflitos": []
+  },
+  "decisao_roteamento": {
+    "destino_principal": "FILA_URGENCIA_MEDICA",
+    "destinos": [
+      "FILA_URGENCIA_MEDICA",
+      "FILA_REVISAO_HUMANA"
+    ],
+    "requer_auditoria_humana": true,
+    "justificativa_roteamento": "Sinal estruturado de urgência identificado. Revisão simultânea: Campos obrigatórios ausentes: diagnostico, medico.crm, medico.nome; Score combinado abaixo do limiar configurado.",
+    "notificacao": {
+      "gerada": true,
+      "canal": "SIMULADO_SLACK_PLANTAO",
+      "mensagem": "ALERTA URGENTE: Sinal estruturado de urgência identificado. Revisão simultânea: Campos obrigatórios ausentes: diagnostico, medico.crm, medico.nome; Score combinado abaixo do limiar configurado.",
+      "status": "REGISTRADA"
+    }
+  },
+  "armazenamento_oci": {
+    "bucket": "mediflow-documentos",
+    "caminho_objeto": "recebidos/DOC-CLIN-2026-76E038E1/original.txt",
+    "status_backup": "ignorado_ou_falha",
+    "modo_simulacao": false
+  },
+  "erro": null,
+  "versao_esquema": "2.0.0"
+}
