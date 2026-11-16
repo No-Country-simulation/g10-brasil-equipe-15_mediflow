@@ -12,7 +12,7 @@
     <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/Pydantic-v2-E92063?style=for-the-badge&logo=pydantic&logoColor=white" alt="Pydantic v2"></a>
     <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/Google%20Gemini-AI-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Google Gemini"></a>
     <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/OCI-Always%20Free-F80000?style=for-the-badge&logo=oracle&logoColor=white" alt="OCI Always Free"></a>
-    <a href="#2%EF%B8%8F%E2%83%A3-executar-a-bateria-de-245-testes-automatizados"><img src="https://img.shields.io/badge/Pytest-245%20passed-brightgreen?style=for-the-badge&logo=pytest&logoColor=white" alt="245 Testes Pytest"></a>
+    <a href="#2%EF%B8%8F%E2%83%A3-executar-a-bateria-de-304-testes-automatizados"><img src="https://img.shields.io/badge/Pytest-304%20passed-brightgreen?style=for-the-badge&logo=pytest&logoColor=white" alt="304 Testes Pytest"></a>
     <a href="#-status-do-projeto"><img src="https://img.shields.io/badge/Status-Em%20Desenvolvimento-yellow?style=for-the-badge&logo=github&logoColor=white" alt="Status"></a>
   </p>
 
@@ -178,7 +178,7 @@ g10-brasil-equipe-15_mediflow/
 │   ├── app/                                    # Bancada Streamlit de testes rápidos e auditoria médica (HiTL)
 │   ├── ingestion/                              # Ingestão blindada (10MB, 20 págs, sanitização de PDF/TXT/Imagens)
 │   ├── schemas/                                # Contrato Canônico Pydantic v2 (clinical.py)
-│   ├── services/                               # Serviços de Integração (GeminiService com REST e timeout 15s)
+│   ├── services/                               # Serviços de Integração (GeminiService com REST e timeout 30s)
 │   │   └── gemini_service.py                   # Integração estruturada Pydantic com duplo fallback (3.8 Flash + 3.5 Lite)
 │   ├── storage/                                # Conector OCI Object Storage Always Free (oci_storage.py)
 │   ├── workflow/                               # Grafo de Decisão Clínica LangGraph (StateGraph)
@@ -186,16 +186,22 @@ g10-brasil-equipe-15_mediflow/
 ├── scripts/                                    # Utilitários de homologação e scripts de diagnóstico
 │   ├── testar_simulacao_oci.py                 # Validação da simulação de falhas OCI do catálogo EPT v1.0 (§12)
 │   └── testar_oci.py                           # Validação real ponta a ponta no bucket OCI Always Free
-├── tests/                                      # Suíte Oficial Pytest com 245 testes automatizados (100% verde)
+├── tests/                                      # Suíte Oficial Pytest com 304 testes automatizados
 │   ├── fixtures/                               # 79 fixtures canônicos (demo, catalogo, manifest.csv)
+│   ├── test_workflow.py                        # 85 testes de roteamento e arestas LangGraph
 │   ├── test_contrato_fixtures.py               # 79 testes de regras R1 a R8 e ponto fixo
-│   ├── test_workflow.py                        # 84 testes de roteamento e arestas LangGraph
+│   ├── test_api.py                             # 40 testes de endpoints REST FastAPI e EPT
+│   ├── test_extraction_adapter.py              # 18 testes do adaptador de envelopes de extração
 │   ├── test_ingestion.py                       # 18 testes de arquivos físicos e limites de segurança
-│   ├── test_api.py                             # 31 testes de endpoints REST FastAPI e EPT
-│   ├── test_gemini_service.py                  # 9 testes unitários do GeminiService (REST, timeout 15s e fallback)
+│   ├── test_gemini_service.py                  # 11 testes unitários do GeminiService (REST, timeout 30s e fallback)
+│   ├── test_gemini_workflow_adapter.py         # 11 testes de integração GeminiService x Workflow
 │   ├── test_audit_items.py                     # 8 testes dedicados de auditoria técnica e sanidade
 │   ├── test_oci_storage.py                     # 8 testes de persistência OCI com SDK simulado (mock)
-│   └── test_schemas.py                         # 7 testes de validação Pydantic v2
+│   ├── test_schemas.py                         # 7 testes de validação Pydantic v2
+│   ├── test_streamlit_pipeline.py              # 6 testes do pipeline Streamlit preservando sinais
+│   ├── test_gemini_prioridades_dosagem.py      # 5 testes de prioridades e dosagens na extração
+│   ├── test_exemplos_extracao_workflow.py      # 4 testes dos exemplos oficiais no workflow
+│   └── test_pr13_persistencia_pendente.py      # 4 testes de persistência pendente e retentativa OCI
 ├── testar_gemini.py                            # Script de validação manual da IA com Google Gemini
 ├── frontend/                                   # (Recomendado) Portal Web Corporativo (React SPA - Giovane Brandino)
 ├── ARQUITETURA.md                              # Especificação Técnica Oficial da Arquitetura
@@ -217,7 +223,7 @@ g10-brasil-equipe-15_mediflow/
 | **Giovane Brandino** | 🎨 Frontend Lead & Developer | Portal Web Corporativo em React SPA, Wireframes & UX |
 | **Iza Paloma M. Coelho** | ☁️ Cloud & AI Agent Lead | OCI Object Storage Always Free, LangGraph & Grafo Condicional |
 | **Cristiano Oliveira** | ⚙️ Backend Architect & Developer | API REST FastAPI Assíncrona, Ingestão & Notificações |
-| **William** | 🧪 QA & Requirements Lead | Especificação Funcional v1.0 & Suíte de 245 Testes Pytest |
+| **William** | 🧪 QA & Requirements Lead | Especificação Funcional v1.0 & Suíte de 304 Testes Pytest |
 
 </div>
 
@@ -239,7 +245,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-### 2️⃣ Executar a Bateria de 245 Testes Automatizados
+### 2️⃣ Executar a Bateria de 304 Testes Automatizados
 ```bash
 python -m pytest
 ```
@@ -268,7 +274,10 @@ uvicorn src.api.main:app --reload --port 8000
 
 ---
 
-> [Atenção]
+> [!NOTE]
+> **Delimitação de Escopo do MVP:** A fila de trabalho e o histórico em execução no servidor FastAPI operam em memória RAM durante a vida do processo (sem continuidade entre reinícios), enquanto os documentos originais e resultados JSON são persistidos no OCI Object Storage. O sistema não utiliza motor OCR local offline (como Tesseract): PDFs digitais usam PyMuPDF e imagens/digitalizados dependem da análise multimodal via `GeminiService`.
+
+> [!WARNING]
 > **Privacidade e LGPD (RNF-08):** O MediFlow utiliza **exclusivamente massa de dados sintética/fictícia**. NENHUM dado real de paciente ou profissional de saúde é manipulado no repositório.
 
 <div align="center">
