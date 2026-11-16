@@ -37,6 +37,12 @@ from src.api.schemas import EventoHistorico
 
 logger = logging.getLogger(__name__)
 
+class ConectorOCIIndisponivel(RuntimeError):
+    """A retentativa não dispõe de um conector OCI."""
+
+
+class ConflitoIntegridadeOCI(RuntimeError):
+    """O original armazenado diverge do documento enviado."""
 
 class TriagemService:
     """Gerenciador de estado em memória e orquestrador do ciclo clínico MediFlow."""
@@ -712,10 +718,13 @@ class TriagemService:
         # -------------------------------------------------------------
         storage = self._obter_storage()
         if not storage:
-            # BLOQUEIO DE FALSO SUCESSO: Conector ausente NUNCA pode fingir sucesso!
-            logger.error("Tentativa de retry sem conector OCI configurado para documento %s", documento_id)
-            raise RuntimeError("Conector OCI não configurado ou indisponível. A persistência durável não pode ser confirmada.")
-
+            logger.error(
+                "Tentativa de retentativa sem conector OCI para documento %s",
+                documento_id,
+            )
+            raise ConectorOCIIndisponivel(
+                "Conector OCI não configurado ou indisponível."
+            )
         try:
             # 1. Regravação do documento original no OCI (se já existir, preserva e avança)
             try:
@@ -745,8 +754,10 @@ class TriagemService:
 
                     if bytes_existentes != doc.conteudo_bytes:
                         logger.error(
-                            "Conflito de integridade OCI: Objeto existente em %s possui conteúdo divergente do documento atual (%s bytes vs %s bytes).",
-                            caminho_original, len(bytes_existentes), len(doc.conteudo_bytes)
+                            "Conflito de integridade OCI em %s (%s bytes no OCI, %s bytes no original).",
+                            caminho_original,
+                            len(bytes_existentes),
+                            len(doc.conteudo_bytes),
                         )
                         self.registrar_evento(
                             documento_id=documento_id,
@@ -754,11 +765,14 @@ class TriagemService:
                             status_anterior=StatusTriagem.ERRO_PERSISTENCIA,
                             status_novo=StatusTriagem.ERRO_PERSISTENCIA,
                             ator="OCI_STORAGE_INTEGRITY",
-                            motivo=f"Conflito de integridade: Objeto existente em {caminho_original} possui conteúdo divergente.",
+                            motivo=(
+                                "Conflito de integridade OCI: "
+                                "o documento original diverge do arquivo armazenado."
+                            ),
                         )
-                        raise RuntimeError(
-                            f"Conflito de integridade OCI: O objeto existente em {caminho_original} possui conteúdo divergente do documento atual."
-                        )
+                        raise ConflitoIntegridadeOCI(
+                            "O original armazenado diverge do documento enviado."
+                        ) from err_orig
 
                     logger.info("Objeto original já existe no OCI com integridade confirmada (%s); prosseguindo para o JSON do resultado.", caminho_original)
                 else:
@@ -809,16 +823,19 @@ class TriagemService:
                 ):
                     raise RuntimeError("Gravacao do resultado nao confirmada.")
         except Exception as err:
-            logger.error("Falha física durante gravação OCI na retentativa para documento %s: %s", documento_id, err)
             self.registrar_evento(
                 documento_id=documento_id,
                 tipo_evento="RETRY_PERSISTENCIA_FALHA",
                 status_anterior=StatusTriagem.ERRO_PERSISTENCIA,
                 status_novo=StatusTriagem.ERRO_PERSISTENCIA,
                 ator="OCI_STORAGE_RETRY",
-                motivo=f"Falha na nova tentativa de gravação OCI: {str(err)}",
+                motivo="Falha na nova tentativa de gravação OCI.",
             )
-            raise RuntimeError(f"Falha na gravação dos objetos no bucket OCI: {str(err)}")
+            if isinstance(err, ConflitoIntegridadeOCI):
+                raise
+            raise RuntimeError(
+                "Falha na nova tentativa de gravação OCI."
+            ) from err
 
         self._resultados_pendentes.pop(documento_id, None)
         self._triagens[documento_id] = triagem_atualizada
