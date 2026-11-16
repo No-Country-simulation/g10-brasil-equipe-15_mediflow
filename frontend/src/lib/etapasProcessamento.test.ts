@@ -86,6 +86,37 @@ describe('derivarEtapas', () => {
     expect(p.porcentagem).toBe(88)
   })
 
+  it('ERRO_PERSISTENCIA com FALHA_GRAVACAO_ORIGINAL falha na etapa 2 e não grava o resultado', () => {
+    const p = derivarEtapas({
+      status: 'ERRO_PERSISTENCIA',
+      motivoErro: 'Falha de gravação durável no OCI: FALHA_GRAVACAO_ORIGINAL: ServiceError 503',
+      caminhoResultado: 'recebidos/DOC-1/original.txt',
+    })
+    expect(estados(p)).toEqual([
+      'concluido', 'falhou', 'concluido', 'concluido',
+      'concluido', 'concluido', 'concluido', 'aguardando',
+    ])
+    expect(p.porcentagem).toBe(75)
+    expect(p.rotuloBarra).toBe('Triagem interrompida')
+    expect(p.etapas[7]).toMatchObject({ subtexto: 'Decisão e dados extraídos gravados no OCI', mono: false })
+  })
+
+  it('OCI_OBRIGATORIO sem conector também conta como falha do original', () => {
+    const p = derivarEtapas({ status: 'ERRO_PERSISTENCIA', motivoErro: 'OCI_OBRIGATORIO: Conector OCI não configurado' })
+    expect(estados(p)[1]).toBe('falhou')
+  })
+
+  it('ERRO_PERSISTENCIA com FALHA_GRAVACAO_RESULTADO segue falhando só na etapa 8, sem caminho', () => {
+    const p = derivarEtapas({
+      status: 'ERRO_PERSISTENCIA',
+      motivoErro: 'Falha de gravação durável no OCI: FALHA_GRAVACAO_RESULTADO: ServiceError 507',
+      caminhoResultado: 'recebidos/DOC-1/original.txt',
+    })
+    expect(estados(p)[1]).toBe('concluido')
+    expect(estados(p)[7]).toBe('falhou')
+    expect(p.etapas[7].mono).toBe(false)
+  })
+
   it('usa o caminho do resultado (mono) só quando ele é conhecido', () => {
     const sem = derivarEtapas({ status: 'PROCESSADO', caminhoResultado: null }).etapas[7]
     expect(sem.mono).toBe(false)

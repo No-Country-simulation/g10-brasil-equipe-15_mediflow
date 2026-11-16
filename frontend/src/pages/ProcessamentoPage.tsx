@@ -24,6 +24,7 @@ export function ProcessamentoPage() {
     status,
     etapaVisual: acompanhamento.etapaVisual,
     caminhoResultado: resultado?.armazenamento_oci?.caminho_objeto,
+    motivoErro: motivoErro ?? resultado?.erro?.mensagem,
   })
   const badge = badgeDoStatus(status)
 

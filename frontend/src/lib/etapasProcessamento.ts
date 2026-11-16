@@ -51,6 +51,16 @@ export type EntradaEtapas = {
   etapaVisual?: number
   /** `armazenamento_oci.caminho_objeto` do resultado, quando já conhecido. */
   caminhoResultado?: string | null
+  /** Motivo do erro (histórico ou `erro.mensagem`); diz em qual gravação o ERRO_PERSISTENCIA ocorreu. */
+  motivoErro?: string | null
+}
+
+/**
+ * A API usa um só status (ERRO_PERSISTENCIA) para as duas gravações no OCI; o código no motivo
+ * (`FALHA_GRAVACAO_ORIGINAL`, ou `OCI_OBRIGATORIO` sem conector) indica que falhou a do original.
+ */
+export function falhouGravacaoOriginal(motivo: string | null | undefined): boolean {
+  return /FALHA_GRAVACAO_ORIGINAL|OCI_OBRIGATORIO/.test(motivo ?? '')
 }
 
 export type ProgressoProcessamento = {
@@ -77,7 +87,11 @@ function limitarEtapaVisual(valor: number | undefined): number {
 }
 
 /** Estado de cada uma das 8 etapas (índice 0 = etapa 1). */
-function estadosPorStatus(status: StatusTriagem | null, etapaVisual: number): EstadoEtapa[] {
+function estadosPorStatus(
+  status: StatusTriagem | null,
+  etapaVisual: number,
+  falhaNoOriginal: boolean,
+): EstadoEtapa[] {
   const todas = (estado: EstadoEtapa) => Array<EstadoEtapa>(TOTAL_ETAPAS).fill(estado)
   const ate = (fim: number, restante: EstadoEtapa): EstadoEtapa[] =>
     ETAPAS_BASE.map((_, i) => (i + 1 <= fim ? 'concluido' : restante))
@@ -101,6 +115,14 @@ function estadosPorStatus(status: StatusTriagem | null, etapaVisual: number): Es
     }
 
     case 'ERRO_PERSISTENCIA': {
+      if (falhaNoOriginal) {
+        // O original não foi gravado; a análise seguiu (decisão preservada), mas o resultado
+        // não chegou a ser gravado: a API só tenta essa gravação quando o original foi salvo.
+        const estados = ate(TOTAL_ETAPAS - 1, 'aguardando')
+        estados[1] = 'falhou'
+        estados[TOTAL_ETAPAS - 1] = 'aguardando'
+        return estados
+      }
       // A decisão clínica foi calculada; só a gravação final do resultado falhou.
       const estados = ate(TOTAL_ETAPAS - 1, 'aguardando')
       estados[TOTAL_ETAPAS - 1] = 'falhou'
@@ -140,12 +162,19 @@ export function statusTerminal(status: StatusTriagem | null): boolean {
   )
 }
 
-export function derivarEtapas({ status, etapaVisual, caminhoResultado }: EntradaEtapas): ProgressoProcessamento {
-  const estados = estadosPorStatus(status, limitarEtapaVisual(etapaVisual))
+export function derivarEtapas({
+  status,
+  etapaVisual,
+  caminhoResultado,
+  motivoErro,
+}: EntradaEtapas): ProgressoProcessamento {
+  const estados = estadosPorStatus(status, limitarEtapaVisual(etapaVisual), falhouGravacaoOriginal(motivoErro))
 
   const etapas = ETAPAS_BASE.map((base, indice): Etapa => {
     const ehResultado = indice === TOTAL_ETAPAS - 1
-    const temCaminho = ehResultado && Boolean(caminhoResultado)
+    // Em ERRO_PERSISTENCIA a API devolve o caminho do original nesse campo; só mostramos o
+    // caminho quando o resultado foi de fato gravado.
+    const temCaminho = ehResultado && estados[indice] === 'concluido' && Boolean(caminhoResultado)
     return {
       numero: indice + 1,
       titulo: base.titulo,
