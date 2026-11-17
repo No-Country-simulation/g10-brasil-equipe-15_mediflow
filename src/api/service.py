@@ -38,6 +38,13 @@ from src.api.schemas import EventoHistorico
 logger = logging.getLogger(__name__)
 
 
+def _caminho_resultado_oci(documento_id: str, status: StatusTriagem, urgente: bool) -> str:
+    if status == StatusTriagem.EM_REVISAO:
+        return f"auditoria_humana/{documento_id}/resultado.json"
+    prefixo = "processados/urgentes" if urgente else "processados"
+    return f"{prefixo}/{documento_id}/resultado.json"
+
+
 class TriagemService:
     """Gerenciador de estado em memória e orquestrador do ciclo clínico MediFlow."""
 
@@ -362,9 +369,8 @@ class TriagemService:
                 ator="WORKFLOW_ENGINE",
                 motivo=mensagem,
             )
-            pasta_status = "urgentes/" if urgente else ""
-            caminho_resultado = (
-                f"processados/{pasta_status}{documento_id}/resultado.json"
+            caminho_resultado = _caminho_resultado_oci(
+                documento_id, StatusTriagem.ERRO_PROCESSAMENTO, urgente
             )
             resultado_para_gravar = triagem.model_copy(
                 update={
@@ -503,8 +509,7 @@ class TriagemService:
                     )
 
         # 4. Construção do Contrato Oficial TriagemMediFlow com métricas reais do agente
-        pasta_status = "urgentes/" if urgente else ""
-        caminho_oci_resultado = f"processados/{pasta_status}{documento_id}/resultado.json"
+        caminho_oci_resultado = _caminho_resultado_oci(documento_id, status_final, urgente)
 
         # Se a gravação inicial teve sucesso, tenta persistir o JSON final no OCI
         if falha_simulada == "RESULTADO":
@@ -672,8 +677,8 @@ class TriagemService:
         else:
             requer_revisao = bool(triagem.decisao_roteamento and triagem.decisao_roteamento.requer_auditoria_humana)
             status_restaurado = StatusTriagem.EM_REVISAO if requer_revisao else StatusTriagem.PROCESSADO
-            pasta_status = "urgentes/" if (triagem.classificacao.nivel_prioridade == "URGENTE") else ""
-            caminho_resultado = f"processados/{pasta_status}{documento_id}/resultado.json"
+            urgente = triagem.classificacao.nivel_prioridade == NivelPrioridade.URGENTE
+            caminho_resultado = _caminho_resultado_oci(documento_id, status_restaurado, urgente)
 
         # -------------------------------------------------------------
         # CASO 1: SIMULAÇÃO EXPLÍCITA DO CATÁLOGO EPT v1.0 (§12)
