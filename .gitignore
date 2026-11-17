@@ -49,3 +49,6 @@ tests/fixtures/catalogo/Limite_Tamanho_10MB/Limite_Tamanho_10MB.pdf
 tests/fixtures/catalogo/Limite_Tamanho_Acima10MB/Limite_Tamanho_Acima10MB.pdf
 tests/fixtures/catalogo/Limite_Texto_Acima10MB/Limite_Texto_Acima10MB.txt
 
+
+# Planejamento local do frontend
+plano.md

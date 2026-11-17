@@ -1,0 +1,82 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Matriz_LaudoDeImagem_Pdf",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "demo/Matriz_LaudoDeImagem_Pdf/Matriz_LaudoDeImagem_Pdf.txt",
+      "pdf": "demo/Matriz_LaudoDeImagem_Pdf/Matriz_LaudoDeImagem_Pdf.pdf",
+      "jpg": "demo/Matriz_LaudoDeImagem_Pdf/Matriz_LaudoDeImagem_Pdf.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-BEFDD90A",
+    "classificacao": {
+      "tipo_documento": "LAUDO_EXAME_IMAGEM",
+      "especialidade": [
+        "Radiologia",
+        "Pneumologia"
+      ],
+      "nivel_prioridade": "URGENTE",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Carlos Eduardo Mendes",
+        "idade": 52
+      },
+      "medico": {
+        "nome": "Dra. Renata Silveira",
+        "crm": {
+          "numero": "145892",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Tromboembolismo pulmonar agudo",
+      "cid": null,
+      "exames": [
+        "Tomografia de tórax com contraste"
+      ],
+      "medicamentos": [],
+      "urgencia": "SIM"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_URGENCIA_MEDICA",
+      "destinos": [
+        "FILA_URGENCIA_MEDICA"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Urgência clínica: FILA_URGENCIA_MEDICA com alerta registrado. Sem ambiguidade, segue sem revisão humana.",
+      "notificacao": {
+        "gerada": true,
+        "canal": "SIMULADO_SLACK_PLANTAO",
+        "status": "REGISTRADA",
+        "mensagem": "ALERTA URGENTE [DOC-BEFDD90A]: Tromboembolismo pulmonar agudo"
+      }
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Caso oficial do brief reproduzido em PDF",
+    "Achado crítico detectado e prioridade URGENTE",
+    "Destino FILA_URGENCIA_MEDICA com alerta",
+    "CID ausente permanece null e não exige revisão por si só"
+  ],
+  "observacoes": "Espelha o exemplo do Projeto_oracle.pdf: urgência sem ambiguidade termina em PROCESSADO, com requer_auditoria_humana false e alerta registrado."
+}
