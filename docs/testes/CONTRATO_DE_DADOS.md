@@ -214,7 +214,9 @@ As regras são aplicadas deterministicamente no modelo de validação:
 | **R8** | Conflitos de Gravidade Baixa | Conflitos com `gravidade == BAIXA` são registrados para auditoria, mas **não** são impeditivos e não geram revisão humana isoladamente. |
 
 **Campos Obrigatórios Auditados (RF-21):**
-`paciente.nome`, `paciente.idade`, `medico.nome`, `medico.crm`, `diagnostico`.
+`paciente.nome`, `paciente.idade`, `medico.nome`, `medico.crm`, `diagnostico`\*.
+
+\* `diagnostico` é dispensado em `LAUDO_EXAME_LABORATORIAL` quando `exames` ou `exames_laboratoriais` estiverem preenchidos (decisão A6, §5.3).
 
 ---
 
@@ -233,14 +235,14 @@ A `FILA_REVISAO_HUMANA` só é acionada em documentos urgentes quando há **ambi
 ### 5.2 Por que o Validador não deduz arbitrariamente "campo ausente"
 
 No ecossistema clínico, a ausência de um campo pode ser legítima ou não, dependendo da tipologia:
-- Um `LAUDO_EXAME_LABORATORIAL` frequentemente possui `diagnostico: null` de forma válida, terminando em `PROCESSADO`.
+- Um `LAUDO_EXAME_LABORATORIAL` **com exames preenchidos** possui `diagnostico: null` de forma válida (decisão A6 — ver §5.3), terminando em `PROCESSADO`.
 - Uma receita ou guia sem diagnóstico (`Ausencia_Diagnostico`) configura incompletude e termina em `EM_REVISAO`.
 
 O validador respeita a lista `qualidade.campos_ausentes` produzida pelo pipeline de extração. O sistema audita se os campos ausentes informados pertencem aos obrigatórios do RF-21, evitando falsos positivos.
 
 ---
 
-### 5.3 Decisões Clínicas Incorporadas ao Contrato (A1 a A5)
+### 5.3 Decisões Clínicas Incorporadas ao Contrato (A1 a A6)
 
 | Identificador | Regra Clínica | Implementação no Código |
 | :--- | :--- | :--- |
@@ -248,6 +250,7 @@ O validador respeita a lista `qualidade.campos_ausentes` produzida pelo pipeline
 | **A3** | Cálculo determinístico do `score_extracao`: `score = 1.0 − (0.2 × campos_obrigatórios_ausentes) − (0.1 × campos_incertos) − (0.3 × conflitos_ALTA) − (0.2 × conflitos_MEDIA) − (0.1 × conflitos_BAIXA)`, com piso em `0.0`. | Função `calcular_score_extracao` e pesos `PESO_CONFLITO`. |
 | **A4** | `nivel_prioridade == NAO_IDENTIFICADA` constitui ambiguidade clínica e força revisão humana (R2). | Testado no fixture de borda `Borda_Prioridade_NaoIdentificada`. |
 | **A5** | `urgencia == INDETERMINADO` é tratado como incerteza crítica e força revisão humana (R2). | Testado no fixture de borda `Borda_Urgencia_Indeterminada`. |
+| **A6** | `diagnostico` é campo obrigatório (RF-21) **exceto** quando o documento é do tipo `LAUDO_EXAME_LABORATORIAL` **e** o campo `dados_extraidos.exames` ou `dados_extraidos.exames_laboratoriais` está preenchido. Nesse caso, a ausência de `diagnostico` é clinicamente esperada (o laudo reporta valores medidos objetivos, não uma conclusão clínica) e não penaliza o score nem força revisão humana. | Implementado em `src/schemas/clinical.py` L574–582: `dispensa_diagnostico = is_lab and bool(d.exames or d.exames_laboratoriais)`. Validado e formalizado na governança de dados. |
 
 ---
 
