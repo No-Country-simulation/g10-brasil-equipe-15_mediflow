@@ -9,7 +9,7 @@ from src.schemas.clinical import (
     NivelPrioridade,
     Paciente,
 )
-from src.workflow.graph import criar_grafo
+from src.workflow.graph import VERSAO_REGRAS, criar_grafo
 from src.workflow.state import (
     ConflitoWorkflow,
     EntradaWorkflow,
@@ -1100,3 +1100,24 @@ def test_pr13_resposta_preserva_justificativa_do_workflow(
     assert final.decisao_roteamento.justificativa_roteamento == decisao_esperada["justificativa"], (
         "A resposta final substituiu a justificativa calculada pelo workflow."
     )
+
+
+@pytest.mark.parametrize(
+    "kwargs,regras_esperadas",
+    [
+        ({}, ["ROTINA"]),
+        ({"prioridade": NivelPrioridade.URGENTE, "urgencia": "SIM"}, ["URGENCIA"]),
+        ({"score": 0.70}, ["REVISAO"]),
+        (
+            {"prioridade": NivelPrioridade.URGENTE, "urgencia": "SIM", "score": 0.70},
+            ["URGENCIA", "REVISAO"],
+        ),
+    ],
+)
+def test_justificativa_rastreavel_inclui_regras_e_versao(executar, kwargs, regras_esperadas):
+    """Critério 12 (§16): justificativa do workflow expõe regras_acionadas e VERSAO_REGRAS."""
+    decisao = executar(**kwargs)["decisao"]
+
+    assert decisao.regras_acionadas == regras_esperadas
+    regras_fmt = ", ".join(regras_esperadas)
+    assert f"[Regras: {regras_fmt} | Versão regras: {VERSAO_REGRAS}]" in decisao.justificativa
