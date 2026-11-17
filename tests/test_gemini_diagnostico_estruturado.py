@@ -143,12 +143,20 @@ def test_preserva_payload_textual_e_sinais():
 
     assert modulo.normalizar_payload_extracao(payload) == payload
 
-
-def test_servico_extrai_objeto_preservando_dados_e_sinais():
+@pytest.mark.parametrize(
+    "idade_recebida, idade_esperada, campos_incertos_esperados",
+    [
+        ("41 anos", 41, ["medico.nome"]),
+        ("29 ou 39 anos", None, ["medico.nome", "paciente.idade"]),
+    ],
+)
+def test_servico_extrai_objeto_preservando_dados_e_sinais(
+    idade_recebida, idade_esperada, campos_incertos_esperados
+):
     payload = {
         "paciente": {
             "nome": "Pessoa Fictícia",
-            "idade": 29,
+            "idade": idade_recebida,
         },
         "diagnostico": {
             "descricao": "Descrição fictícia.",
@@ -180,11 +188,12 @@ def test_servico_extrai_objeto_preservando_dados_e_sinais():
 
         dados = envelope["dados_clinicos"]
 
-        assert dados.paciente.idade == 29
+        assert dados.paciente.nome == "Pessoa Fictícia"
+        assert dados.paciente.idade == idade_esperada
         assert dados.diagnostico == "Descrição fictícia."
         assert dados.cid == "J06.9"
         assert envelope["urgencia"] == "NAO"
-        assert envelope["campos_incertos"] == ["medico.nome"]
+        assert envelope["campos_incertos"] == campos_incertos_esperados
         assert envelope["conflitos"] == []
 
         modelo.generate_content.assert_called_once()
@@ -273,13 +282,19 @@ def test_normaliza_idade_textual_inequivoca(
         "idade-aproximada",
     ],
 )
-def test_rejeita_idade_textual_ambigua_sem_escolher_numero(idade):
-    payload = {"paciente": {"idade": idade}}
+def test_sinaliza_idade_textual_invalida_sem_escolher_numero(idade):
+    payload = {
+        "paciente": {"nome": "Pessoa Fictícia", "idade": idade},
+        "campos_incertos": ["medico.nome"],
+    }
     original = deepcopy(payload)
 
-    with pytest.raises(ValueError):
-        modulo.normalizar_payload_extracao(payload)
+    normalizado = modulo.normalizar_payload_extracao(payload)
+    dados = modulo.DadosClinicosExtraidos.model_validate(normalizado)
 
+    assert dados.paciente.nome == "Pessoa Fictícia"
+    assert dados.paciente.idade is None
+    assert normalizado["campos_incertos"] == ["medico.nome", "paciente.idade"]
     assert payload == original
 
 

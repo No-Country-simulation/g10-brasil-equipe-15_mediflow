@@ -145,13 +145,23 @@ def normalizar_idade_extracao(payload: Dict[str, Any]) -> Dict[str, Any]:
         flags=re.IGNORECASE,
     )
 
-    if correspondencia is None:
-        raise ValueError("Idade textual ambígua ou em formato não suportado.")
-
     paciente_normalizado = dict(paciente)
-    paciente_normalizado["idade"] = int(correspondencia.group(1))
-    normalizado["paciente"] = paciente_normalizado
 
+    if correspondencia is None:
+        paciente_normalizado["idade"] = None
+        campos_incertos = normalizado.get("campos_incertos")
+        if campos_incertos is None:
+            campos_incertos = []
+        if not isinstance(campos_incertos, list):
+            raise ValueError("campos_incertos deve ser uma lista.")
+
+        if "paciente.idade" not in campos_incertos:
+            campos_incertos = [*campos_incertos, "paciente.idade"]
+        normalizado["campos_incertos"] = campos_incertos
+    else:
+        paciente_normalizado["idade"] = int(correspondencia.group(1))
+
+    normalizado["paciente"] = paciente_normalizado
     return normalizado
 
 
