@@ -25,10 +25,10 @@ class TestGeminiService:
     """Suíte de testes de unidade e resiliência para o GeminiService."""
 
     def test_inicializacao_com_valores_padrao(self):
-        """Verifica a inicialização padrão com o modelo gemini-3.8-flash."""
+        """Verifica que o modelo padrão é gemini-3.5-flash-lite."""
         service = GeminiService(api_key="chave_teste_mock")
         assert service.api_key == "chave_teste_mock"
-        assert service.model_name == "gemini-3.8-flash"
+        assert service.model_name == "gemini-3.5-flash-lite"
 
     def test_configuracao_transporte_rest(self):
         """Verifica se genai.configure utiliza transport='rest' no Windows."""
@@ -156,7 +156,7 @@ class TestGeminiService:
             assert resultado.score_confianca_classificacao == 0.0
 
     def test_tentativa_com_modelo_secundario_em_caso_de_falha_do_primeiro(self):
-        """Verifica se o segundo modelo candidato (gemini-3.5-flash-lite) é acionado se o primeiro falhar."""
+        """Tenta o Flash-Lite primeiro e usa o Flash se ele falhar."""
         payload_mock = {
             "tipo_documento": "RECEITUARIO_MEDICO",
             "especialidade": "Clínica Médica",
@@ -167,16 +167,26 @@ class TestGeminiService:
         mock_response.text = json.dumps(payload_mock)
 
         def mock_generative_model(model_name, **kwargs):
-            m = MagicMock()
-            if model_name == "gemini-3.8-flash":
-                m.generate_content.side_effect = Exception("Erro temporário no gemini-3.8-flash")
+            modelo = MagicMock()
+            if model_name == "gemini-3.5-flash-lite":
+                modelo.generate_content.side_effect = Exception(
+                    "Erro temporário no gemini-3.5-flash-lite"
+                )
             else:
-                m.generate_content.return_value = mock_response
-            return m
+                modelo.generate_content.return_value = mock_response
+            return modelo
 
-        with patch("src.services.gemini_service.genai.GenerativeModel", side_effect=mock_generative_model):
-            service = GeminiService(api_key="chave_teste", model_name="gemini-3.8-flash")
-            resultado = service.classificar_documento("Amoxicilina 500mg 8/8h por 7 dias")
+        with patch(
+            "src.services.gemini_service.genai.GenerativeModel",
+            side_effect=mock_generative_model,
+        ) as fabrica_modelo:
+            service = GeminiService(api_key="chave_teste")
+            resultado = service.classificar_documento("Laudo fictício de rotina.")
+
+            assert [
+                chamada.kwargs["model_name"]
+                for chamada in fabrica_modelo.call_args_list
+            ] == ["gemini-3.5-flash-lite", "gemini-3.8-flash"]
 
             assert resultado.tipo_documento == TipoDocumentoEnum.RECEITUARIO_MEDICO
             assert resultado.nivel_prioridade == NivelPrioridadeEnum.ROTINA
