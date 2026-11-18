@@ -275,3 +275,69 @@ def test_persistencia_oci_forcar_simulado_cenario_demo():
     assert resultado["status_backup"] == "simulado"
     assert resultado["modo_simulacao"] is True
     assert storage_mock.enviar_bytes.call_count == 0
+
+
+def test_persistencia_oci_obrigatorio_ativo_sem_credenciais_retorna_falha(monkeypatch):
+    """EF v1.2 RF-30 / §16.10: com OCI_OBRIGATORIO=true, ausência de credenciais retorna falha (nunca simulado)."""
+    monkeypatch.setenv("OCI_OBRIGATORIO", "true")
+    with patch(
+        "src.storage.oci_storage.OCIStorage.das_configuracoes",
+        side_effect=ValueError("Preencha no .env: OCI_USER_OCID, OCI_KEY_FILE"),
+    ):
+        resultado = executar_persistencia_triagem(
+            documento_id="DOC-OBRIG-01",
+            nome_arquivo="laudo.pdf",
+            conteudo_original_bytes=b"%PDF-1.4",
+            dados_triagem_json={"status": "PROCESSADO", "documento_id": "DOC-OBRIG-01"},
+            caminho_resultado_alvo="processados/DOC-OBRIG-01/resultado.json",
+            storage=None,
+            forcar_simulado=False,
+        )
+
+    assert resultado["status_backup"] == "falha"
+    assert resultado["modo_simulacao"] is False
+    assert resultado["caminho_objeto"] is None
+    assert resultado["erro"] == MENSAGEM_PUBLICA_FALHA_OCI
+    assert "OCI_USER_OCID" not in resultado["erro"]
+
+
+def test_persistencia_oci_chave_inexistente_ou_config_parcial_retorna_falha_sanitizada(caplog):
+    """Arquivo de chave ausente ou configuração parcial do OCI resulta em falha sanitizada, não em simulado."""
+    with caplog.at_level(logging.ERROR, logger="mediflow.app.oci_persistence"):
+        with patch(
+            "src.storage.oci_storage.OCIStorage.das_configuracoes",
+            side_effect=FileNotFoundError("O arquivo indicado em OCI_KEY_FILE nao existe."),
+        ):
+            res_chave = executar_persistencia_triagem(
+                documento_id="DOC-KEY-ERR",
+                nome_arquivo="laudo.pdf",
+                conteudo_original_bytes=b"%PDF-1.4",
+                dados_triagem_json={"status": "PROCESSADO", "documento_id": "DOC-KEY-ERR"},
+                caminho_resultado_alvo="processados/DOC-KEY-ERR/resultado.json",
+                storage=None,
+                forcar_simulado=False,
+            )
+
+        with patch(
+            "src.storage.oci_storage.OCIStorage.das_configuracoes",
+            side_effect=ValueError("Preencha no .env: OCI_NAMESPACE"),
+        ):
+            res_parcial = executar_persistencia_triagem(
+                documento_id="DOC-PARCIAL-ERR",
+                nome_arquivo="laudo.pdf",
+                conteudo_original_bytes=b"%PDF-1.4",
+                dados_triagem_json={"status": "PROCESSADO", "documento_id": "DOC-PARCIAL-ERR"},
+                caminho_resultado_alvo="processados/DOC-PARCIAL-ERR/resultado.json",
+                storage=None,
+                forcar_simulado=False,
+            )
+
+    for res in (res_chave, res_parcial):
+        assert res["status_backup"] == "falha"
+        assert res["modo_simulacao"] is False
+        assert res["caminho_objeto"] is None
+        assert res["erro"] == MENSAGEM_PUBLICA_FALHA_OCI
+        assert "OCI_KEY_FILE" not in res["erro"]
+        assert "OCI_NAMESPACE" not in res["erro"]
+    assert "OCI_KEY_FILE" in caplog.text
+

@@ -13,10 +13,12 @@ Cobre os 3 cenários obrigatórios (rotina, urgência isolada, ambíguo/misto) e
 from src.app.oci_persistence import MENSAGEM_PUBLICA_FALHA_OCI
 from src.app.quality_indicator import (
     IndicadoresQualidadeRoteamento,
+    MENSAGEM_PUBLICA_ERRO_PROCESSAMENTO,
     calcular_indicadores_qualidade_e_roteamento,
     eh_decisao_urgente,
     executar_modo_simulado_documento,
     montar_triagem_canonica,
+    montar_triagem_erro_processamento,
 )
 from src.schemas import (
     Classificacao,
@@ -448,6 +450,135 @@ def test_modo_simulado_arquivo_arbitrario_nao_inventa_dados_ficticios():
     assert estado["entrada"].dados_extraidos.paciente.nome != "Carlos Drummond"
     assert estado["decisao"].requer_auditoria_humana is False
     assert [d.value for d in estado["decisao"].destinos] == ["FARMACIA_HOSPITALAR"]
+
+
+def test_contradicao_prioridade_urgente_e_urgencia_nao_preserva_em_revisao_em_triagem_canonica():
+    """RF-16 / RNF-02: prioridade URGENTE + urgencia NAO mantém EM_REVISAO e dois destinos no JSON final."""
+    entrada = EntradaWorkflow(
+        documento_id="DOC-CONTRADICAO",
+        classificacao=Classificacao(
+            tipo_documento=TipoDocumento.LAUDO_EXAME_IMAGEM,
+            especialidade=["Radiologia"],
+            nivel_prioridade=NivelPrioridade.URGENTE,
+            score_classificacao=0.95,
+        ),
+        dados_extraidos=DadosExtraidos(
+            paciente=Paciente(nome="Renato Russo", idade=45),
+            medico=Medico(nome="Dra. Rita", crm=Crm(numero="998877", uf="SP")),
+            diagnostico="Pneumotórax em reavaliação",
+            urgencia=Urgencia.NAO,
+        ),
+        urgencia="NAO",
+        limiar=0.85,
+    )
+    estado = criar_grafo().invoke({"entrada": entrada})
+    assert estado["decisao"].requer_auditoria_humana is True
+
+    triagem = montar_triagem_canonica(
+        documento_id="DOC-CONTRADICAO",
+        classificacao=entrada.classificacao,
+        dados_extraidos=entrada.dados_extraidos,
+        qualidade_wf=estado["qualidade"],
+        decisao_wf=estado["decisao"],
+        urgencia_efetiva=entrada.urgencia,
+        caminho_alvo="auditoria_humana/DOC-CONTRADICAO/resultado.json",
+    )
+    assert triagem.status == StatusTriagem.EM_REVISAO
+    assert triagem.decisao_roteamento.requer_auditoria_humana is True
+    assert triagem.decisao_roteamento.destinos == [
+        Destino.FILA_URGENCIA_MEDICA,
+        Destino.FILA_REVISAO_HUMANA,
+    ]
+    assert triagem.qualidade.score_combinado == 0.95
+
+
+def test_modo_simulado_fixture_erro_processamento_nao_extrai_travessao_como_paciente():
+    """Qualidade_Pdf_ComSenha.txt retorna erro_processamento (PDF_PROTEGIDO) sem ler '—' como nome."""
+    from pathlib import Path
+    from src.ingestion import DocumentLoader
+
+    caminho_txt = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "catalogo"
+        / "Qualidade_Pdf_ComSenha"
+        / "Qualidade_Pdf_ComSenha.txt"
+    )
+    doc = DocumentLoader.carregar_arquivo(caminho_txt)
+    estado = executar_modo_simulado_documento(doc, limiar=0.85)
+
+    assert "erro_processamento" in estado
+    assert estado["erro_processamento"]["codigo"] == CodigoErro.PDF_PROTEGIDO
+
+
+def test_modo_simulado_avulso_crm_sem_uf_e_vitamina_b12_nao_inventa_uf_nem_cid():
+    """RF-09 / RF-10: CRM sem UF explícita aciona EM_REVISAO e 'Vitamina B12' nunca vira CID='B12'."""
+    from src.ingestion import DocumentLoader
+
+    texto = (
+        "RECEITUÁRIO MÉDICO\n"
+        "Paciente: Fernanda Montenegro\n"
+        "Idade: 68\n"
+        "Médico: Dr. Ariano Suassuna\n"
+        "CRM: 123456\n"
+        "Diagnóstico: Deficiência de Vitamina B12 em acompanhamento\n"
+    ).encode("utf-8")
+    doc = DocumentLoader.carregar_bytes(texto, nome_arquivo="receita_sem_uf.txt")
+    estado = executar_modo_simulado_documento(doc, limiar=0.85)
+
+    entrada = estado["entrada"]
+    assert entrada.dados_extraidos.cid is None
+    assert "uf" not in entrada.dados_extraidos.medico.crm.model_fields_set
+    assert "medico.crm" in estado["qualidade"].campos_ausentes
+    assert estado["decisao"].requer_auditoria_humana is True
+    assert [d.value for d in estado["decisao"].destinos] == ["FILA_REVISAO_HUMANA"]
+
+
+def test_modo_simulado_laudo_laboratorial_avulso_com_analitos_preserva_decisao_a6():
+    """Decisão A6 no Modo Simulado: laudo laboratorial avulso com analitos e sem diagnóstico aprova em rotina."""
+    from src.ingestion import DocumentLoader
+
+    texto = (
+        "LAUDO DE EXAME LABORATORIAL\n"
+        "Paciente: Lázaro Ramos\n"
+        "Idade: 44\n"
+        "Solicitante: Dra. Taís Araújo - CRM: 445566-SP\n"
+        "Hemoglobina: 14.2 g/dL\n"
+        "Leucócitos: 6100 mm3\n"
+    ).encode("utf-8")
+    doc = DocumentLoader.carregar_bytes(texto, nome_arquivo="hemograma_avulso.txt")
+    estado = executar_modo_simulado_documento(doc, limiar=0.85)
+
+    assert estado["entrada"].dados_extraidos.diagnostico is None
+    assert len(estado["entrada"].dados_extraidos.exames_laboratoriais) == 2
+    assert estado["decisao"].requer_auditoria_humana is False
+    assert [d.value for d in estado["decisao"].destinos] == ["PRONTUARIO_ELETRONICO"]
+
+
+def test_montar_triagem_erro_processamento_nivel_2_e_falha_oci():
+    """Contrato §4 (Nível 2) / EF v1.2 §12: ERRO_PROCESSAMENTO zera blocos clínicos e preenche erro."""
+    triagem_erro = montar_triagem_erro_processamento(
+        documento_id="DOC-ERR-01",
+        codigo=CodigoErro.FALHA_WORKFLOW,
+        mensagem=MENSAGEM_PUBLICA_ERRO_PROCESSAMENTO,
+        caminho_alvo="processados/DOC-ERR-01/resultado.json",
+        modo_simulacao_padrao=True,
+    )
+    assert triagem_erro.status == StatusTriagem.ERRO_PROCESSAMENTO
+    assert triagem_erro.classificacao is None
+    assert triagem_erro.dados_extraidos is None
+    assert triagem_erro.qualidade is None
+    assert triagem_erro.decisao_roteamento is None
+    assert triagem_erro.erro.codigo == CodigoErro.FALHA_WORKFLOW
+
+    triagem_erro_oci = montar_triagem_erro_processamento(
+        documento_id="DOC-ERR-01",
+        codigo=CodigoErro.FALHA_WORKFLOW,
+        res_oci={"status_backup": "falha", "bucket": "mediflow-documentos", "caminho_objeto": None},
+    )
+    assert triagem_erro_oci.status == StatusTriagem.ERRO_PERSISTENCIA
+    assert triagem_erro_oci.erro.codigo == CodigoErro.ERRO_PERSISTENCIA
+
 
 
 

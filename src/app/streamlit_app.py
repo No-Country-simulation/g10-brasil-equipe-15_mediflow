@@ -13,6 +13,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+import logging
 import os
 import re
 from typing import Any, Dict, List, Optional
@@ -25,19 +26,22 @@ from src.app.oci_persistence import (
     resolver_caminho_resultado_oci,
 )
 from src.app.quality_indicator import (
+    MENSAGEM_PUBLICA_ERRO_PROCESSAMENTO,
     calcular_indicadores_qualidade_e_roteamento,
     eh_decisao_urgente,
     executar_modo_simulado_documento,
     montar_triagem_canonica,
+    montar_triagem_erro_processamento,
 )
 from src.app.triage_pipeline import processar_documento_com_agente
 from src.ingestion import DocumentLoader, IngestaoError, resolver_mime_type
 from src.schemas import (
     Classificacao,
     ClassificacaoClinica,
+    CodigoErro,
     Crm,
     DadosExtraidos,
-    Destino,
+    Medicamento,
     Medico,
     NivelPrioridade,
     Paciente,
@@ -50,6 +54,34 @@ from src.workflow.graph import criar_grafo
 from src.workflow.state import EntradaWorkflow
 
 load_dotenv(override=True)
+logger = logging.getLogger("mediflow.app.streamlit")
+
+MENSAGENS_BORDA_INGESTAO = {
+    "ARQUIVO_MAIOR_QUE_LIMITE": (
+        "O arquivo excede o limite configurado para o MVP (máximo de 10 MB e 20 páginas). "
+        "Envie um documento menor ou dividido."
+    ),
+    "PDF_PROTEGIDO": (
+        "O arquivo PDF está protegido por senha. Remova a proteção do documento e envie novamente."
+    ),
+    "PDF_CORROMPIDO": (
+        "O arquivo enviado está corrompido ou possui estrutura inválida. "
+        "Gere ou exporte novamente o documento íntegro e repita o envio."
+    ),
+    "MIME_INVALIDO": (
+        "A assinatura binária do arquivo não corresponde à extensão informada. "
+        "Verifique o formato real do documento e tente novamente."
+    ),
+    "ARQUIVO_VAZIO": (
+        "O arquivo enviado está vazio (0 bytes). Selecione um documento válido com conteúdo legível."
+    ),
+    "CAMPOS_INVALIDOS": (
+        "Os dados de entrada são inválidos ou estão vazios. Corrija o arquivo e tente novamente."
+    ),
+    "FORMATO_NAO_SUPORTADO": (
+        "Formato de arquivo não suportado. Utilize apenas PDF, TXT, PNG, JPG, JPEG ou WEBP."
+    ),
+}
 
 MAPA_DESTINOS_ROTULOS = {
     "FILA_URGENCIA_MEDICA": "Fila de Urgência Médica (Plantão / Emergência)",
@@ -90,6 +122,7 @@ def executar_fluxo_agente(
     exames: Optional[List[Any]] = None,
     urgencia: Optional[str] = None,
     especialidade: Optional[List[str] | str] = None,
+    campos_incertos_extras: Optional[List[str]] = None,
     limiar: float = 0.85,
 ) -> Dict[str, Any]:
     """Invoca deterministicamente o motor LangGraph para decisão clínica e roteamento."""
@@ -104,13 +137,13 @@ def executar_fluxo_agente(
 
     # 1. Detecção rigorosa de campos ausentes / ilegíveis nos cenários simulados
     campos_ausentes: List[str] = []
-    campos_incertos: List[str] = []
+    campos_incertos: List[str] = list(campos_incertos_extras or [])
 
     p_nome = paciente_dict.get("nome")
     if not p_nome or str(p_nome).strip() in ("N/I", "") or "não identificado" in str(p_nome).lower():
         campos_ausentes.append("paciente.nome")
         p_nome_clean = None
-    elif "ilegível" in str(p_nome).lower():
+    elif "ilegível" in str(p_nome).lower() or "manchad" in str(p_nome).lower():
         campos_ausentes.append("paciente.nome")
         campos_incertos.append("paciente.nome")
         p_nome_clean = None
@@ -118,7 +151,17 @@ def executar_fluxo_agente(
         p_nome_clean = str(p_nome)
 
     p_idade = paciente_dict.get("idade")
+    p_idade_clean: Optional[int] = None
     if p_idade is None:
+        campos_ausentes.append("paciente.idade")
+    elif isinstance(p_idade, str) and (
+        "~" in p_idade or "?" in p_idade or "ilegível" in p_idade.lower()
+    ):
+        campos_ausentes.append("paciente.idade")
+        campos_incertos.append("paciente.idade")
+    elif isinstance(p_idade, int):
+        p_idade_clean = p_idade
+    else:
         campos_ausentes.append("paciente.idade")
 
     m_nome = medico_dict.get("nome")
@@ -159,14 +202,18 @@ def executar_fluxo_agente(
         campos_incertos.append("diagnostico")
         diag_clean = None
 
-    paciente_obj = Paciente(nome=p_nome_clean, idade=p_idade)
+    paciente_obj = Paciente(nome=p_nome_clean, idade=p_idade_clean)
     medico_obj = Medico(nome=m_nome_clean, crm=crm_obj)
+    meds_formatados = [
+        Medicamento(**m) if isinstance(m, dict) else m
+        for m in (medicamentos or [])
+    ]
     dados_extraidos = DadosExtraidos(
         paciente=paciente_obj,
         medico=medico_obj,
         diagnostico=diag_clean,
         cid=cid,
-        medicamentos=medicamentos or [],
+        medicamentos=meds_formatados,
         exames=exames or [],
         urgencia=Urgencia(urg_norm),
     )
@@ -285,16 +332,24 @@ CENARIOS_DEMO = {
     "Cenário 3: Ambiguidade / Rasura (Receituário - Fila de Revisão Humana)": {
         "arquivo": "03_receituario_ambiguo.pdf",
         "tipo": "RECEITUARIO_MEDICO",
-        "especialidade": "Clínica Médica",
+        "especialidade": [],
         "prioridade": "NAO_IDENTIFICADA",
         "urgencia": "INDETERMINADO",
         "score_classif": 0.80,
-        "paciente": "Maria de Fátima Oliveira [Nome parcialmente ilegível]",
-        "idade": 55,
+        "paciente": "[M...ia de F...tima O...veira? - Nome parcialmente manchado]",
+        "idade": "~55 anos",
         "medico": "Dr. [Assinatura ilegível]",
         "crm": "123...?-SP",
-        "diagnostico": "Prescrição de anti-hipertensivo com dosagem borrada",
+        "diagnostico": None,
         "cid": None,
+        "medicamentos": [
+            {
+                "nome": "Hidroclorotiazida",
+                "dosagem": "25mg",
+                "frequencia": "1 cp pela manhã",
+            }
+        ],
+        "campos_incertos_extras": ["medicamentos"],
         "exames": [],
         "requer_auditoria": True,
     },
@@ -346,8 +401,8 @@ with st.sidebar:
     else:
         uploaded_file = st.file_uploader(
             "Arraste ou selecione um laudo/receita:",
-            type=["pdf", "png", "jpg", "webp", "txt"],
-            help="Formatos aceitos: PDF, TXT ou Imagens (Máx: 10MB / 20 páginas)",
+            type=["pdf", "png", "jpg", "jpeg", "webp", "txt"],
+            help="Formatos aceitos: PDF, TXT ou Imagens PNG/JPG/JPEG/WEBP (Máx: 10MB / 20 páginas)",
         )
 
         if uploaded_file is not None:
@@ -362,10 +417,16 @@ with st.sidebar:
                     title="Upload Concluído",
                 )
             except IngestaoError as e:
-                st.error(f"Rejeição na borda ({e.codigo}): {e.mensagem}", title="Arquivo Inválido")
-            except Exception:
+                logger.warning("Rejeição na borda (%s) para '%s': %s", e.codigo, uploaded_file.name, e.mensagem)
+                msg_borda = MENSAGENS_BORDA_INGESTAO.get(
+                    e.codigo,
+                    "Não foi possível validar o arquivo na ingestão. Verifique o formato e a integridade do documento e tente novamente.",
+                )
+                st.error(f"Rejeição na borda (`{e.codigo}`): {msg_borda}", title="Arquivo Inválido")
+            except Exception as err_leitura:
+                logger.warning("Falha de leitura na ingestão para '%s': %s", uploaded_file.name, err_leitura)
                 st.error(
-                    "Não foi possível processar o arquivo enviado. Verifique o formato e tente novamente.",
+                    "Não foi possível processar o arquivo enviado. Verifique o formato (PDF, TXT, PNG, JPG, JPEG ou WEBP) e tente novamente.",
                     title="Falha na Leitura",
                 )
 
@@ -447,12 +508,18 @@ if doc_ingerido is not None:
     with col_direita:
         st.subheader("⚖️ Decisão do Agente & Roteamento", anchor=False)
 
-        limiar_configurado = float(os.getenv("LIMIAR_CONFIANCA", "0.85"))
+        try:
+            limiar_bruto = float(os.getenv("LIMIAR_CONFIANCA", "0.85"))
+            limiar_configurado = limiar_bruto if 0.0 <= limiar_bruto <= 1.0 else 0.85
+        except ValueError:
+            limiar_configurado = 0.85
+
         decisao_wf = None
         qualidade_wf = None
         classif_obj: Optional[Classificacao] = None
         dados_ext_obj: Optional[DadosExtraidos] = None
         urgencia_efetiva: Optional[str] = None
+        erro_proc_info: Optional[Dict[str, Any]] = None
         forcar_simulado_oci = False
 
         if dados_mock:
@@ -465,9 +532,11 @@ if doc_ingerido is not None:
                 medico_dict={"nome": dados_mock["medico"], "crm": dados_mock["crm"]},
                 diagnostico=dados_mock["diagnostico"],
                 cid=dados_mock["cid"],
+                medicamentos=dados_mock.get("medicamentos", []),
                 exames=dados_mock.get("exames", []),
                 urgencia=dados_mock["urgencia"],
                 especialidade=dados_mock.get("especialidade"),
+                campos_incertos_extras=dados_mock.get("campos_incertos_extras", []),
                 limiar=limiar_configurado,
             )
             entrada_wf = estado_wf["entrada"]
@@ -498,87 +567,199 @@ if doc_ingerido is not None:
 
             if executar_ia:
                 with st.spinner("Analisando documento clínico com Gemini Multimodal e Motor LangGraph..."):
-                    service = GeminiService(
-                        api_key=api_key_custom or os.getenv("GEMINI_API_KEY"),
-                        model_name=os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
-                    )
-                    mime_tipo = resolver_mime_type(doc_ingerido)
+                    try:
+                        service = GeminiService(
+                            api_key=api_key_custom or os.getenv("GEMINI_API_KEY"),
+                            model_name=os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
+                        )
+                        mime_tipo = resolver_mime_type(doc_ingerido)
 
-                    resultado_pipeline = processar_documento_com_agente(
-                        servico=service,
-                        documento_id=doc_ingerido.documento_id,
-                        conteudo_texto=doc_ingerido.conteudo_texto or "",
-                        conteudo_bytes=doc_ingerido.conteudo_bytes,
-                        mime_type=mime_tipo,
-                        limiar=limiar_configurado,
-                    )
-                    estado_wf = resultado_pipeline["estado_workflow"]
-                    entrada_wf = estado_wf["entrada"]
-                    t_val = getattr(entrada_wf.classificacao, "tipo_documento", None)
-                    tipo_str = getattr(t_val, "value", str(t_val or ""))
-                    eh_fallback_llm = (
-                        tipo_str == "NAO_IDENTIFICADO"
-                        and float(entrada_wf.classificacao.score_confianca_classificacao) == 0.0
-                    ) or (
-                        float(estado_wf["qualidade"].score_extracao) == 0.0
-                        and not entrada_wf.dados_extraidos.diagnostico
-                        and not entrada_wf.dados_extraidos.paciente.nome
-                    )
+                        resultado_pipeline = processar_documento_com_agente(
+                            servico=service,
+                            documento_id=doc_ingerido.documento_id,
+                            conteudo_texto=doc_ingerido.conteudo_texto or "",
+                            conteudo_bytes=doc_ingerido.conteudo_bytes,
+                            mime_type=mime_tipo,
+                            limiar=limiar_configurado,
+                        )
+                        estado_wf = resultado_pipeline["estado_workflow"]
+                        entrada_wf = estado_wf["entrada"]
+                        t_val = getattr(entrada_wf.classificacao, "tipo_documento", None)
+                        tipo_str = getattr(t_val, "value", str(t_val or ""))
+                        eh_fallback_llm = (
+                            tipo_str == "NAO_IDENTIFICADO"
+                            and float(entrada_wf.classificacao.score_confianca_classificacao) == 0.0
+                        ) or (
+                            float(estado_wf["qualidade"].score_extracao) == 0.0
+                            and not entrada_wf.dados_extraidos.diagnostico
+                            and not entrada_wf.dados_extraidos.paciente.nome
+                        )
 
-                    st.session_state.resultado_ia = {
-                        "decisao_wf": estado_wf.get("decisao"),
-                        "qualidade_wf": estado_wf.get("qualidade"),
-                        "classif_obj": entrada_wf.classificacao,
-                        "dados_ext_obj": entrada_wf.dados_extraidos,
-                        "urgencia_efetiva": entrada_wf.urgencia,
-                        "chave_ativa": bool(api_key_custom or tem_chave_valida),
-                        "fallback_llm": eh_fallback_llm,
-                        "simulado": False,
-                    }
+                        st.session_state.resultado_ia = {
+                            "decisao_wf": estado_wf.get("decisao"),
+                            "qualidade_wf": estado_wf.get("qualidade"),
+                            "classif_obj": entrada_wf.classificacao,
+                            "dados_ext_obj": entrada_wf.dados_extraidos,
+                            "urgencia_efetiva": entrada_wf.urgencia,
+                            "chave_ativa": bool(api_key_custom or tem_chave_valida),
+                            "fallback_llm": eh_fallback_llm,
+                            "simulado": False,
+                        }
+                    except Exception as err_ia:
+                        logger.error(
+                            "Falha na execução do pipeline de triagem (%s): %s",
+                            doc_ingerido.documento_id,
+                            err_ia,
+                        )
+                        st.session_state.resultado_ia = {
+                            "erro_processamento": {
+                                "codigo": CodigoErro.FALHA_WORKFLOW,
+                                "mensagem": MENSAGEM_PUBLICA_ERRO_PROCESSAMENTO,
+                            },
+                            "simulado": False,
+                        }
                     st.session_state.cache_persistencia_oci = {}
 
             if usar_fallback_teste:
-                estado_wf = executar_modo_simulado_documento(
-                    doc_ingerido,
-                    limiar=limiar_configurado,
-                )
-                entrada_wf = estado_wf["entrada"]
-                st.session_state.resultado_ia = {
-                    "decisao_wf": estado_wf.get("decisao"),
-                    "qualidade_wf": estado_wf.get("qualidade"),
-                    "classif_obj": entrada_wf.classificacao,
-                    "dados_ext_obj": entrada_wf.dados_extraidos,
-                    "urgencia_efetiva": entrada_wf.urgencia,
-                    "chave_ativa": True,
-                    "fallback_llm": False,
-                    "simulado": True,
-                }
+                try:
+                    estado_wf = executar_modo_simulado_documento(
+                        doc_ingerido,
+                        limiar=limiar_configurado,
+                    )
+                    if "erro_processamento" in estado_wf:
+                        st.session_state.resultado_ia = {
+                            "erro_processamento": estado_wf["erro_processamento"],
+                            "simulado": True,
+                        }
+                    else:
+                        entrada_wf = estado_wf["entrada"]
+                        st.session_state.resultado_ia = {
+                            "decisao_wf": estado_wf.get("decisao"),
+                            "qualidade_wf": estado_wf.get("qualidade"),
+                            "classif_obj": entrada_wf.classificacao,
+                            "dados_ext_obj": entrada_wf.dados_extraidos,
+                            "urgencia_efetiva": entrada_wf.urgencia,
+                            "chave_ativa": True,
+                            "fallback_llm": False,
+                            "simulado": True,
+                        }
+                except Exception as err_sim:
+                    logger.error(
+                        "Falha na execução do modo simulado (%s): %s",
+                        doc_ingerido.documento_id,
+                        err_sim,
+                    )
+                    st.session_state.resultado_ia = {
+                        "erro_processamento": {
+                            "codigo": CodigoErro.FALHA_WORKFLOW,
+                            "mensagem": MENSAGEM_PUBLICA_ERRO_PROCESSAMENTO,
+                        },
+                        "simulado": True,
+                    }
                 st.session_state.cache_persistencia_oci = {}
 
             if st.session_state.resultado_ia:
                 res = st.session_state.resultado_ia
-                decisao_wf = res["decisao_wf"]
-                qualidade_wf = res["qualidade_wf"]
-                classif_obj = res["classif_obj"]
-                dados_ext_obj = res["dados_ext_obj"]
-                urgencia_efetiva = res["urgencia_efetiva"]
                 forcar_simulado_oci = bool(res.get("simulado"))
+                if "erro_processamento" in res:
+                    erro_proc_info = res["erro_processamento"]
+                else:
+                    decisao_wf = res["decisao_wf"]
+                    qualidade_wf = res["qualidade_wf"]
+                    classif_obj = res["classif_obj"]
+                    dados_ext_obj = res["dados_ext_obj"]
+                    urgencia_efetiva = res["urgencia_efetiva"]
 
-                if not res.get("chave_ativa") and not res.get("simulado"):
-                    st.warning(
-                        "Chave GEMINI_API_KEY não configurada ou inválida. O adaptador acionou o fallback seguro (EF v1.2 §12), encaminhando para revisão humana.",
-                        title="Fallback Resiliente Ativado",
-                    )
-                elif res.get("fallback_llm") and not res.get("simulado"):
-                    st.warning(
-                        "O provedor Gemini não respondeu no tempo limite ou retornou formato fora do schema. O fallback seguro (EF v1.2 §12 / RF-24) encaminhou o documento para revisão humana.",
-                        title="Fallback Resiliente por Falha/Timeout do Modelo",
-                    )
+                    if not res.get("chave_ativa") and not res.get("simulado"):
+                        st.warning(
+                            "Chave GEMINI_API_KEY não configurada ou inválida. O adaptador acionou o fallback seguro (EF v1.2 §12), encaminhando para revisão humana.",
+                            title="Fallback Resiliente Ativado",
+                        )
+                    elif res.get("fallback_llm") and not res.get("simulado"):
+                        st.warning(
+                            "O provedor Gemini não respondeu no tempo limite ou retornou formato fora do schema. O fallback seguro (EF v1.2 §12 / RF-24) encaminhou o documento para revisão humana.",
+                            title="Fallback Resiliente por Falha/Timeout do Modelo",
+                        )
 
         # ---------------------------------------------------------------------
-        # 2. PERSISTÊNCIA OCI E RENDERIZAÇÃO FIEL DA DECISÃO DO AGENTE
+        # 2A. RENDERIZAÇÃO DE ERRO DE PROCESSAMENTO (NÍVEL 2 — EF v1.2 §12)
         # ---------------------------------------------------------------------
-        if (
+        if erro_proc_info is not None:
+            caminho_oci_erro = resolver_caminho_resultado_oci(
+                doc_ingerido.documento_id,
+                StatusTriagem.ERRO_PROCESSAMENTO,
+                False,
+            )
+            triagem_erro_candidata = montar_triagem_erro_processamento(
+                documento_id=doc_ingerido.documento_id,
+                codigo=erro_proc_info["codigo"],
+                mensagem=erro_proc_info["mensagem"],
+                res_oci=None,
+                caminho_alvo=caminho_oci_erro,
+                modo_simulacao_padrao=forcar_simulado_oci,
+            )
+            chave_cache_erro = f"{doc_ingerido.documento_id}_err_{'sim' if forcar_simulado_oci else 'real'}"
+            if chave_cache_erro not in st.session_state.cache_persistencia_oci:
+                res_oci_erro = executar_persistencia_triagem(
+                    documento_id=doc_ingerido.documento_id,
+                    nome_arquivo=doc_ingerido.nome_arquivo,
+                    conteudo_original_bytes=doc_ingerido.conteudo_bytes,
+                    dados_triagem_json=triagem_erro_candidata.model_dump(mode="json"),
+                    caminho_resultado_alvo=caminho_oci_erro,
+                    forcar_simulado=forcar_simulado_oci,
+                    mime_original=resolver_mime_type(doc_ingerido),
+                )
+                st.session_state.cache_persistencia_oci[chave_cache_erro] = res_oci_erro
+            else:
+                res_oci_erro = st.session_state.cache_persistencia_oci[chave_cache_erro]
+
+            triagem_erro_final = montar_triagem_erro_processamento(
+                documento_id=doc_ingerido.documento_id,
+                codigo=erro_proc_info["codigo"],
+                mensagem=erro_proc_info["mensagem"],
+                res_oci=res_oci_erro,
+                caminho_alvo=caminho_oci_erro,
+                modo_simulacao_padrao=forcar_simulado_oci,
+            )
+
+            with st.container(border=True):
+                if triagem_erro_final.status == StatusTriagem.ERRO_PERSISTENCIA:
+                    st.error(
+                        "⚠️ FALHA NO PROCESSAMENTO E NA PERSISTÊNCIA OCI (`ERRO_PERSISTENCIA`)",
+                        icon=":material/cloud_off:",
+                    )
+                else:
+                    st.error(
+                        "❌ ERRO DE PROCESSAMENTO CLÍNICO (`ERRO_PROCESSAMENTO`)",
+                        icon=":material/error:",
+                    )
+                st.markdown(f"**Código Funcional:** `{triagem_erro_final.erro.codigo.value}`")
+                st.markdown(f"**Mensagem:** {triagem_erro_final.erro.mensagem}")
+                st.markdown(
+                    f"**Ação Recomendada:** Verifique a integridade e legibilidade do documento (`{doc_ingerido.documento_id}`) "
+                    "e tente processar novamente ou envie uma versão válida."
+                )
+
+            tab_erro_oci, tab_erro_json = st.tabs(
+                [
+                    ":material/history: Linha do Tempo & OCI",
+                    ":material/data_object: Payload JSON (Nível 2)",
+                ]
+            )
+            with tab_erro_oci:
+                with st.container(border=True):
+                    st.markdown("1. 📥 **RECEBIDO** — Documento aceito para análise.")
+                    st.markdown("2. 🧠 **PROCESSANDO** — Tentativa de leitura/validação estruturada.")
+                    st.markdown(
+                        f"3. ❌ **{triagem_erro_final.status.value}** — {triagem_erro_final.erro.mensagem}"
+                    )
+            with tab_erro_json:
+                st.json(triagem_erro_final.model_dump(mode="json"))
+
+        # ---------------------------------------------------------------------
+        # 2B. PERSISTÊNCIA OCI E RENDERIZAÇÃO FIEL DA DECISÃO DO AGENTE
+        # ---------------------------------------------------------------------
+        elif (
             decisao_wf is not None
             and qualidade_wf is not None
             and classif_obj is not None
@@ -661,6 +842,10 @@ if doc_ingerido is not None:
                         f"**Roteamento clínico calculado (preservado em memória):** `{destinos_str}`"
                     )
                     st.markdown(f"**Justificativa do Agente:** {decisao_wf.justificativa}")
+                    st.markdown(
+                        "**Ação Recomendada:** Verifique a conectividade e as credenciais do OCI Object Storage "
+                        f"e processe novamente o documento (`{doc_ingerido.documento_id}`) para repetir a gravação."
+                    )
                     st.caption(
                         "A triagem não é considerada concluída com sucesso enquanto original e resultado não forem confirmados no OCI (EF v1.2 §12 / RF-30)."
                     )
@@ -802,11 +987,19 @@ if doc_ingerido is not None:
                     st.markdown("#### 📋 Dados Clínicos Extraídos (Fidelidade Estrita — RF-15)")
                     p_obj = dados_ext_obj.paciente
                     m_obj = dados_ext_obj.medico
-                    crm_fmt = (
-                        m_obj.crm.formatado()
-                        if isinstance(m_obj.crm, Crm) and m_obj.crm.numero
-                        else (str(m_obj.crm) if m_obj.crm else None)
+                    crm_tem_uf_explicita = (
+                        isinstance(m_obj.crm, Crm)
+                        and "uf" in m_obj.crm.model_fields_set
+                        and bool(m_obj.crm.uf)
                     )
+                    if isinstance(m_obj.crm, Crm) and m_obj.crm.numero:
+                        crm_fmt = (
+                            m_obj.crm.formatado()
+                            if crm_tem_uf_explicita
+                            else f"{m_obj.crm.numero} (UF não identificada no documento)"
+                        )
+                    else:
+                        crm_fmt = str(m_obj.crm) if m_obj.crm else None
                     esp_fmt = ", ".join(classif_obj.especialidade) if classif_obj.especialidade else None
 
                     info_col1, info_col2 = st.columns(2)
@@ -849,6 +1042,11 @@ if doc_ingerido is not None:
                             unid = f" {item.unidade}" if item.unidade else ""
                             ref = f" (Ref.: {item.referencia_impressa})" if item.referencia_impressa else ""
                             st.write(f"- 🔬 **{item.analito}:** {item.valor_medido}{unid}{ref}")
+
+                    if not qualidade_wf.motivos_revisao and qualidade_wf.campos_ausentes:
+                        st.caption(
+                            f"Campos opcionais ausentes no documento (tolerados pela Regra R6): `{', '.join(qualidade_wf.campos_ausentes)}`"
+                        )
 
             # --- ABA 2: FILA LÓGICA DE REVISÃO HUMANA (ESCOPO MVP — EF v1.2 §15.7) ---
             with tab_hitl:

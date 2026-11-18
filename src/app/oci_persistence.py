@@ -120,6 +120,26 @@ def _registrar_erro_interno_oci(etapa: str, err: Exception) -> None:
     logger.error("Falha ao persistir %s no OCI: %s", etapa, detalhe_log)
 
 
+def _eh_ausencia_credenciais_oci(err: Exception) -> bool:
+    """
+    Distingue ambiente local sem OCI configurado de falhas reais de credencial/chave
+    ou de modo estrito OCI_OBRIGATORIO=true (EF v1.2 RF-28, RF-30, §12 e §16.10).
+    """
+    if os.getenv("OCI_OBRIGATORIO", "false").strip().lower() in ("true", "1"):
+        return False
+    if not isinstance(err, ValueError):
+        return False
+    msg = str(err)
+    if not msg.startswith("Preencha no .env:"):
+        return False
+    faltantes = {
+        item.strip()
+        for item in msg.partition(":")[2].split(",")
+        if item.strip()
+    }
+    return {"OCI_USER_OCID", "OCI_KEY_FILE"}.issubset(faltantes)
+
+
 def executar_persistencia_triagem(
     *,
     documento_id: str,
@@ -162,18 +182,33 @@ def executar_persistencia_triagem(
 
             cliente_storage = OCIStorage.das_configuracoes()
         except Exception as err:
-            logger.info("OCI Storage não configurado (%s). Operando em modo simulado.", err)
+            if _eh_ausencia_credenciais_oci(err):
+                logger.info("OCI Storage não configurado. Operando em modo simulado.")
+                return {
+                    "status_backup": "simulado",
+                    "modo_simulacao": True,
+                    "bucket": bucket_padrao,
+                    "caminho_objeto": caminho_resultado_alvo,
+                    "caminho_alvo": caminho_resultado_alvo,
+                    "caminho_original": caminho_original,
+                    "etag": None,
+                    "erro": None,
+                    "detalhes": MENSAGEM_PUBLICA_SIMULADO_CONFIG,
+                    "evento_linha_do_tempo": "Persistência local em memória (OCI não configurado no ambiente).",
+                }
+
+            _registrar_erro_interno_oci("inicialização do conector OCI", err)
             return {
-                "status_backup": "simulado",
-                "modo_simulacao": True,
+                "status_backup": "falha",
+                "modo_simulacao": False,
                 "bucket": bucket_padrao,
-                "caminho_objeto": caminho_resultado_alvo,
+                "caminho_objeto": None,
                 "caminho_alvo": caminho_resultado_alvo,
                 "caminho_original": caminho_original,
                 "etag": None,
-                "erro": None,
-                "detalhes": MENSAGEM_PUBLICA_SIMULADO_CONFIG,
-                "evento_linha_do_tempo": "Persistência local em memória (OCI não configurado no ambiente).",
+                "erro": MENSAGEM_PUBLICA_FALHA_OCI,
+                "detalhes": MENSAGEM_PUBLICA_FALHA_OCI,
+                "evento_linha_do_tempo": "Falha ao inicializar ou validar credenciais do OCI Object Storage.",
             }
 
     bucket_atual = getattr(cliente_storage, "bucket", bucket_padrao)
