@@ -18,7 +18,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from typing import Any, Dict, List, Optional
-from src.ingestion import DocumentLoader, IngestaoError
+from src.ingestion import DocumentLoader, IngestaoError, resolver_mime_type
 from src.services.gemini_service import GeminiService
 from src.workflow.graph import criar_grafo
 from src.workflow.state import EntradaWorkflow
@@ -422,16 +422,7 @@ if doc_ingerido is not None:
                 with st.spinner("Analisando documento clínico com Gemini IA Multimodal e Motor LangGraph..."):
                     service = GeminiService(api_key=api_key_custom or os.getenv("GEMINI_API_KEY"))
 
-                    mime_map = {
-                        "PDF": "application/pdf",
-                        "JPG": "image/jpeg",
-                        "JPEG": "image/jpeg",
-                        "PNG": "image/png",
-                        "WEBP": "image/webp",
-                        "TXT": "text/plain"
-                    }
-                    formato_upper = (doc_ingerido.formato or "JPG").upper()
-                    mime_tipo = doc_ingerido.metadados.get("mime") or mime_map.get(formato_upper, "image/jpeg")
+                    mime_tipo = resolver_mime_type(doc_ingerido)
 
                     resultado_pipeline = processar_documento_com_agente(
                         servico=service,

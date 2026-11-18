@@ -225,3 +225,14 @@ class TestGeminiService:
             # Nenhuma chamada à API foi gasta desnecessariamente
             mock_gen_model.assert_not_called()
 
+    def test_constantes_versao_prompt_definidas(self):
+        """Critério 12 (§16): prompts do GeminiService expõem identificadores de versão explícitos."""
+        from src.services.gemini_service import (
+            VERSAO_PROMPT,
+            VERSAO_PROMPT_CLASSIFICACAO,
+            VERSAO_PROMPT_EXTRACAO,
+        )
+
+        for versao in (VERSAO_PROMPT, VERSAO_PROMPT_CLASSIFICACAO, VERSAO_PROMPT_EXTRACAO):
+            assert isinstance(versao, str) and versao.strip()
+
