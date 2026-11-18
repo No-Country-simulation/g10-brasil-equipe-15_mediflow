@@ -1265,3 +1265,62 @@ def test_api_triagem_gemini_desabilitado_por_env(monkeypatch):
     svc_injetado = TriagemService(gemini_service=mock_injetado)
     assert svc_injetado._obter_gemini_service() is mock_injetado
 
+@pytest.mark.parametrize(
+    ("status", "urgente", "prefixo_esperado"),
+    [
+        (StatusTriagem.PROCESSADO, False, "processados"),
+        (StatusTriagem.PROCESSADO, True, "processados/urgentes"),
+        (StatusTriagem.EM_REVISAO, False, "auditoria_humana"),
+        (StatusTriagem.EM_REVISAO, True, "auditoria_humana"),
+    ],
+    ids=["rotina", "urgencia", "revisao", "revisao-com-urgencia"],
+)
+def test_caminho_resultado_oci_por_status_e_urgencia(
+    status, urgente, prefixo_esperado
+):
+    from src.api.service import _caminho_resultado_oci
+
+    documento_id = "DOC-TESTE-39"
+
+    caminho = _caminho_resultado_oci(documento_id, status, urgente)
+
+    assert caminho == f"{prefixo_esperado}/{documento_id}/resultado.json"
+
+
+@pytest.mark.parametrize(
+    ("sinal", "urgente_esperado"),
+    [
+        ("classificacao", True),
+        ("extracao", True),
+        ("destino", True),
+        ("nenhum", False),
+    ],
+)
+def test_triagem_urgente_na_retentativa(sinal, urgente_esperado):
+    from types import SimpleNamespace
+
+    from src.api.service import (
+        Destino,
+        NivelPrioridade,
+        Urgencia,
+        _triagem_urgente_na_retentativa,
+    )
+
+    triagem = SimpleNamespace(
+        classificacao=None,
+        dados_extraidos=None,
+        decisao_roteamento=None,
+    )
+
+    if sinal == "classificacao":
+        triagem.classificacao = SimpleNamespace(
+            nivel_prioridade=NivelPrioridade.URGENTE
+        )
+    elif sinal == "extracao":
+        triagem.dados_extraidos = SimpleNamespace(urgencia=Urgencia.SIM)
+    elif sinal == "destino":
+        triagem.decisao_roteamento = SimpleNamespace(
+            destinos=[Destino.FILA_URGENCIA_MEDICA]
+        )
+
+    assert _triagem_urgente_na_retentativa(triagem) is urgente_esperado
