@@ -836,44 +836,73 @@ def test_simulacao_via_header_http_explicito(client):
 
 
 def test_retry_com_original_existente_divergente_retorna_502_conflito(client):
-    """
-    Valida que a API REST devolve HTTP 502 Bad Gateway com erro de integridade
-    quando o objeto existente no OCI tiver conteúdo divergente do arquivo enviado.
-    """
+    """Confere a mensagem pública do 502 e os motivos do histórico."""
     from unittest.mock import MagicMock
-    from src.api.routes import triagem_service
+
     import oci
 
+    from src.api.routes import triagem_service
+
+    marcador_sdk = "DETALHE_INTERNO_OCI_CARTAO_026"
     storage_mock = MagicMock()
-    # Ao reenviar o original, o OCI lança 412 PreconditionFailed
     storage_mock.enviar_bytes.side_effect = oci.exceptions.ServiceError(
-        status=412, code="PreconditionFailed", headers={}, message="Objeto já existe"
+        status=412,
+        code="PreconditionFailed",
+        headers={},
+        message=marcador_sdk,
     )
-    # Ao conferir com ler_bytes(), os bytes existentes são de outro documento
     storage_mock.ler_bytes.return_value = b"CONTEUDO_DIFERENTE_CORROMPIDO"
+    storage_anterior = triagem_service._storage
     triagem_service._storage = storage_mock
 
     try:
-        conteudo = "Receituário Médico\nPaciente: Maria da Silva\nIdade: 35\nDipirona 500mg".encode("utf-8")
-        files = {"file": ("receituario_maria.txt", io.BytesIO(conteudo), "text/plain")}
-        res_envio = client.post("/api/v1/triagens", files=files)
-        assert res_envio.status_code == 202
-        doc_id = res_envio.json()["documento_id"]
+        conteudo = (
+            "Receituário Médico\nPaciente: Maria da Silva\n"
+            "Idade: 35\nDipirona 500mg"
+        ).encode("utf-8")
+        arquivos = {
+            "file": ("receituario_maria.txt", io.BytesIO(conteudo), "text/plain"),
+        }
+        resposta_envio = client.post("/api/v1/triagens", files=arquivos)
+        assert resposta_envio.status_code == 202
 
-        # Triagem falha inicialmente na persistência
-        triagem = triagem_service.obter_triagem(doc_id)
-        assert triagem.status.value == "ERRO_PERSISTENCIA"
+        doc_id = resposta_envio.json()["documento_id"]
+        url_triagem = f"/api/v1/triagens/{doc_id}"
+        assert triagem_service.obter_triagem(doc_id).status.value == "ERRO_PERSISTENCIA"
 
-        # Dispara retentativa via API
-        res_retry = client.post(f"/api/v1/triagens/{doc_id}/reprocessar-persistencia")
-        assert res_retry.status_code == 502
-        assert "Conflito de integridade OCI" in res_retry.json()["mensagem"]
+        resposta_retry = client.post(f"{url_triagem}/reprocessar-persistencia")
+        assert resposta_retry.status_code == 502
 
-        # Confirma que manteve o status de erro
-        triagem_final = triagem_service.obter_triagem(doc_id)
-        assert triagem_final.status.value == "ERRO_PERSISTENCIA"
+        erro = resposta_retry.json()
+        assert erro["codigo"] == CodigoErro.ERRO_PERSISTENCIA.value
+        assert erro["mensagem"] == (
+            "Conflito de integridade OCI: "
+            "o documento original diverge do arquivo armazenado."
+        )
+
+        resposta_historico = client.get(f"{url_triagem}/historico")
+        assert resposta_historico.status_code == 200
+
+        motivos = {
+            evento["tipo_evento"]: evento["motivo"]
+            for evento in resposta_historico.json()
+        }
+        assert motivos["RETRY_PERSISTENCIA_CONFLITO"] == (
+            "Conflito de integridade OCI: "
+            "o documento original diverge do arquivo armazenado."
+        )
+        assert motivos["RETRY_PERSISTENCIA_FALHA"] == (
+            "Falha na nova tentativa de gravação OCI."
+        )
+
+        for resposta in (resposta_retry, resposta_historico):
+            assert marcador_sdk not in resposta.text
+            assert "PreconditionFailed" not in resposta.text
+            assert f"recebidos/{doc_id}/original.txt" not in resposta.text
+
+        assert triagem_service.obter_triagem(doc_id).status.value == "ERRO_PERSISTENCIA"
     finally:
-        triagem_service._storage = None
+        triagem_service._storage = storage_anterior
 
 
 @pytest.mark.parametrize("etapa", ["extracao", "grafo"])
@@ -983,3 +1012,315 @@ def test_api_urgencia_respeita_negacao(client, monkeypatch, achado, urgente):
     decisao = resultado["decisao_roteamento"]
     assert ("FILA_URGENCIA_MEDICA" in decisao["destinos"]) is urgente
     assert decisao["justificativa_roteamento"]
+
+
+@pytest.mark.parametrize(
+    "texto,regras_esperadas,evento_terminal,metadados_envio",
+    [
+        pytest.param(
+            (
+                "Laudo de Exame de Imagem\n"
+                "Paciente: Carlos Eduardo Mendes\n"
+                "Idade: 58\n"
+                "Médico: Dra. Camila Alencar\n"
+                "CRM/SP: 987654\n"
+                "Diagnóstico: Tromboembolismo Pulmonar Agudo URGENTE."
+            ),
+            ["URGENCIA"],
+            "ROTEADO",
+            {},
+            id="urgencia-roteado",
+        ),
+        pytest.param(
+            "Receituário Médico\nDr. Renato CRM: 14589/SP",
+            ["REVISAO"],
+            "ROTEADO",
+            {},
+            id="revisao-roteado",
+        ),
+        pytest.param(
+            (
+                "Receita Médica\n"
+                "Paciente: João da Silva\n"
+                "Idade: 40\n"
+                "Médico: Dr. Renato Silva\n"
+                "CRM/SP: 145890\n"
+                "Diagnóstico: Cefaleia tensional."
+            ),
+            ["ROTINA"],
+            "ERRO_PERSISTENCIA",
+            {"simular_falha_oci": "RESULTADO"},
+            id="rotina-erro-persistencia",
+        ),
+    ],
+)
+def test_rastreabilidade_regras_e_versoes_resultado_e_historico(
+    client, monkeypatch, texto, regras_esperadas, evento_terminal, metadados_envio
+):
+    """Critério 12 (§16): resultado e /historico preservam regras acionadas e versões de configuração."""
+    from src.api.service import triagem_service
+    from src.workflow.graph import VERSAO_REGRAS
+
+    monkeypatch.setenv("OCI_OBRIGATORIO", "false")
+    monkeypatch.setattr(triagem_service, "_obter_storage", lambda: None)
+
+    envio = client.post(
+        "/api/v1/triagens",
+        json={"documento_texto": texto, "metadados": metadados_envio},
+    )
+    assert envio.status_code == 202
+    doc_id = envio.json()["documento_id"]
+
+    res_triagem = client.get(f"/api/v1/triagens/{doc_id}")
+    assert res_triagem.status_code == 200
+    triagem = res_triagem.json()
+
+    regras_fmt = ", ".join(regras_esperadas)
+    justificativa = triagem["decisao_roteamento"]["justificativa_roteamento"]
+    assert f"[Regras: {regras_fmt} | Versão regras: {VERSAO_REGRAS}]" in justificativa
+    assert triagem["versao_esquema"] == "2.0.0"
+    assert triagem["qualidade"]["limiar_aplicado"] == 0.85
+
+    res_hist = client.get(f"/api/v1/triagens/{doc_id}/historico")
+    assert res_hist.status_code == 200
+    eventos = res_hist.json()
+
+    terminais = [e for e in eventos if e["tipo_evento"] == evento_terminal]
+    assert len(terminais) == 1
+    meta = terminais[0]["metadados"]
+    assert meta == {
+        "regras_acionadas": regras_esperadas,
+        "versao_esquema": "2.0.0",
+        "versao_regras": VERSAO_REGRAS,
+        "limiar_aplicado": 0.85,
+        "extrator": "heuristica_local",
+        "versao_prompt": None,
+    }
+
+
+# ==============================================================================
+# SUÍTE: INTEGRAÇÃO MULTIMODAL GEMINI NA API REST (RF-04, RF-14, RF-24, E.F. §12)
+# ==============================================================================
+
+def test_api_triagem_com_gemini_imagem_multimodal(client, monkeypatch):
+    """
+    Valida processamento de imagem escaneada (.jpg) via API com GeminiService ativo:
+    - Extração clínica multimodal com entidade preenchida (paciente, urgência, CID).
+    - Roteamento para FILA_URGENCIA_MEDICA.
+    - Metadados de auditoria registram extrator='gemini_service' e versao_prompt='1.0.0'.
+    - MIME type 'image/jpeg' é repassado corretamente ao serviço Gemini.
+    """
+    from unittest.mock import MagicMock
+    from src.api.service import triagem_service
+    from src.schemas.clinical import (
+        ClassificacaoDocumento,
+        DadosClinicosExtraidos,
+        Paciente,
+        Medico,
+        Crm,
+        Urgencia,
+    )
+    from src.services.gemini_service import VERSAO_PROMPT
+
+    gemini_mock = MagicMock()
+    gemini_mock.classificar_documento.return_value = ClassificacaoDocumento(
+        tipo_documento="LAUDO_EXAME_IMAGEM",
+        nivel_prioridade="URGENTE",
+        score_confianca_classificacao=0.96,
+    )
+    gemini_mock.extrair_dados_clinicos_envelope.return_value = {
+        "dados_clinicos": DadosClinicosExtraidos(
+            paciente=Paciente(nome="Maria Eduarda Santos", idade=42),
+            medico=Medico(nome="Dr. Roberto", crm=Crm(numero="12345", uf="SP")),
+            diagnostico="Tromboembolismo Pulmonar Agudo",
+            cid="I26.9",
+            urgencia=Urgencia.SIM,
+            exames=["Angiotomografia de Tórax"],
+            score_confianca_extracao=0.95,
+        ),
+        "urgencia": "SIM",
+        "campos_incertos": [],
+        "conflitos": [],
+    }
+
+    monkeypatch.setattr(triagem_service, "_obter_storage", lambda: None)
+    monkeypatch.setattr(triagem_service, "_obter_gemini_service", lambda: gemini_mock)
+
+    bytes_imagem = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xdb"
+    files = {"file": ("tomografia_pulmao.jpg", io.BytesIO(bytes_imagem), "image/jpeg")}
+
+    res_envio = client.post("/api/v1/triagens", files=files)
+    assert res_envio.status_code == 202
+    doc_id = res_envio.json()["documento_id"]
+
+    res_triagem = client.get(f"/api/v1/triagens/{doc_id}")
+    assert res_triagem.status_code == 200
+    triagem = res_triagem.json()
+
+    assert triagem["status"] == "PROCESSADO"
+    assert triagem["classificacao"]["tipo_documento"] == "LAUDO_EXAME_IMAGEM"
+    assert triagem["dados_extraidos"]["paciente"]["nome"] == "Maria Eduarda Santos"
+    assert triagem["dados_extraidos"]["diagnostico"] == "Tromboembolismo Pulmonar Agudo"
+    assert triagem["dados_extraidos"]["cid"] == "I26.9"
+    assert triagem["decisao_roteamento"]["destino_principal"] == "FILA_URGENCIA_MEDICA"
+
+    # Confirma parâmetros de chamada ao Gemini
+    assert gemini_mock.classificar_documento.called
+    kwargs_classif = gemini_mock.classificar_documento.call_args[1]
+    assert kwargs_classif["mime_type"] == "image/jpeg"
+    assert kwargs_classif["conteudo_bytes"] == bytes_imagem
+
+    # Confirma metadados do histórico
+    res_hist = client.get(f"/api/v1/triagens/{doc_id}/historico")
+    assert res_hist.status_code == 200
+    eventos = res_hist.json()
+    evento_roteado = next(e for e in eventos if e["tipo_evento"] == "ROTEADO")
+    assert evento_roteado["metadados"]["extrator"] == "gemini_service"
+    assert evento_roteado["metadados"]["versao_prompt"] == VERSAO_PROMPT
+    assert "fallback_llm" not in evento_roteado["metadados"]
+
+
+def test_api_triagem_com_gemini_failsafe_revisao(client, monkeypatch):
+    """
+    Valida fail-safe do GeminiService na API REST (Seção 12 da E.F. v1.2):
+    - Quando Gemini falha e retorna NAO_IDENTIFICADO com score 0.0,
+      o sistema encaminha com segurança para EM_REVISAO / FILA_REVISAO_HUMANA.
+    - Metadados registram extrator='gemini_service' e fallback_llm=True.
+    """
+    from unittest.mock import MagicMock
+    from src.api.service import triagem_service
+    from src.schemas.clinical import (
+        ClassificacaoDocumento,
+        DadosClinicosExtraidos,
+    )
+    from src.services.gemini_service import VERSAO_PROMPT
+
+    gemini_mock = MagicMock()
+    gemini_mock.classificar_documento.return_value = ClassificacaoDocumento(
+        tipo_documento="NAO_IDENTIFICADO",
+        nivel_prioridade="NAO_IDENTIFICADA",
+        score_confianca_classificacao=0.0,
+    )
+    gemini_mock.extrair_dados_clinicos_envelope.return_value = {
+        "dados_clinicos": DadosClinicosExtraidos(
+            diagnostico=None,
+            score_confianca_extracao=0.0,
+        ),
+        "urgencia": "INDETERMINADO",
+        "campos_incertos": [],
+        "conflitos": [],
+    }
+
+    monkeypatch.setattr(triagem_service, "_obter_storage", lambda: None)
+    monkeypatch.setattr(triagem_service, "_obter_gemini_service", lambda: gemini_mock)
+
+    bytes_doc = b"Documento indecifravel com falha de modelo"
+    files = {"file": ("documento_falho.txt", io.BytesIO(bytes_doc), "text/plain")}
+
+    res_envio = client.post("/api/v1/triagens", files=files)
+    assert res_envio.status_code == 202
+    doc_id = res_envio.json()["documento_id"]
+
+    res_triagem = client.get(f"/api/v1/triagens/{doc_id}")
+    assert res_triagem.status_code == 200
+    triagem = res_triagem.json()
+
+    assert triagem["status"] == "EM_REVISAO"
+    assert triagem["decisao_roteamento"]["destino_principal"] == "FILA_REVISAO_HUMANA"
+    assert triagem["decisao_roteamento"]["requer_auditoria_humana"] is True
+
+    res_hist = client.get(f"/api/v1/triagens/{doc_id}/historico")
+    assert res_hist.status_code == 200
+    eventos = res_hist.json()
+    evento_roteado = next(e for e in eventos if e["tipo_evento"] == "ROTEADO")
+    assert evento_roteado["metadados"]["extrator"] == "gemini_service"
+    assert evento_roteado["metadados"]["versao_prompt"] == VERSAO_PROMPT
+    assert evento_roteado["metadados"]["fallback_llm"] is True
+
+
+def test_api_triagem_gemini_desabilitado_por_env(monkeypatch):
+    """
+    Valida suporte a API_USAR_GEMINI=false e bypass em ambiente de teste:
+    - Se API_USAR_GEMINI for false, _obter_gemini_service retorna None.
+    - Se TESTING for true, _obter_gemini_service retorna None por segurança.
+    """
+    from src.api.service import TriagemService
+
+    svc = TriagemService()
+
+    # 1. Teste de flag explícita API_USAR_GEMINI=false
+    monkeypatch.delenv("TESTING", raising=False)
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setenv("API_USAR_GEMINI", "false")
+    monkeypatch.setenv("GEMINI_API_KEY", "chave-ficticia")
+    assert svc._obter_gemini_service() is None
+
+    # 2. Teste de flag TESTING=true
+    monkeypatch.setenv("API_USAR_GEMINI", "true")
+    monkeypatch.setenv("TESTING", "true")
+    assert svc._obter_gemini_service() is None
+
+    # 3. Teste de serviço injetado explicitamente (tem precedência)
+    mock_injetado = object()
+    svc_injetado = TriagemService(gemini_service=mock_injetado)
+    assert svc_injetado._obter_gemini_service() is mock_injetado
+
+@pytest.mark.parametrize(
+    ("status", "urgente", "prefixo_esperado"),
+    [
+        (StatusTriagem.PROCESSADO, False, "processados"),
+        (StatusTriagem.PROCESSADO, True, "processados/urgentes"),
+        (StatusTriagem.EM_REVISAO, False, "auditoria_humana"),
+        (StatusTriagem.EM_REVISAO, True, "auditoria_humana"),
+    ],
+    ids=["rotina", "urgencia", "revisao", "revisao-com-urgencia"],
+)
+def test_caminho_resultado_oci_por_status_e_urgencia(
+    status, urgente, prefixo_esperado
+):
+    from src.api.service import _caminho_resultado_oci
+
+    documento_id = "DOC-TESTE-39"
+
+    caminho = _caminho_resultado_oci(documento_id, status, urgente)
+
+    assert caminho == f"{prefixo_esperado}/{documento_id}/resultado.json"
+
+
+@pytest.mark.parametrize(
+    ("sinal", "urgente_esperado"),
+    [
+        ("classificacao", True),
+        ("extracao", True),
+        ("destino", True),
+        ("nenhum", False),
+    ],
+)
+def test_triagem_urgente_na_retentativa(sinal, urgente_esperado):
+    from types import SimpleNamespace
+
+    from src.api.service import (
+        Destino,
+        NivelPrioridade,
+        Urgencia,
+        _triagem_urgente_na_retentativa,
+    )
+
+    triagem = SimpleNamespace(
+        classificacao=None,
+        dados_extraidos=None,
+        decisao_roteamento=None,
+    )
+
+    if sinal == "classificacao":
+        triagem.classificacao = SimpleNamespace(
+            nivel_prioridade=NivelPrioridade.URGENTE
+        )
+    elif sinal == "extracao":
+        triagem.dados_extraidos = SimpleNamespace(urgencia=Urgencia.SIM)
+    elif sinal == "destino":
+        triagem.decisao_roteamento = SimpleNamespace(
+            destinos=[Destino.FILA_URGENCIA_MEDICA]
+        )
+
+    assert _triagem_urgente_na_retentativa(triagem) is urgente_esperado

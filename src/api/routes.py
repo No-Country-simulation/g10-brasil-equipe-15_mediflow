@@ -19,7 +19,11 @@ from src.api.schemas import (
     HealthResponse,
     ErroEnvelope,
 )
-from src.api.service import triagem_service
+from src.api.service import (
+    ConectorOCIIndisponivel,
+    ConflitoIntegridadeOCI,
+    triagem_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -252,34 +256,46 @@ def obter_status_triagem(documento_id: str):
     summary="Retenta a persistência OCI preservando a decisão prévia (RF-28, RF-30)",
 )
 def reprocessar_persistencia_triagem(documento_id: str):
-    """
-    Quando ocorre ERRO_PERSISTENCIA, permite reenviar os artefatos ao OCI
-    sem reexecutar o fluxo cognitivo ou gastar novos tokens de LLM.
-    """
+    """Retenta a gravação dos artefatos sem reexecutar a análise clínica."""
     try:
         triagem = triagem_service.reprocessar_persistencia_oci(documento_id)
         return triagem.model_dump(mode="json")
-    except ValueError as e:
+    except ValueError as erro:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={
                 "codigo": CodigoErro.REQUISICAO_INVALIDA.value,
-                "mensagem": str(e),
+                "mensagem": str(erro),
             },
-        )
-    except Exception:
+        ) from erro
+    except Exception as erro:
         logger.exception(
             "Falha na retentativa de persistência OCI para documento %s",
             documento_id,
         )
+
+        mensagem = (
+            "Falha ao persistir documento no armazenamento. "
+            "O resultado clínico está preservado."
+        )
+        if isinstance(erro, ConectorOCIIndisponivel):
+            mensagem = (
+                "Conector OCI não configurado ou indisponível. "
+                "A persistência durável não pode ser confirmada."
+            )
+        elif isinstance(erro, ConflitoIntegridadeOCI):
+            mensagem = (
+                "Conflito de integridade OCI: "
+                "o documento original diverge do arquivo armazenado."
+            )
+
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail={
                 "codigo": CodigoErro.ERRO_PERSISTENCIA.value,
-                "mensagem": "Não foi possível concluir a retentativa de persistência.",
+                "mensagem": mensagem,
             },
-        )
-
+        ) from erro
 
 @router.get(
     "/triagens/{documento_id}/historico",

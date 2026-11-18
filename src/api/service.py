@@ -12,7 +12,12 @@ from threading import Lock
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from src.ingestion import DocumentLoader, DocumentoIngerido, IngestaoError
+from src.ingestion import (
+    DocumentLoader,
+    DocumentoIngerido,
+    IngestaoError,
+    resolver_mime_type,
+)
 from src.schemas import (
     TriagemMediFlow,
     StatusTriagem,
@@ -29,14 +34,23 @@ from src.schemas import (
     ErroProcessamento,
     Conflito,
     Gravidade,
+    Urgencia,
 )
-from src.workflow.graph import criar_grafo
+from src.workflow.graph import VERSAO_REGRAS, criar_grafo
 from src.workflow.state import ConflitoWorkflow, EntradaWorkflow
+from src.workflow.extraction_adapter import entrada_do_envelope
 from src.schemas.clinical import ClassificacaoClinica, NivelPrioridade
+from src.services.gemini_service import VERSAO_PROMPT, GeminiService
 from src.api.schemas import EventoHistorico
 
 logger = logging.getLogger(__name__)
 
+class ConectorOCIIndisponivel(RuntimeError):
+    """A retentativa não dispõe de um conector OCI."""
+
+
+class ConflitoIntegridadeOCI(RuntimeError):
+    """O original armazenado diverge do documento enviado."""
 
 def _caminho_resultado_oci(documento_id: str, status: StatusTriagem, urgente: bool) -> str:
     if status == StatusTriagem.EM_REVISAO:
@@ -44,11 +58,25 @@ def _caminho_resultado_oci(documento_id: str, status: StatusTriagem, urgente: bo
     prefixo = "processados/urgentes" if urgente else "processados"
     return f"{prefixo}/{documento_id}/resultado.json"
 
+def _triagem_urgente_na_retentativa(triagem: TriagemMediFlow) -> bool:
+    classificacao = triagem.classificacao
+    dados_extraidos = triagem.dados_extraidos
+    roteamento = triagem.decisao_roteamento
+
+    return (
+        getattr(classificacao, "nivel_prioridade", None) == NivelPrioridade.URGENTE
+        or getattr(dados_extraidos, "urgencia", None) == Urgencia.SIM
+        or Destino.FILA_URGENCIA_MEDICA in getattr(roteamento, "destinos", ())
+    )
 
 class TriagemService:
     """Gerenciador de estado em memória e orquestrador do ciclo clínico MediFlow."""
 
-    def __init__(self, storage: Optional[Any] = None):
+    def __init__(
+        self,
+        storage: Optional[Any] = None,
+        gemini_service: Optional[Any] = None,
+    ):
         # Repositórios em memória para estado rápido da API
         self._triagens: Dict[str, TriagemMediFlow] = {}
         self._historico: Dict[str, List[EventoHistorico]] = {}
@@ -57,10 +85,11 @@ class TriagemService:
         self._metadados: Dict[str, Dict[str, Any]] = {}
         self._grafo = criar_grafo()
         self._storage = storage
+        self._gemini_service = gemini_service
         self._lock_submissao = Lock()
         self._locks_processamento: Dict[str, Any] = {}
 
-        # Refer?ncias dos hist?ricos confirmados e recupera??o em mem?ria.
+        # Referências dos históricos confirmados e recuperação em memória.
         self._historicos_oci: Dict[str, str] = {}
         self._historicos_pendentes: Dict[str, TriagemMediFlow] = {}
         self._historicos_eventos_confirmados: Dict[str, tuple[str, ...]] = {}
@@ -71,6 +100,23 @@ class TriagemService:
         self._resultados_pendentes: Dict[
             str, tuple[str, bytes, TriagemMediFlow]
         ] = {}
+
+    def _obter_gemini_service(self) -> Optional[Any]:
+        """Obtém serviço Gemini configurado ou injetado."""
+        if self._gemini_service is not None:
+            return self._gemini_service
+        # Em ambiente de teste automatizado, evita chamadas externas a menos que explicitamente injetado
+        if os.getenv("TESTING", "").lower() in ("1", "true") or os.getenv("PYTEST_CURRENT_TEST"):
+            return None
+        if os.getenv("API_USAR_GEMINI", "true").lower() in ("false", "0"):
+            return None
+        if not os.getenv("GEMINI_API_KEY"):
+            return None
+        try:
+            return GeminiService()
+        except Exception as err:
+            logger.debug("GeminiService não configurado ou indisponível: %s", err)
+            return None
 
     def _obter_storage(self) -> Optional[Any]:
         """Obtém cliente OCI Storage configurado ou injetado."""
@@ -100,6 +146,7 @@ class TriagemService:
         ator: str,
         status_anterior: Optional[str] = None,
         motivo: Optional[str] = None,
+        metadados: Optional[Dict[str, Any]] = None,
     ) -> EventoHistorico:
         """Registra um evento cronológico na linha do tempo de auditoria (CT-070 a CT-072)."""
         evento = EventoHistorico(
@@ -111,6 +158,7 @@ class TriagemService:
             status_novo=status_novo,
             motivo=motivo,
             versao_esquema="2.0.0",
+            metadados=metadados,
         )
         if documento_id not in self._historico:
             self._historico[documento_id] = []
@@ -273,7 +321,7 @@ class TriagemService:
                 storage.enviar_bytes(
                     caminho_oci_original,
                     doc.conteudo_bytes,
-                    tipo_conteudo="application/pdf" if doc.formato == "PDF" else "text/plain",
+                    tipo_conteudo=resolver_mime_type(doc),
                 )
                 backup_status = "sucesso"
             except Exception as err:
@@ -289,57 +337,27 @@ class TriagemService:
             backup_status = "ignorado_ou_falha"
 
         urgente = False
+        limiar_efetivo = float(os.getenv("LIMIAR_CONFIANCA", "0.85"))
+        extrator_nome = "heuristica_local"
+        versao_prompt = None
+        eh_fallback_llm = False
+
         try:
-            # 2. Extração de Entidades Clínicas (Heurística Robusta do MVP)
-            texto = doc.conteudo_texto or ""
-            tipo_doc = self._inferir_tipo_documento(texto, doc.nome_arquivo)
-            urgente = self._inferir_urgencia(texto)
+            gemini = self._obter_gemini_service()
+            if gemini is not None:
+                entrada_workflow, eh_fallback_llm = self._preparar_entrada_com_gemini(
+                    gemini, doc, documento_id, limiar_efetivo
+                )
+                extrator_nome = "gemini_service"
+                versao_prompt = VERSAO_PROMPT
+            else:
+                entrada_workflow = self._preparar_entrada_heuristica(
+                    doc, documento_id, limiar_efetivo
+                )
 
-            dados_paciente = self._extrair_paciente(texto)
-            dados_medico = self._extrair_medico(texto)
-            diagnostico, cid = self._extrair_diagnostico_e_cid(texto)
-            medicamentos = self._extrair_medicamentos(texto)
-            exames = self._extrair_exames(texto)
-
-            # 3. Execução do Grafo LangGraph
-            score_classif = 0.95
-            score_extrac = 0.95
-            campos_ausentes: List[str] = []
-
-            if not dados_paciente.nome:
-                campos_ausentes.append("paciente.nome")
-            if dados_paciente.idade is None:
-                campos_ausentes.append("paciente.idade")
-            if not dados_medico.nome:
-                campos_ausentes.append("medico.nome")
-            if not (dados_medico.crm and dados_medico.crm.numero):
-                campos_ausentes.append("medico.crm")
-            if not diagnostico and tipo_doc != "LAUDO_EXAME_LABORATORIAL":
-                campos_ausentes.append("diagnostico")
-
-            dados_extraidos_obj = DadosExtraidos(
-                paciente=dados_paciente,
-                medico=dados_medico,
-                diagnostico=diagnostico,
-                cid=cid,
-                medicamentos=medicamentos,
-                exames=exames,
-                urgencia="SIM" if urgente else "NAO",
-            )
-
-            entrada_workflow = EntradaWorkflow(
-                documento_id=documento_id,
-                classificacao=ClassificacaoClinica(
-                    tipo_documento=tipo_doc,
-                    nivel_prioridade=NivelPrioridade.URGENTE if urgente else NivelPrioridade.ROTINA,
-                    score_confianca_classificacao=score_classif,
-                ),
-                dados_extraidos=dados_extraidos_obj,
-                urgencia="SIM" if urgente else "NAO",
-                campos_ausentes=campos_ausentes,
-                campos_incertos=[],
-                conflitos=[],
-                limiar=float(os.getenv("LIMIAR_CONFIANCA", "0.85")),
+            urgente = (
+                entrada_workflow.classificacao.nivel_prioridade == NivelPrioridade.URGENTE
+                or entrada_workflow.urgencia == "SIM"
             )
 
             saida_workflow = self._grafo.invoke({"entrada": entrada_workflow})
@@ -451,6 +469,11 @@ class TriagemService:
             status_final = StatusTriagem.EM_REVISAO
 
         destinos_finais = [Destino(d.value) for d in decisao_wf.destinos] if decisao_wf else [Destino.FILA_REVISAO_HUMANA]
+        regras_acionadas = (
+            list(decisao_wf.regras_acionadas)
+            if (decisao_wf and getattr(decisao_wf, "regras_acionadas", None))
+            else []
+        )
         justificativa = decisao_wf.justificativa if decisao_wf else "Processamento concluído."
 
         # Preserva os motivos de revisão humana levantados pelo agente (CT-057 e §16 item 12)
@@ -471,12 +494,12 @@ class TriagemService:
         score_classif_final = (
             qualidade_wf.score_classificacao
             if qualidade_wf and hasattr(qualidade_wf, "score_classificacao")
-            else score_classif
+            else entrada_workflow.qualidade.score_classificacao
         )
         score_extrac_final = (
             qualidade_wf.score_extracao
             if qualidade_wf and hasattr(qualidade_wf, "score_extracao")
-            else score_extrac
+            else entrada_workflow.qualidade.score_extracao
         )
         score_combinado_final = (
             qualidade_wf.score_combinado
@@ -486,12 +509,12 @@ class TriagemService:
         campos_ausentes_finais = (
             list(qualidade_wf.campos_ausentes)
             if qualidade_wf and hasattr(qualidade_wf, "campos_ausentes")
-            else campos_ausentes
+            else list(entrada_workflow.qualidade.campos_ausentes)
         )
         campos_incertos_finais = (
             list(qualidade_wf.campos_incertos)
             if qualidade_wf and hasattr(qualidade_wf, "campos_incertos")
-            else []
+            else list(getattr(entrada_workflow.qualidade, "campos_incertos", []))
         )
         conflitos_finais = []
         if qualidade_wf and hasattr(qualidade_wf, "conflitos"):
@@ -509,6 +532,15 @@ class TriagemService:
                     )
 
         # 4. Construção do Contrato Oficial TriagemMediFlow com métricas reais do agente
+        classif_entrada = entrada_workflow.classificacao
+        classificacao_obj = Classificacao(
+            tipo_documento=classif_entrada.tipo_documento,
+            especialidade=classif_entrada.especialidade or ["Clínica Médica"],
+            nivel_prioridade=classif_entrada.nivel_prioridade,
+            score_classificacao=score_classif_final,
+        )
+        dados_extraidos_obj = entrada_workflow.dados_extraidos
+
         caminho_oci_resultado = _caminho_resultado_oci(documento_id, status_final, urgente)
 
         # Se a gravação inicial teve sucesso, tenta persistir o JSON final no OCI
@@ -522,17 +554,12 @@ class TriagemService:
                 triagem_temp = TriagemMediFlow(
                     status=status_final,
                     documento_id=documento_id,
-                    classificacao=Classificacao(
-                        tipo_documento=tipo_doc,
-                        especialidade=["Clínica Médica"],
-                        nivel_prioridade="URGENTE" if urgente else "ROTINA",
-                        score_classificacao=score_classif_final,
-                    ),
+                    classificacao=classificacao_obj,
                     dados_extraidos=dados_extraidos_obj,
                     qualidade=Qualidade(
                         score_extracao=score_extrac_final,
                         score_combinado=score_combinado_final,
-                        limiar_aplicado=float(os.getenv("LIMIAR_CONFIANCA", "0.85")),
+                        limiar_aplicado=limiar_efetivo,
                         campos_ausentes=campos_ausentes_finais,
                         campos_incertos=campos_incertos_finais,
                         conflitos=conflitos_finais,
@@ -588,25 +615,12 @@ class TriagemService:
         triagem = TriagemMediFlow(
             status=status_efetivo,
             documento_id=documento_id,
-            classificacao=Classificacao(
-                tipo_documento=tipo_doc,
-                especialidade=["Clínica Médica"],
-                nivel_prioridade="URGENTE" if urgente else "ROTINA",
-                score_classificacao=score_classif_final,
-            ),
-            dados_extraidos=DadosExtraidos(
-                paciente=dados_paciente,
-                medico=dados_medico,
-                diagnostico=diagnostico,
-                cid=cid,
-                medicamentos=medicamentos,
-                exames=exames,
-                urgencia="SIM" if urgente else "NAO",
-            ),
+            classificacao=classificacao_obj,
+            dados_extraidos=dados_extraidos_obj,
             qualidade=Qualidade(
                 score_extracao=score_extrac_final,
                 score_combinado=score_combinado_final,
-                limiar_aplicado=float(os.getenv("LIMIAR_CONFIANCA", "0.85")),
+                limiar_aplicado=limiar_efetivo,
                 campos_ausentes=campos_ausentes_finais,
                 campos_incertos=campos_incertos_finais,
                 conflitos=conflitos_finais,
@@ -630,6 +644,17 @@ class TriagemService:
         self._triagens[documento_id] = triagem
         self._status_em_andamento[documento_id] = status_efetivo
 
+        metadados_auditoria = {
+            "regras_acionadas": regras_acionadas,
+            "versao_esquema": "2.0.0",
+            "versao_regras": VERSAO_REGRAS,
+            "limiar_aplicado": limiar_efetivo,
+            "extrator": extrator_nome,
+            "versao_prompt": versao_prompt,
+        }
+        if eh_fallback_llm:
+            metadados_auditoria["fallback_llm"] = True
+
         if falha_persistencia:
             self.registrar_evento(
                 documento_id=documento_id,
@@ -638,6 +663,7 @@ class TriagemService:
                 status_novo=StatusTriagem.ERRO_PERSISTENCIA,
                 ator="OCI_STORAGE_PERSISTENCE",
                 motivo=f"Falha de gravação durável no OCI: {falha_persistencia}. Decisão clínica e qualidade preservadas.",
+                metadados=metadados_auditoria,
             )
         else:
             self.registrar_evento(
@@ -647,6 +673,7 @@ class TriagemService:
                 status_novo=status_final,
                 ator="LANGGRAPH_ROUTER",
                 motivo=justificativa,
+                metadados=metadados_auditoria,
             )
         return triagem
 
@@ -677,7 +704,7 @@ class TriagemService:
         else:
             requer_revisao = bool(triagem.decisao_roteamento and triagem.decisao_roteamento.requer_auditoria_humana)
             status_restaurado = StatusTriagem.EM_REVISAO if requer_revisao else StatusTriagem.PROCESSADO
-            urgente = triagem.classificacao.nivel_prioridade == NivelPrioridade.URGENTE
+            urgente = _triagem_urgente_na_retentativa(triagem)
             caminho_resultado = _caminho_resultado_oci(documento_id, status_restaurado, urgente)
 
         # -------------------------------------------------------------
@@ -717,10 +744,13 @@ class TriagemService:
         # -------------------------------------------------------------
         storage = self._obter_storage()
         if not storage:
-            # BLOQUEIO DE FALSO SUCESSO: Conector ausente NUNCA pode fingir sucesso!
-            logger.error("Tentativa de retry sem conector OCI configurado para documento %s", documento_id)
-            raise RuntimeError("Conector OCI não configurado ou indisponível. A persistência durável não pode ser confirmada.")
-
+            logger.error(
+                "Tentativa de retentativa sem conector OCI para documento %s",
+                documento_id,
+            )
+            raise ConectorOCIIndisponivel(
+                "Conector OCI não configurado ou indisponível."
+            )
         try:
             # 1. Regravação do documento original no OCI (se já existir, preserva e avança)
             try:
@@ -750,8 +780,10 @@ class TriagemService:
 
                     if bytes_existentes != doc.conteudo_bytes:
                         logger.error(
-                            "Conflito de integridade OCI: Objeto existente em %s possui conteúdo divergente do documento atual (%s bytes vs %s bytes).",
-                            caminho_original, len(bytes_existentes), len(doc.conteudo_bytes)
+                            "Conflito de integridade OCI em %s (%s bytes no OCI, %s bytes no original).",
+                            caminho_original,
+                            len(bytes_existentes),
+                            len(doc.conteudo_bytes),
                         )
                         self.registrar_evento(
                             documento_id=documento_id,
@@ -759,11 +791,14 @@ class TriagemService:
                             status_anterior=StatusTriagem.ERRO_PERSISTENCIA,
                             status_novo=StatusTriagem.ERRO_PERSISTENCIA,
                             ator="OCI_STORAGE_INTEGRITY",
-                            motivo=f"Conflito de integridade: Objeto existente em {caminho_original} possui conteúdo divergente.",
+                            motivo=(
+                                "Conflito de integridade OCI: "
+                                "o documento original diverge do arquivo armazenado."
+                            ),
                         )
-                        raise RuntimeError(
-                            f"Conflito de integridade OCI: O objeto existente em {caminho_original} possui conteúdo divergente do documento atual."
-                        )
+                        raise ConflitoIntegridadeOCI(
+                            "O original armazenado diverge do documento enviado."
+                        ) from err_orig
 
                     logger.info("Objeto original já existe no OCI com integridade confirmada (%s); prosseguindo para o JSON do resultado.", caminho_original)
                 else:
@@ -814,16 +849,19 @@ class TriagemService:
                 ):
                     raise RuntimeError("Gravacao do resultado nao confirmada.")
         except Exception as err:
-            logger.error("Falha física durante gravação OCI na retentativa para documento %s: %s", documento_id, err)
             self.registrar_evento(
                 documento_id=documento_id,
                 tipo_evento="RETRY_PERSISTENCIA_FALHA",
                 status_anterior=StatusTriagem.ERRO_PERSISTENCIA,
                 status_novo=StatusTriagem.ERRO_PERSISTENCIA,
                 ator="OCI_STORAGE_RETRY",
-                motivo=f"Falha na nova tentativa de gravação OCI: {str(err)}",
+                motivo="Falha na nova tentativa de gravação OCI.",
             )
-            raise RuntimeError(f"Falha na gravação dos objetos no bucket OCI: {str(err)}")
+            if isinstance(err, ConflitoIntegridadeOCI):
+                raise
+            raise RuntimeError(
+                "Falha na nova tentativa de gravação OCI."
+            ) from err
 
         self._resultados_pendentes.pop(documento_id, None)
         self._triagens[documento_id] = triagem_atualizada
@@ -1143,6 +1181,91 @@ class TriagemService:
 
     def obter_historico(self, documento_id: str) -> List[EventoHistorico]:
         return self._historico.get(documento_id, [])
+
+    def _preparar_entrada_heuristica(
+        self,
+        doc: DocumentoIngerido,
+        documento_id: str,
+        limiar: float,
+    ) -> EntradaWorkflow:
+        texto = doc.conteudo_texto or ""
+        tipo_doc = self._inferir_tipo_documento(texto, doc.nome_arquivo)
+        urgente = self._inferir_urgencia(texto)
+
+        dados_paciente = self._extrair_paciente(texto)
+        dados_medico = self._extrair_medico(texto)
+        diagnostico, cid = self._extrair_diagnostico_e_cid(texto)
+        medicamentos = self._extrair_medicamentos(texto)
+        exames = self._extrair_exames(texto)
+
+        score_classif = 0.95
+        campos_ausentes: List[str] = []
+
+        if not dados_paciente.nome:
+            campos_ausentes.append("paciente.nome")
+        if dados_paciente.idade is None:
+            campos_ausentes.append("paciente.idade")
+        if not dados_medico.nome:
+            campos_ausentes.append("medico.nome")
+        if not (dados_medico.crm and dados_medico.crm.numero):
+            campos_ausentes.append("medico.crm")
+        if not diagnostico and tipo_doc != "LAUDO_EXAME_LABORATORIAL":
+            campos_ausentes.append("diagnostico")
+
+        dados_extraidos_obj = DadosExtraidos(
+            paciente=dados_paciente,
+            medico=dados_medico,
+            diagnostico=diagnostico,
+            cid=cid,
+            medicamentos=medicamentos,
+            exames=exames,
+            urgencia="SIM" if urgente else "NAO",
+        )
+
+        return EntradaWorkflow(
+            documento_id=documento_id,
+            classificacao=ClassificacaoClinica(
+                tipo_documento=tipo_doc,
+                nivel_prioridade=NivelPrioridade.URGENTE if urgente else NivelPrioridade.ROTINA,
+                score_confianca_classificacao=score_classif,
+            ),
+            dados_extraidos=dados_extraidos_obj,
+            urgencia="SIM" if urgente else "NAO",
+            campos_ausentes=campos_ausentes,
+            campos_incertos=[],
+            conflitos=[],
+            limiar=limiar,
+        )
+
+    def _preparar_entrada_com_gemini(
+        self,
+        servico: Any,
+        doc: DocumentoIngerido,
+        documento_id: str,
+        limiar: float,
+    ) -> tuple[EntradaWorkflow, bool]:
+        mime_tipo = resolver_mime_type(doc)
+        argumentos = {
+            "conteudo_texto": doc.conteudo_texto or "",
+            "conteudo_bytes": doc.conteudo_bytes,
+            "mime_type": mime_tipo,
+        }
+        classificacao = servico.classificar_documento(**argumentos)
+        envelope = servico.extrair_dados_clinicos_envelope(**argumentos)
+
+        entrada = entrada_do_envelope(
+            envelope,
+            documento_id=documento_id,
+            classificacao=classificacao,
+            limiar=limiar,
+        )
+
+        t_val = getattr(classificacao, "tipo_documento", None)
+        tipo_str = getattr(t_val, "value", t_val)
+        score_val = getattr(classificacao, "score_confianca_classificacao", None)
+        eh_fallback = (tipo_str == "NAO_IDENTIFICADO" and score_val == 0.0)
+
+        return entrada, eh_fallback
 
     # Métodos auxiliares de extração heurística para o MVP
     def _inferir_tipo_documento(self, texto: str, nome: str) -> str:
