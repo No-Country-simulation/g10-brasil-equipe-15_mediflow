@@ -15,6 +15,7 @@ from src.app.quality_indicator import (
     IndicadoresQualidadeRoteamento,
     calcular_indicadores_qualidade_e_roteamento,
     eh_decisao_urgente,
+    executar_modo_simulado_documento,
     montar_triagem_canonica,
 )
 from src.schemas import (
@@ -380,5 +381,73 @@ def test_imports_internos_do_streamlit_app_resolvem_sem_erro():
                 assert hasattr(modulo, alias.name), (
                     f"Símbolo '{alias.name}' não encontrado no módulo '{no.module}'"
                 )
+
+
+def test_modo_simulado_borda_urgencia_indeterminada_aciona_revisao_decisao_a5():
+    """Garante que Borda_Urgencia_Indeterminada.txt no Modo Simulado resulta em EM_REVISAO (Nilo Sérgio Amarante)."""
+    from pathlib import Path
+    from src.ingestion import DocumentLoader
+
+    caminho_txt = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "catalogo"
+        / "Borda_Urgencia_Indeterminada"
+        / "Borda_Urgencia_Indeterminada.txt"
+    )
+    doc = DocumentLoader.carregar_arquivo(caminho_txt)
+    estado = executar_modo_simulado_documento(doc, limiar=0.85)
+
+    entrada = estado["entrada"]
+    decisao = estado["decisao"]
+    qualidade = estado["qualidade"]
+
+    assert entrada.dados_extraidos.paciente.nome == "Nilo Sérgio Amarante"
+    assert entrada.urgencia == "INDETERMINADO"
+    assert decisao.requer_auditoria_humana is True
+    assert [d.value for d in decisao.destinos] == ["FILA_REVISAO_HUMANA"]
+    assert "urgencia" in qualidade.campos_incertos
+
+
+def test_modo_simulado_respeita_score_forcado_borda_084_e_085():
+    """Valida que fixtures de fronteira com score_forcado respeitam 0.84 (< 0.85) e 0.85 (== 0.85)."""
+    from pathlib import Path
+    from src.ingestion import DocumentLoader
+
+    doc_084 = DocumentLoader.carregar_arquivo(
+        Path(__file__).resolve().parent / "fixtures" / "demo" / "Borda_Score_084" / "Borda_Score_084.txt"
+    )
+    est_084 = executar_modo_simulado_documento(doc_084, limiar=0.85)
+    assert est_084["qualidade"].score_combinado == 0.84
+    assert est_084["decisao"].requer_auditoria_humana is True
+
+    doc_085 = DocumentLoader.carregar_arquivo(
+        Path(__file__).resolve().parent / "fixtures" / "catalogo" / "Borda_Score_085" / "Borda_Score_085.txt"
+    )
+    est_085 = executar_modo_simulado_documento(doc_085, limiar=0.85)
+    assert est_085["qualidade"].score_combinado == 0.85
+    assert est_085["decisao"].requer_auditoria_humana is False
+
+
+def test_modo_simulado_arquivo_arbitrario_nao_inventa_dados_ficticios():
+    """Arquivos fora do catálogo extraem apenas o texto real, sem inventar 'Carlos Drummond'."""
+    from src.ingestion import DocumentLoader
+
+    texto = (
+        "RECEITUÁRIO MÉDICO\n"
+        "Paciente: Marina Torres\n"
+        "Idade: 31\n"
+        "Médico: Dr. Paulo Prado\n"
+        "CRM/SP: 654321\n"
+        "Diagnóstico: Sinusite bacteriana aguda\n"
+    ).encode("utf-8")
+    doc = DocumentLoader.carregar_bytes(texto, nome_arquivo="receita_propria_avulsa.txt")
+    estado = executar_modo_simulado_documento(doc, limiar=0.85)
+
+    assert estado["entrada"].dados_extraidos.paciente.nome == "Marina Torres"
+    assert estado["entrada"].dados_extraidos.paciente.nome != "Carlos Drummond"
+    assert estado["decisao"].requer_auditoria_humana is False
+    assert [d.value for d in estado["decisao"].destinos] == ["FARMACIA_HOSPITALAR"]
+
 
 

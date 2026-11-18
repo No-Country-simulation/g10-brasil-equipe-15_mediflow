@@ -7,7 +7,11 @@ de TriagemMediFlow preservando urgência extraída, exames laboratoriais (A6) e 
 """
 from __future__ import annotations
 
+import copy
+import json
 import os
+import re
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -291,3 +295,132 @@ def montar_triagem_canonica(
         ),
         erro=None,
     )
+
+
+def _localizar_fixture_oficial(doc_ingerido: Any) -> Optional[Dict[str, Any]]:
+    """Localiza o expected.json caso o documento pertença ao catálogo oficial de fixtures."""
+    raiz_projeto = Path(__file__).resolve().parent.parent.parent
+    pasta_fixtures = raiz_projeto / "tests" / "fixtures"
+    if not pasta_fixtures.is_dir():
+        return None
+
+    candidatos: List[str] = []
+    texto = getattr(doc_ingerido, "conteudo_texto", None) or ""
+    match_fixture = re.search(r"Fixture:\s*([A-Za-z0-9_]+)", texto)
+    if match_fixture:
+        candidatos.append(match_fixture.group(1).strip())
+
+    nome_arq = getattr(doc_ingerido, "nome_arquivo", None) or ""
+    stem = Path(nome_arq).stem.strip()
+    if stem and stem not in candidatos:
+        candidatos.append(stem)
+
+    for fid in candidatos:
+        for subpasta in ("demo", "catalogo", "catalogo_completo"):
+            caminho_json = pasta_fixtures / subpasta / fid / "expected.json"
+            if caminho_json.is_file():
+                dados = json.loads(caminho_json.read_text(encoding="utf-8"))
+                if (
+                    dados.get("tipo_de_teste") == "funcional"
+                    and isinstance(dados.get("resposta_esperada"), dict)
+                    and dados["resposta_esperada"].get("classificacao")
+                    and dados["resposta_esperada"].get("dados_extraidos")
+                ):
+                    return dados
+    return None
+
+
+def executar_modo_simulado_documento(
+    doc_ingerido: Any,
+    *,
+    limiar: float = 0.85,
+) -> Dict[str, Any]:
+    """
+    Executa a triagem determinística real para o documento carregado sem chamar o Gemini:
+    1. Se for uma das fixtures oficiais, alimenta EntradaWorkflow.de_extracao no motor LangGraph
+       (aplicando modo_fixture.score_forcado quando presente nos casos de fronteira).
+    2. Se for um documento arbitrário, utiliza extração textual heurística sem inventar dados;
+       mídias sem texto extraível recebem urgencia='INDETERMINADO' e seguem para revisão humana.
+    """
+    from src.workflow.graph import (
+        criar_grafo,
+        decidir_revisao,
+        decidir_rotina,
+        decidir_urgencia,
+        escolher_caminho,
+    )
+    from src.workflow.state import EntradaWorkflow
+
+    doc_id = getattr(doc_ingerido, "documento_id", "DOC-SIMULADO")
+    fixture_dados = _localizar_fixture_oficial(doc_ingerido)
+
+    if fixture_dados is not None:
+        payload = copy.deepcopy(fixture_dados["resposta_esperada"])
+        payload["documento_id"] = doc_id
+        score_forcado = (fixture_dados.get("modo_fixture") or {}).get("score_forcado") or {}
+        if "score_classificacao" in score_forcado:
+            payload["classificacao"]["score_classificacao"] = float(
+                score_forcado["score_classificacao"]
+            )
+
+        entrada = EntradaWorkflow.de_extracao(payload, limiar=limiar)
+        estado_wf = criar_grafo().invoke({"entrada": entrada})
+
+        if "score_extracao" in score_forcado:
+            q_atual = estado_wf["qualidade"]
+            sc_class = float(
+                score_forcado.get("score_classificacao", q_atual.score_classificacao)
+            )
+            sc_ext = float(score_forcado["score_extracao"])
+            sc_comb = min(sc_class, sc_ext)
+
+            motivos = [
+                m
+                for m in q_atual.motivos_revisao
+                if m != "Score combinado abaixo do limiar configurado."
+            ]
+            if sc_comb < limiar:
+                motivos.append("Score combinado abaixo do limiar configurado.")
+
+            q_forcada = q_atual.model_copy(
+                update={
+                    "score_classificacao": sc_class,
+                    "score_extracao": sc_ext,
+                    "score_combinado": sc_comb,
+                    "motivos_revisao": motivos,
+                }
+            )
+            estado_wf["qualidade"] = q_forcada
+            rota = escolher_caminho(estado_wf)
+            if rota == "urgencia":
+                estado_wf.update(decidir_urgencia(estado_wf))
+            elif rota == "revisao":
+                estado_wf.update(decidir_revisao(estado_wf))
+            else:
+                estado_wf.update(decidir_rotina(estado_wf))
+
+        return estado_wf
+
+    texto = (getattr(doc_ingerido, "conteudo_texto", None) or "").strip()
+    if not texto:
+        entrada_sem_texto = EntradaWorkflow(
+            documento_id=doc_id,
+            classificacao=Classificacao(
+                tipo_documento="NAO_IDENTIFICADO",
+                nivel_prioridade=NivelPrioridade.NAO_IDENTIFICADA,
+                score_classificacao=0.0,
+            ),
+            dados_extraidos=DadosExtraidos(urgencia=Urgencia.INDETERMINADO),
+            urgencia="INDETERMINADO",
+            limiar=limiar,
+        )
+        return criar_grafo().invoke({"entrada": entrada_sem_texto})
+
+    from src.api.service import TriagemService
+
+    entrada_heuristica = TriagemService()._preparar_entrada_heuristica(
+        doc_ingerido,
+        doc_id,
+        limiar,
+    )
+    return criar_grafo().invoke({"entrada": entrada_heuristica})

@@ -27,6 +27,7 @@ from src.app.oci_persistence import (
 from src.app.quality_indicator import (
     calcular_indicadores_qualidade_e_roteamento,
     eh_decisao_urgente,
+    executar_modo_simulado_documento,
     montar_triagem_canonica,
 )
 from src.app.triage_pipeline import processar_documento_com_agente
@@ -537,17 +538,8 @@ if doc_ingerido is not None:
                     st.session_state.cache_persistencia_oci = {}
 
             if usar_fallback_teste:
-                estado_wf = executar_fluxo_agente(
-                    documento_id=doc_ingerido.documento_id,
-                    tipo_documento="RECEITUARIO_MEDICO",
-                    prioridade_str="ROTINA",
-                    score_classificacao=0.95,
-                    paciente_dict={"nome": "Carlos Drummond", "idade": 50},
-                    medico_dict={"nome": "Dr. Fernando Pessoa", "crm": "12345-SP"},
-                    diagnostico="Prescrição ambulatorial de rotina",
-                    cid=None,
-                    urgencia="NAO",
-                    especialidade="Clínica Médica",
+                estado_wf = executar_modo_simulado_documento(
+                    doc_ingerido,
                     limiar=limiar_configurado,
                 )
                 entrada_wf = estado_wf["entrada"]
@@ -558,6 +550,7 @@ if doc_ingerido is not None:
                     "dados_ext_obj": entrada_wf.dados_extraidos,
                     "urgencia_efetiva": entrada_wf.urgencia,
                     "chave_ativa": True,
+                    "fallback_llm": False,
                     "simulado": True,
                 }
                 st.session_state.cache_persistencia_oci = {}
