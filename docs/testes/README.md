@@ -1,7 +1,7 @@
 # Documentação de Testes, QA e Contratos — MediFlow
 
 > **Hackathon ONE G10 (Oracle & Alura) — Equipe 15**  
-> **Frente de QA & Consistência (William)** em conjunto com a **Frente de Ingestão (Cristiano)** e **Agentes LLM (Luciana / Gisele)**.
+> **Frente de QA & Consistência (William)** em conjunto com a **Frente de Ingestão (Cristiano)** e **Agentes LLM (Luciana)**.
 
 Este diretório centraliza toda a base documental de engenharia de software, garantia de qualidade (QA), rastreabilidade de requisitos e contratos executáveis do projeto MediFlow.
 
