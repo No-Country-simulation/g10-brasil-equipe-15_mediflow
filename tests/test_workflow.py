@@ -1039,6 +1039,7 @@ def test_pr13_retry_json_com_original_divergente_rejeita_recuperacao(
     a recuperação DEVE abortar com erro de integridade e NÃO salvar o resultado.json.
     """
     from src.schemas import StatusTriagem
+    from src.api.service import ConflitoIntegridadeOCI
     storage, cliente, objetos = oci_workflow_simulado
     servico = servico_pr13_isolado(storage=storage)
 
@@ -1055,11 +1056,8 @@ def test_pr13_retry_json_com_original_divergente_rejeita_recuperacao(
     assert inicial.status.value == "ERRO_PERSISTENCIA"
 
     # 3. Dispara retentativa de persistência
-    with pytest.raises(RuntimeError) as exc_info:
+    with pytest.raises(ConflitoIntegridadeOCI):
         servico.reprocessar_persistencia_oci(documento_id)
-
-    assert "Conflito de integridade OCI" in str(exc_info.value)
-    assert "conteúdo divergente" in str(exc_info.value)
 
     # 4. Confirma que o JSON NÃO foi gravado e o estado não confirmou sucesso
     caminho_json = f"processados/{documento_id}/resultado.json"
