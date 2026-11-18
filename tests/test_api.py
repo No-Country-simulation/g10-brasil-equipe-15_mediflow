@@ -836,44 +836,73 @@ def test_simulacao_via_header_http_explicito(client):
 
 
 def test_retry_com_original_existente_divergente_retorna_502_conflito(client):
-    """
-    Valida que a API REST devolve HTTP 502 Bad Gateway com erro de integridade
-    quando o objeto existente no OCI tiver conteúdo divergente do arquivo enviado.
-    """
+    """Confere a mensagem pública do 502 e os motivos do histórico."""
     from unittest.mock import MagicMock
-    from src.api.routes import triagem_service
+
     import oci
 
+    from src.api.routes import triagem_service
+
+    marcador_sdk = "DETALHE_INTERNO_OCI_CARTAO_026"
     storage_mock = MagicMock()
-    # Ao reenviar o original, o OCI lança 412 PreconditionFailed
     storage_mock.enviar_bytes.side_effect = oci.exceptions.ServiceError(
-        status=412, code="PreconditionFailed", headers={}, message="Objeto já existe"
+        status=412,
+        code="PreconditionFailed",
+        headers={},
+        message=marcador_sdk,
     )
-    # Ao conferir com ler_bytes(), os bytes existentes são de outro documento
     storage_mock.ler_bytes.return_value = b"CONTEUDO_DIFERENTE_CORROMPIDO"
+    storage_anterior = triagem_service._storage
     triagem_service._storage = storage_mock
 
     try:
-        conteudo = "Receituário Médico\nPaciente: Maria da Silva\nIdade: 35\nDipirona 500mg".encode("utf-8")
-        files = {"file": ("receituario_maria.txt", io.BytesIO(conteudo), "text/plain")}
-        res_envio = client.post("/api/v1/triagens", files=files)
-        assert res_envio.status_code == 202
-        doc_id = res_envio.json()["documento_id"]
+        conteudo = (
+            "Receituário Médico\nPaciente: Maria da Silva\n"
+            "Idade: 35\nDipirona 500mg"
+        ).encode("utf-8")
+        arquivos = {
+            "file": ("receituario_maria.txt", io.BytesIO(conteudo), "text/plain"),
+        }
+        resposta_envio = client.post("/api/v1/triagens", files=arquivos)
+        assert resposta_envio.status_code == 202
 
-        # Triagem falha inicialmente na persistência
-        triagem = triagem_service.obter_triagem(doc_id)
-        assert triagem.status.value == "ERRO_PERSISTENCIA"
+        doc_id = resposta_envio.json()["documento_id"]
+        url_triagem = f"/api/v1/triagens/{doc_id}"
+        assert triagem_service.obter_triagem(doc_id).status.value == "ERRO_PERSISTENCIA"
 
-        # Dispara retentativa via API
-        res_retry = client.post(f"/api/v1/triagens/{doc_id}/reprocessar-persistencia")
-        assert res_retry.status_code == 502
-        assert "Conflito de integridade OCI" in res_retry.json()["mensagem"]
+        resposta_retry = client.post(f"{url_triagem}/reprocessar-persistencia")
+        assert resposta_retry.status_code == 502
 
-        # Confirma que manteve o status de erro
-        triagem_final = triagem_service.obter_triagem(doc_id)
-        assert triagem_final.status.value == "ERRO_PERSISTENCIA"
+        erro = resposta_retry.json()
+        assert erro["codigo"] == CodigoErro.ERRO_PERSISTENCIA.value
+        assert erro["mensagem"] == (
+            "Conflito de integridade OCI: "
+            "o documento original diverge do arquivo armazenado."
+        )
+
+        resposta_historico = client.get(f"{url_triagem}/historico")
+        assert resposta_historico.status_code == 200
+
+        motivos = {
+            evento["tipo_evento"]: evento["motivo"]
+            for evento in resposta_historico.json()
+        }
+        assert motivos["RETRY_PERSISTENCIA_CONFLITO"] == (
+            "Conflito de integridade OCI: "
+            "o documento original diverge do arquivo armazenado."
+        )
+        assert motivos["RETRY_PERSISTENCIA_FALHA"] == (
+            "Falha na nova tentativa de gravação OCI."
+        )
+
+        for resposta in (resposta_retry, resposta_historico):
+            assert marcador_sdk not in resposta.text
+            assert "PreconditionFailed" not in resposta.text
+            assert f"recebidos/{doc_id}/original.txt" not in resposta.text
+
+        assert triagem_service.obter_triagem(doc_id).status.value == "ERRO_PERSISTENCIA"
     finally:
-        triagem_service._storage = None
+        triagem_service._storage = storage_anterior
 
 
 @pytest.mark.parametrize("etapa", ["extracao", "grafo"])
