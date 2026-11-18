@@ -259,7 +259,11 @@ def normalizar_payload_extracao(payload: Any) -> Dict[str, Any]:
 
 
 class GeminiService:
-    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-3.8-flash"):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model_name: str = "gemini-3.5-flash-lite",
+    ):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.model_name = model_name
 
@@ -268,6 +272,14 @@ class GeminiService:
             genai.configure(api_key=self.api_key, transport="rest")
         else:
             logger.warning("[GeminiService] Chave GEMINI_API_KEY não configurada ou SDK ausente.")
+
+    def _modelos_candidatos(self) -> tuple[str, str]:
+        alternativo = (
+            "gemini-3.8-flash"
+            if self.model_name == "gemini-3.5-flash-lite"
+            else "gemini-3.5-flash-lite"
+        )
+        return self.model_name, alternativo
 
     def _montar_partes_conteudo(
         self,
@@ -307,11 +319,7 @@ class GeminiService:
             mime_type=mime_type
         )
 
-        modelos_candidatos = [self.model_name]
-        if "gemini-3.5-flash-lite" not in modelos_candidatos:
-            modelos_candidatos.append("gemini-3.5-flash-lite")
-
-        for modelo in modelos_candidatos:
+        for modelo in self._modelos_candidatos():
             try:
                 model = genai.GenerativeModel(
                     model_name=modelo,
@@ -351,11 +359,7 @@ class GeminiService:
             mime_type=mime_type
         )
 
-        modelos_candidatos = [self.model_name]
-        if "gemini-3.5-flash-lite" not in modelos_candidatos:
-            modelos_candidatos.append("gemini-3.5-flash-lite")
-
-        for modelo in modelos_candidatos:
+        for modelo in self._modelos_candidatos():
             try:
                 model = genai.GenerativeModel(
                     model_name=modelo,
