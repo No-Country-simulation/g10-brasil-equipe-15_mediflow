@@ -246,8 +246,9 @@ Devolve `TriagemMediFlow` (`src/schemas/clinical.py`). A resposta é a serializa
 
 **Caminhos reais no OCI** (verificados em `src/api/service.py`):
 - Documento original recebido: `recebidos/{doc_id}/original.{fmt}`
-- Resultado processado (rotina ou revisão): `processados/{doc_id}/resultado.json`
-- Resultado urgente: `processados/urgentes/{doc_id}/resultado.json`
+- Resultado processado (rotina sem pendências): `processados/{doc_id}/resultado.json`
+- Resultado urgente (sem auditoria humana): `processados/urgentes/{doc_id}/resultado.json`
+- Resultado em auditoria humana (status `EM_REVISAO`): `auditoria_humana/{doc_id}/resultado.json`
 - Histórico de auditoria: `historico/{doc_id}/{snapshot_id}.json`
 
 #### Exemplo: urgência com ambiguidade (duas filas), trecho
@@ -696,7 +697,7 @@ Todos os itens anteriormente pendentes foram verificados e validados contra o c�
 | :--- | :--- | :--- |
 | **Formato `documento_id`** | `src/api/service.py` L113–116 | Gera `DOC-CLIN-{YYYY}-{uuid4().hex[:8].upper()}` (ex: `DOC-CLIN-2026-3F7A09B2`). O formato interno do loader `DOC-{HEX8}` é sobreposto pelo gerador oficial da API. |
 | **Eventos e Atores reais** | `src/api/service.py` | `RECEBIDO` (`API_INGESTAO`), `PROCESSANDO` (`WORKFLOW_ENGINE`), `ROTEADO` (`LANGGRAPH_ROUTER`), `ERRO_PROCESSAMENTO`, `ERRO_PERSISTENCIA`, `RETRY_PERSISTENCIA_*`. Tabela completa em §3.4. |
-| **Caminhos OCI** | `src/api/service.py` | `recebidos/{id}/original.{fmt}`, `processados/{id}/resultado.json`, `processados/urgentes/{id}/resultado.json`, `historico/{id}/{snapshot}.json`. Detalhado em §3.3. |
+| **Caminhos OCI** | `src/api/service.py` | `recebidos/{id}/original.{fmt}`, `processados/{id}/resultado.json`, `processados/urgentes/{id}/resultado.json`, `auditoria_humana/{id}/resultado.json`, `historico/{id}/{snapshot}.json`. Detalhado em §3.3. |
 | **Idempotência de triagem** | `src/api/service.py` L1002–1012 | Trava de concorrência ativa: `_locks_processamento[doc_id] = asyncio.Lock()`. Evita execução duplicada entre background task e polling síncrono. |
 | **Envelope de Erro** | `src/api/main.py` | Exception handlers realizam o *unwrap* de `detail`. Clientes recebem sempre `{codigo, mensagem}` diretamente. |
 | **Tratamento de 500** | `src/api/main.py` | Handler global captura exceções não tratadas e responde `{codigo: "ERRO_INTERNO", mensagem: "Ocorreu um erro interno no servidor."}`. |
