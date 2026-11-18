@@ -18,7 +18,7 @@ pillow>=10.0.0
 oci>=2.120.0
 
 # Interface do Usuário e Auditoria Clínica
-streamlit>=1.39.0
+streamlit>=1.46.0
 
 # API REST e Servidor Web Assíncrono
 fastapi>=0.111.0

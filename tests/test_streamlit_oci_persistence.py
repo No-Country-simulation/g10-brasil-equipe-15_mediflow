@@ -1,30 +1,71 @@
 """
 Testes TDD para a camada de persistência OCI do Streamlit.
 
-Verifica que o seam 'executar_persistencia_triagem' reporta fielmente:
-1. Sucesso real de gravação com ETag quando OCI confirma HTTP 200/201.
-2. Falha real com mensagem/código da Oracle quando OCI lança ServiceError (ex: 412 IfNoneMatchFailed).
-3. Modo simulado transparente quando OCI não está configurado ou em modo demo.
+Verifica que 'executar_persistencia_triagem' e os resolvedores de caminho atendem:
+1. Gravação confirmada do documento original e do JSON de resultado com ETag.
+2. Falha no documento original NUNCA vira falso sucesso, mesmo quando o JSON é salvo.
+3. HTTP 412 (objeto existente) só é aceito após conferir que os bytes armazenados são idênticos.
+4. Mensagens públicas fixas e seguras na UI/JSON, restringindo ServiceError e opc-request-id aos logs internos.
+5. Segregação por status funcional (processados/, processados/urgentes/, auditoria_humana/).
 """
-from types import SimpleNamespace
+import logging
 from unittest.mock import Mock, patch
-import json
-import pytest
+
 import oci
+import pytest
 
-from src.app.oci_persistence import executar_persistencia_triagem
+from src.app.oci_persistence import (
+    MENSAGEM_PUBLICA_FALHA_OCI,
+    executar_persistencia_triagem,
+    resolver_caminho_original_oci,
+    resolver_caminho_resultado_oci,
+)
+from src.schemas import StatusTriagem
 
 
-def test_persistencia_oci_sucesso_retorna_status_e_etag():
-    """Se o conector OCI grava o objeto com sucesso, deve retornar status_backup='sucesso' e ETag real."""
+def test_resolver_caminhos_oci_segregacao_por_status():
+    """Garante segregação estrita em recebidos/, processados/, processados/urgentes/ e auditoria_humana/."""
+    assert (
+        resolver_caminho_original_oci("DOC-001", "Exame Sangue.PDF")
+        == "recebidos/DOC-001/original.pdf"
+    )
+    assert (
+        resolver_caminho_resultado_oci("DOC-001", StatusTriagem.PROCESSADO, urgente=False)
+        == "processados/DOC-001/resultado.json"
+    )
+    assert (
+        resolver_caminho_resultado_oci("DOC-002", StatusTriagem.PROCESSADO, urgente=True)
+        == "processados/urgentes/DOC-002/resultado.json"
+    )
+    assert (
+        resolver_caminho_resultado_oci("DOC-003", StatusTriagem.EM_REVISAO, urgente=False)
+        == "auditoria_humana/DOC-003/resultado.json"
+    )
+    # Urgência com ambiguidade (EM_REVISAO) segrega sob auditoria_humana/
+    assert (
+        resolver_caminho_resultado_oci("DOC-004", StatusTriagem.EM_REVISAO, urgente=True)
+        == "auditoria_humana/DOC-004/resultado.json"
+    )
+
+
+def test_persistencia_oci_sucesso_envia_original_e_resultado_com_etag():
+    """Quando original e JSON são confirmados no OCI, retorna status_backup='sucesso' e ETag."""
     storage_mock = Mock()
     storage_mock.bucket = "mediflow-documentos"
-    storage_mock.enviar_bytes.return_value = {
-        "bucket": "mediflow-documentos",
-        "caminho_objeto": "processados/DOC-001/resultado.json",
-        "etag": "etag-real-12345",
-        "status_backup": "sucesso",
-    }
+    storage_mock.enviar_bytes.side_effect = [
+        {
+            "bucket": "mediflow-documentos",
+            "caminho_objeto": "recebidos/DOC-001/original.txt",
+            "etag": "etag-orig-001",
+            "status_backup": "sucesso",
+        },
+        {
+            "bucket": "mediflow-documentos",
+            "caminho_objeto": "processados/DOC-001/resultado.json",
+            "etag": "etag-res-12345",
+            "status_backup": "sucesso",
+        },
+    ]
 
     resultado = executar_persistencia_triagem(
         documento_id="DOC-001",
@@ -34,20 +75,133 @@ def test_persistencia_oci_sucesso_retorna_status_e_etag():
         caminho_resultado_alvo="processados/DOC-001/resultado.json",
         storage=storage_mock,
         forcar_simulado=False,
+        mime_original="text/plain",
     )
 
     assert resultado["status_backup"] == "sucesso"
     assert resultado["modo_simulacao"] is False
-    assert resultado["etag"] == "etag-real-12345"
+    assert resultado["etag"] == "etag-res-12345"
     assert resultado["bucket"] == "mediflow-documentos"
+    assert resultado["caminho_original"] == "recebidos/DOC-001/original.txt"
     assert resultado["caminho_objeto"] == "processados/DOC-001/resultado.json"
-    assert "erro" not in resultado or resultado["erro"] is None
-    assert "gravado com sucesso" in resultado["evento_linha_do_tempo"].lower()
-    assert storage_mock.enviar_bytes.call_count >= 1
+    assert resultado["erro"] is None
+    assert storage_mock.enviar_bytes.call_count == 2
 
 
-def test_persistencia_oci_falha_412_retorna_status_falha_com_detalhe():
-    """Se o OCI rejeitar com 412 IfNoneMatchFailed (ou qualquer ServiceError), deve retornar status_backup='falha'."""
+def test_persistencia_oci_falha_no_original_mesmo_com_json_salvo_retorna_falha(caplog):
+    """Se o envio do documento original falhar, o resultado NUNCA pode ser sucesso, mesmo se o JSON gravar."""
+    storage_mock = Mock()
+    storage_mock.bucket = "mediflow-documentos"
+    storage_mock.enviar_bytes.side_effect = [
+        oci.exceptions.ServiceError(
+            status=503,
+            code="ServiceUnavailable",
+            headers={"opc-request-id": "req-orig-503"},
+            message="OCI bucket temporarily unavailable.",
+        ),
+        {
+            "bucket": "mediflow-documentos",
+            "caminho_objeto": "processados/DOC-001/resultado.json",
+            "etag": "etag-json-ok",
+            "status_backup": "sucesso",
+        },
+    ]
+
+    with caplog.at_level(logging.ERROR, logger="mediflow.app.oci_persistence"):
+        resultado = executar_persistencia_triagem(
+            documento_id="DOC-001",
+            nome_arquivo="receita.txt",
+            conteudo_original_bytes=b"Conteudo da receita",
+            dados_triagem_json={"status": "PROCESSADO", "documento_id": "DOC-001"},
+            caminho_resultado_alvo="processados/DOC-001/resultado.json",
+            storage=storage_mock,
+            forcar_simulado=False,
+        )
+
+    assert resultado["status_backup"] == "falha"
+    assert resultado["modo_simulacao"] is False
+    assert resultado["caminho_objeto"] is None
+    assert resultado["erro"] == MENSAGEM_PUBLICA_FALHA_OCI
+    assert "req-orig-503" not in resultado["erro"]
+    assert "ServiceUnavailable" not in resultado["detalhes"]
+    assert "req-orig-503" in caplog.text
+
+
+def test_persistencia_oci_original_412_conteudo_identico_confirma_idempotencia():
+    """Em HTTP 412 no original, confirma gravação somente após verificar que ler_bytes retorna bytes idênticos."""
+    conteudo_orig = b"Conteudo identico da receita"
+    storage_mock = Mock()
+    storage_mock.bucket = "mediflow-documentos"
+    storage_mock.enviar_bytes.side_effect = [
+        oci.exceptions.ServiceError(
+            status=412,
+            code="IfNoneMatchFailed",
+            headers={"opc-request-id": "req-412-ok"},
+            message="Entity tag did not match.",
+        ),
+        {
+            "bucket": "mediflow-documentos",
+            "caminho_objeto": "processados/DOC-001/resultado.json",
+            "etag": "etag-res-ok",
+            "status_backup": "sucesso",
+        },
+    ]
+    storage_mock.ler_bytes.return_value = conteudo_orig
+
+    resultado = executar_persistencia_triagem(
+        documento_id="DOC-001",
+        nome_arquivo="receita.txt",
+        conteudo_original_bytes=conteudo_orig,
+        dados_triagem_json={"status": "PROCESSADO", "documento_id": "DOC-001"},
+        caminho_resultado_alvo="processados/DOC-001/resultado.json",
+        storage=storage_mock,
+        forcar_simulado=False,
+    )
+
+    assert resultado["status_backup"] == "sucesso"
+    assert resultado["etag"] == "etag-res-ok"
+    storage_mock.ler_bytes.assert_called_once_with("recebidos/DOC-001/original.txt")
+
+
+def test_persistencia_oci_original_412_conteudo_divergente_retorna_falha(caplog):
+    """Em HTTP 412 no original, se o conteúdo no bucket divergir do enviado, deve sinalizar falha."""
+    storage_mock = Mock()
+    storage_mock.bucket = "mediflow-documentos"
+    storage_mock.enviar_bytes.side_effect = [
+        oci.exceptions.ServiceError(
+            status=412,
+            code="IfNoneMatchFailed",
+            headers={"opc-request-id": "req-412-div"},
+            message="Entity tag did not match.",
+        ),
+        {
+            "bucket": "mediflow-documentos",
+            "caminho_objeto": "processados/DOC-001/resultado.json",
+            "etag": "etag-res-ok",
+            "status_backup": "sucesso",
+        },
+    ]
+    storage_mock.ler_bytes.return_value = b"OUTRO CONTEUDO DIVERGENTE"
+
+    with caplog.at_level(logging.ERROR, logger="mediflow.app.oci_persistence"):
+        resultado = executar_persistencia_triagem(
+            documento_id="DOC-001",
+            nome_arquivo="receita.txt",
+            conteudo_original_bytes=b"Conteudo esperado",
+            dados_triagem_json={"status": "PROCESSADO", "documento_id": "DOC-001"},
+            caminho_resultado_alvo="processados/DOC-001/resultado.json",
+            storage=storage_mock,
+            forcar_simulado=False,
+        )
+
+    assert resultado["status_backup"] == "falha"
+    assert resultado["caminho_objeto"] is None
+    assert resultado["erro"] == MENSAGEM_PUBLICA_FALHA_OCI
+    assert "diverge" in caplog.text
+
+
+def test_persistencia_oci_falha_412_sanitiza_mensagem_publica_e_mantem_detalhe_no_log(caplog):
+    """Detalhes do OCI (ServiceError, código e opc-request-id) ficam nos logs internos, nunca na UI/JSON."""
     storage_mock = Mock()
     storage_mock.bucket = "mediflow-documentos"
     storage_mock.enviar_bytes.side_effect = oci.exceptions.ServiceError(
@@ -56,49 +210,56 @@ def test_persistencia_oci_falha_412_retorna_status_falha_com_detalhe():
         headers={"opc-request-id": "req-gru-412"},
         message="The current entity tag did not match the if-none-match condition.",
     )
+    storage_mock.ler_bytes.side_effect = RuntimeError("Objeto inacessível")
 
-    resultado = executar_persistencia_triagem(
-        documento_id="DOC-001",
-        nome_arquivo="receita.txt",
-        conteudo_original_bytes=b"Conteudo da receita",
-        dados_triagem_json={"status": "PROCESSADO", "documento_id": "DOC-001"},
-        caminho_resultado_alvo="processados/DOC-001/resultado.json",
-        storage=storage_mock,
-        forcar_simulado=False,
-    )
+    with caplog.at_level(logging.ERROR, logger="mediflow.app.oci_persistence"):
+        resultado = executar_persistencia_triagem(
+            documento_id="DOC-001",
+            nome_arquivo="receita.txt",
+            conteudo_original_bytes=b"Conteudo da receita",
+            dados_triagem_json={"status": "PROCESSADO", "documento_id": "DOC-001"},
+            caminho_resultado_alvo="processados/DOC-001/resultado.json",
+            storage=storage_mock,
+            forcar_simulado=False,
+        )
 
-    # Regra fundamental: Falha NUNCA vira sucesso nem silencia erro
     assert resultado["status_backup"] == "falha"
     assert resultado["modo_simulacao"] is False
     assert resultado["etag"] is None
-    assert "412" in resultado["erro"]
-    assert "IfNoneMatchFailed" in resultado["erro"]
-    assert "req-gru-412" in resultado["erro"]
-    assert "falha" in resultado["evento_linha_do_tempo"].lower()
+    assert resultado["erro"] == MENSAGEM_PUBLICA_FALHA_OCI
+    assert resultado["detalhes"] == MENSAGEM_PUBLICA_FALHA_OCI
+    for termo_interno in ("412", "IfNoneMatchFailed", "req-gru-412", "ServiceError"):
+        assert termo_interno not in resultado["erro"]
+        assert termo_interno not in resultado["detalhes"]
+        assert termo_interno not in resultado["evento_linha_do_tempo"]
 
 
-def test_persistencia_oci_sem_credenciais_retorna_modo_simulado():
-    """Quando o OCI não está configurado no .env, deve sinalizar modo_simulacao=True e status_backup='simulado'."""
-    with patch("src.storage.oci_storage.OCIStorage.das_configuracoes", side_effect=ValueError("Preencha no .env")):
+def test_persistencia_oci_sem_credenciais_retorna_modo_simulado_sem_vazar_env():
+    """Quando o OCI não está configurado no .env, sinaliza modo_simulacao=True sem expor variáveis internas."""
+    with patch(
+        "src.storage.oci_storage.OCIStorage.das_configuracoes",
+        side_effect=ValueError("Preencha no .env: OCI_USER_OCID, OCI_KEY_FILE"),
+    ):
         resultado = executar_persistencia_triagem(
             documento_id="DOC-002",
             nome_arquivo="laudo.pdf",
             conteudo_original_bytes=b"%PDF-1.4",
             dados_triagem_json={"status": "EM_REVISAO", "documento_id": "DOC-002"},
-            caminho_resultado_alvo="auditoria/DOC-002.json",
-            storage=None,  # Sem storage injetado, força resolução das configurações
+            caminho_resultado_alvo="auditoria_humana/DOC-002/resultado.json",
+            storage=None,
             forcar_simulado=False,
         )
 
         assert resultado["status_backup"] == "simulado"
         assert resultado["modo_simulacao"] is True
         assert resultado["etag"] is None
-        assert "simulad" in resultado["evento_linha_do_tempo"].lower() or "local" in resultado["evento_linha_do_tempo"].lower()
-        assert "não configurado" in resultado["detalhes"].lower() or "local" in resultado["detalhes"].lower()
+        assert "OCI_USER_OCID" not in resultado["detalhes"]
+        assert "OCI_KEY_FILE" not in resultado["detalhes"]
+        assert "simulad" in resultado["detalhes"].lower()
 
 
 def test_persistencia_oci_forcar_simulado_cenario_demo():
-    """Para cenários oficiais demo do edital, deve permanecer em modo simulado sem acessar nuvem."""
+    """Para cenários oficiais demo do edital, permanece em modo simulado sem acessar nuvem."""
     storage_mock = Mock()
 
     resultado = executar_persistencia_triagem(
@@ -106,13 +267,11 @@ def test_persistencia_oci_forcar_simulado_cenario_demo():
         nome_arquivo="01_rotina.pdf",
         conteudo_original_bytes=b"%PDF-1.4",
         dados_triagem_json={"status": "PROCESSADO", "documento_id": "DOC-DEMO-01"},
-        caminho_resultado_alvo="processados/DOC-DEMO-01.json",
+        caminho_resultado_alvo="processados/DOC-DEMO-01/resultado.json",
         storage=storage_mock,
         forcar_simulado=True,
     )
 
     assert resultado["status_backup"] == "simulado"
     assert resultado["modo_simulacao"] is True
-    # Não deve ter chamado enviar_bytes do storage
     assert storage_mock.enviar_bytes.call_count == 0
-
