@@ -120,10 +120,21 @@ def _registrar_erro_interno_oci(etapa: str, err: Exception) -> None:
     logger.error("Falha ao persistir %s no OCI: %s", etapa, detalhe_log)
 
 
+CAMPOS_OCI_CREDENCIAIS = {
+    "OCI_USER_OCID",
+    "OCI_TENANCY_OCID",
+    "OCI_FINGERPRINT",
+    "OCI_KEY_FILE",
+    "OCI_NAMESPACE",
+}
+
+
 def _eh_ausencia_credenciais_oci(err: Exception) -> bool:
     """
     Distingue ambiente local sem OCI configurado de falhas reais de credencial/chave
     ou de modo estrito OCI_OBRIGATORIO=true (EF v1.2 RF-28, RF-30, §12 e §16.10).
+    Apenas entra em modo simulado se nenhuma credencial tiver sido fornecida.
+    Se houver credenciais parciais preenchidas, retorna False para sinalizar falha real sanitizada.
     """
     if os.getenv("OCI_OBRIGATORIO", "false").strip().lower() in ("true", "1"):
         return False
@@ -137,7 +148,7 @@ def _eh_ausencia_credenciais_oci(err: Exception) -> bool:
         for item in msg.partition(":")[2].split(",")
         if item.strip()
     }
-    return {"OCI_USER_OCID", "OCI_KEY_FILE"}.issubset(faltantes)
+    return CAMPOS_OCI_CREDENCIAIS.issubset(faltantes)
 
 
 def executar_persistencia_triagem(
@@ -221,27 +232,48 @@ def executar_persistencia_triagem(
     else:
         json_bytes = bytes(dados_triagem_json)
 
-    # 4. Gravação OCI Independente (Original + Resultado) — falha em qualquer um invalida confirmação
-    falha_original = False
+    # 4. Gravação do Original no OCI (se falhar, aborta imediatamente para não gravar resultado com falso sucesso)
     if not conteudo_original_bytes:
         logger.error(
             "Falha ao persistir original no OCI: conteúdo binário ausente para documento %s.",
             documento_id,
         )
-        falha_original = True
-    else:
-        try:
-            _enviar_com_conferencia_412(
-                cliente_storage=cliente_storage,
-                caminho=caminho_original,
-                conteudo=conteudo_original_bytes,
-                tipo_conteudo=mime_original,
-            )
-        except Exception as err_orig:
-            _registrar_erro_interno_oci(f"documento original ({caminho_original})", err_orig)
-            falha_original = True
+        return {
+            "status_backup": "falha",
+            "modo_simulacao": False,
+            "bucket": bucket_atual,
+            "caminho_objeto": None,
+            "caminho_alvo": caminho_resultado_alvo,
+            "caminho_original": caminho_original,
+            "etag": None,
+            "erro": MENSAGEM_PUBLICA_FALHA_OCI,
+            "detalhes": MENSAGEM_PUBLICA_FALHA_OCI,
+            "evento_linha_do_tempo": "Falha ao persistir documento original no OCI Object Storage.",
+        }
 
-    falha_resultado = False
+    try:
+        _enviar_com_conferencia_412(
+            cliente_storage=cliente_storage,
+            caminho=caminho_original,
+            conteudo=conteudo_original_bytes,
+            tipo_conteudo=mime_original,
+        )
+    except Exception as err_orig:
+        _registrar_erro_interno_oci(f"documento original ({caminho_original})", err_orig)
+        return {
+            "status_backup": "falha",
+            "modo_simulacao": False,
+            "bucket": bucket_atual,
+            "caminho_objeto": None,
+            "caminho_alvo": caminho_resultado_alvo,
+            "caminho_original": caminho_original,
+            "etag": None,
+            "erro": MENSAGEM_PUBLICA_FALHA_OCI,
+            "detalhes": MENSAGEM_PUBLICA_FALHA_OCI,
+            "evento_linha_do_tempo": "Falha ao confirmar a gravação do original no OCI Object Storage.",
+        }
+
+    # 5. Gravação do Resultado JSON (somente executado após confirmação íntegra do original)
     etag: Optional[str] = None
     try:
         resposta = _enviar_com_conferencia_412(
@@ -253,9 +285,6 @@ def executar_persistencia_triagem(
         etag = resposta.get("etag") if isinstance(resposta, dict) else None
     except Exception as err_res:
         _registrar_erro_interno_oci(f"resultado ({caminho_resultado_alvo})", err_res)
-        falha_resultado = True
-
-    if falha_original or falha_resultado:
         return {
             "status_backup": "falha",
             "modo_simulacao": False,

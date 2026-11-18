@@ -89,23 +89,15 @@ def test_persistencia_oci_sucesso_envia_original_e_resultado_com_etag():
 
 
 def test_persistencia_oci_falha_no_original_mesmo_com_json_salvo_retorna_falha(caplog):
-    """Se o envio do documento original falhar, o resultado NUNCA pode ser sucesso, mesmo se o JSON gravar."""
+    """Se o envio do documento original falhar, o resultado NUNCA pode ser sucesso, e a gravação do JSON é abortada."""
     storage_mock = Mock()
     storage_mock.bucket = "mediflow-documentos"
-    storage_mock.enviar_bytes.side_effect = [
-        oci.exceptions.ServiceError(
-            status=503,
-            code="ServiceUnavailable",
-            headers={"opc-request-id": "req-orig-503"},
-            message="OCI bucket temporarily unavailable.",
-        ),
-        {
-            "bucket": "mediflow-documentos",
-            "caminho_objeto": "processados/DOC-001/resultado.json",
-            "etag": "etag-json-ok",
-            "status_backup": "sucesso",
-        },
-    ]
+    storage_mock.enviar_bytes.side_effect = oci.exceptions.ServiceError(
+        status=503,
+        code="ServiceUnavailable",
+        headers={"opc-request-id": "req-orig-503"},
+        message="OCI bucket temporarily unavailable.",
+    )
 
     with caplog.at_level(logging.ERROR, logger="mediflow.app.oci_persistence"):
         resultado = executar_persistencia_triagem(
@@ -125,6 +117,43 @@ def test_persistencia_oci_falha_no_original_mesmo_com_json_salvo_retorna_falha(c
     assert "req-orig-503" not in resultado["erro"]
     assert "ServiceUnavailable" not in resultado["detalhes"]
     assert "req-orig-503" in caplog.text
+    # Garante atomicidade: falha no original impede chamada para gravar resultado.json
+    assert storage_mock.enviar_bytes.call_count == 1
+    assert storage_mock.enviar_bytes.call_args[0][0] == "recebidos/DOC-001/original.txt"
+
+
+def test_persistencia_oci_falha_original_impede_gravacao_de_resultado_com_falso_sucesso_no_bucket():
+    """Garante que se o original falhar, nenhum resultado.json é gravado no bucket com falso sucesso."""
+    storage_mock = Mock()
+    storage_mock.bucket = "mediflow-documentos"
+    storage_mock.enviar_bytes.side_effect = RuntimeError("Falha de rede ao gravar original")
+
+    payload_candidato = {
+        "status": "PROCESSADO",
+        "documento_id": "DOC-FAIL-ORIG",
+        "armazenamento_oci": {
+            "bucket": "mediflow-documentos",
+            "caminho_objeto": "processados/DOC-FAIL-ORIG/resultado.json",
+            "status_backup": "sucesso",
+            "modo_simulacao": False,
+        },
+    }
+
+    resultado = executar_persistencia_triagem(
+        documento_id="DOC-FAIL-ORIG",
+        nome_arquivo="receita.txt",
+        conteudo_original_bytes=b"Conteudo original",
+        dados_triagem_json=payload_candidato,
+        caminho_resultado_alvo="processados/DOC-FAIL-ORIG/resultado.json",
+        storage=storage_mock,
+        forcar_simulado=False,
+    )
+
+    assert resultado["status_backup"] == "falha"
+    assert storage_mock.enviar_bytes.call_count == 1
+    assert storage_mock.enviar_bytes.call_args[0][0] == "recebidos/DOC-FAIL-ORIG/original.txt"
+    caminhos_totais = [call[0][0] for call in storage_mock.enviar_bytes.call_args_list]
+    assert "processados/DOC-FAIL-ORIG/resultado.json" not in caminhos_totais
 
 
 def test_persistencia_oci_original_412_conteudo_identico_confirma_idempotencia():
@@ -164,23 +193,15 @@ def test_persistencia_oci_original_412_conteudo_identico_confirma_idempotencia()
 
 
 def test_persistencia_oci_original_412_conteudo_divergente_retorna_falha(caplog):
-    """Em HTTP 412 no original, se o conteúdo no bucket divergir do enviado, deve sinalizar falha."""
+    """Em HTTP 412 no original, se o conteúdo no bucket divergir do enviado, deve sinalizar falha e abortar."""
     storage_mock = Mock()
     storage_mock.bucket = "mediflow-documentos"
-    storage_mock.enviar_bytes.side_effect = [
-        oci.exceptions.ServiceError(
-            status=412,
-            code="IfNoneMatchFailed",
-            headers={"opc-request-id": "req-412-div"},
-            message="Entity tag did not match.",
-        ),
-        {
-            "bucket": "mediflow-documentos",
-            "caminho_objeto": "processados/DOC-001/resultado.json",
-            "etag": "etag-res-ok",
-            "status_backup": "sucesso",
-        },
-    ]
+    storage_mock.enviar_bytes.side_effect = oci.exceptions.ServiceError(
+        status=412,
+        code="IfNoneMatchFailed",
+        headers={"opc-request-id": "req-412-div"},
+        message="Entity tag did not match.",
+    )
     storage_mock.ler_bytes.return_value = b"OUTRO CONTEUDO DIVERGENTE"
 
     with caplog.at_level(logging.ERROR, logger="mediflow.app.oci_persistence"):
@@ -198,6 +219,7 @@ def test_persistencia_oci_original_412_conteudo_divergente_retorna_falha(caplog)
     assert resultado["caminho_objeto"] is None
     assert resultado["erro"] == MENSAGEM_PUBLICA_FALHA_OCI
     assert "diverge" in caplog.text
+    assert storage_mock.enviar_bytes.call_count == 1
 
 
 def test_persistencia_oci_falha_412_sanitiza_mensagem_publica_e_mantem_detalhe_no_log(caplog):
@@ -235,10 +257,12 @@ def test_persistencia_oci_falha_412_sanitiza_mensagem_publica_e_mantem_detalhe_n
 
 
 def test_persistencia_oci_sem_credenciais_retorna_modo_simulado_sem_vazar_env():
-    """Quando o OCI não está configurado no .env, sinaliza modo_simulacao=True sem expor variáveis internas."""
+    """Quando o OCI não está configurado no .env (ausência total), opera em modo simulado sem expor variáveis internas."""
     with patch(
         "src.storage.oci_storage.OCIStorage.das_configuracoes",
-        side_effect=ValueError("Preencha no .env: OCI_USER_OCID, OCI_KEY_FILE"),
+        side_effect=ValueError(
+            "Preencha no .env: OCI_USER_OCID, OCI_TENANCY_OCID, OCI_FINGERPRINT, OCI_KEY_FILE, OCI_NAMESPACE"
+        ),
     ):
         resultado = executar_persistencia_triagem(
             documento_id="DOC-002",
@@ -282,7 +306,9 @@ def test_persistencia_oci_obrigatorio_ativo_sem_credenciais_retorna_falha(monkey
     monkeypatch.setenv("OCI_OBRIGATORIO", "true")
     with patch(
         "src.storage.oci_storage.OCIStorage.das_configuracoes",
-        side_effect=ValueError("Preencha no .env: OCI_USER_OCID, OCI_KEY_FILE"),
+        side_effect=ValueError(
+            "Preencha no .env: OCI_USER_OCID, OCI_TENANCY_OCID, OCI_FINGERPRINT, OCI_KEY_FILE, OCI_NAMESPACE"
+        ),
     ):
         resultado = executar_persistencia_triagem(
             documento_id="DOC-OBRIG-01",
@@ -299,6 +325,32 @@ def test_persistencia_oci_obrigatorio_ativo_sem_credenciais_retorna_falha(monkey
     assert resultado["caminho_objeto"] is None
     assert resultado["erro"] == MENSAGEM_PUBLICA_FALHA_OCI
     assert "OCI_USER_OCID" not in resultado["erro"]
+
+
+def test_persistencia_oci_credenciais_parciais_sem_user_e_sem_key_file_retorna_falha_sanitizada(caplog):
+    """Com OCI_OBRIGATORIO=false, se faltarem OCI_USER_OCID e OCI_KEY_FILE mas outros campos existirem, retorna falha."""
+    with caplog.at_level(logging.ERROR, logger="mediflow.app.oci_persistence"):
+        with patch(
+            "src.storage.oci_storage.OCIStorage.das_configuracoes",
+            side_effect=ValueError("Preencha no .env: OCI_USER_OCID, OCI_KEY_FILE"),
+        ):
+            resultado = executar_persistencia_triagem(
+                documento_id="DOC-PARCIAL-02",
+                nome_arquivo="laudo.pdf",
+                conteudo_original_bytes=b"%PDF-1.4",
+                dados_triagem_json={"status": "PROCESSADO", "documento_id": "DOC-PARCIAL-02"},
+                caminho_resultado_alvo="processados/DOC-PARCIAL-02/resultado.json",
+                storage=None,
+                forcar_simulado=False,
+            )
+
+    assert resultado["status_backup"] == "falha"
+    assert resultado["modo_simulacao"] is False
+    assert resultado["caminho_objeto"] is None
+    assert resultado["erro"] == MENSAGEM_PUBLICA_FALHA_OCI
+    assert "OCI_USER_OCID" not in resultado["erro"]
+    assert "OCI_KEY_FILE" not in resultado["erro"]
+    assert "OCI_USER_OCID" in caplog.text
 
 
 def test_persistencia_oci_chave_inexistente_ou_config_parcial_retorna_falha_sanitizada(caplog):
