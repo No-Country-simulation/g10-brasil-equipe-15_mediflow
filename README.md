@@ -12,7 +12,7 @@
     <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/Pydantic-v2-E92063?style=for-the-badge&logo=pydantic&logoColor=white" alt="Pydantic v2"></a>
     <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/Google%20Gemini-AI-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Google Gemini"></a>
     <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/OCI-Always%20Free-F80000?style=for-the-badge&logo=oracle&logoColor=white" alt="OCI Always Free"></a>
-    <a href="#2%EF%B8%8F%E2%83%A3-executar-a-bateria-de-304-testes-automatizados"><img src="https://img.shields.io/badge/Pytest-304%20passed-brightgreen?style=for-the-badge&logo=pytest&logoColor=white" alt="304 Testes Pytest"></a>
+    <a href="#testes-automatizados"><img src="https://img.shields.io/badge/Pytest-Testes%20automatizados-blue?style=for-the-badge&logo=pytest&logoColor=white" alt="Testes automatizados com Pytest"></a>
     <a href="#-status-do-projeto"><img src="https://img.shields.io/badge/Status-Em%20Desenvolvimento-yellow?style=for-the-badge&logo=github&logoColor=white" alt="Status"></a>
   </p>
 
@@ -33,7 +33,7 @@
 </div>
 
 > [!NOTE]
-> **Hackathon ONE G10 - BRASIL**: O **MediFlow** foi desenvolvido para eliminar gargalos de digitação e triagem manual em hospitais e operadoras de saúde, reduzindo o tempo de atendimento de **15 minutos para menos de 5 segundos** por documento.
+> **Hackathon ONE G10 - BRASIL**: O **MediFlow** foi desenvolvido para apoiar a triagem de documentos clínicos com extração estruturada e roteamento automatizado. O tempo de processamento depende do documento, do modelo de IA e da disponibilidade dos serviços. As medições da versão da entrega serão registradas nas evidências de QA.
 
 ---
 
@@ -72,7 +72,7 @@ O ciclo de vida do documento no **MediFlow** é totalmente desacoplado e assínc
 ```mermaid
 flowchart TD
     subgraph INGESTION["1. Ingestão & API REST"]
-        A["🖥️ Clientes Web & Interfaces<br/>(React SPA / Streamlit HiTL)"] -->|POST /api/v1/triagens| B["⚡ FastAPI Server"]
+        A["🖥️ Portal React SPA"] -->|POST /api/v1/triagens| B["⚡ FastAPI Server"]
         B -->|HTTP 202 Accepted| A
     end
 
@@ -81,7 +81,7 @@ flowchart TD
     end
 
     subgraph AI_ENGINE["3. Inteligência Multimodal (GeminiService)"]
-        B -->|Background Task| D["🧠 Google Gemini Multimodal<br/>(3.8 Flash & 3.5 Flash-Lite)"]
+        B -->|Background Task| D["🧠 Google Gemini Multimodal<br/>(Flash-Lite principal / Flash alternativo)"]
         D -->|Extração de Entidades| E["📋 Pydantic v2 Contract<br/>(src/schemas/clinical.py)"]
     end
 
@@ -98,7 +98,7 @@ flowchart TD
         G1 --> H1[("☁️ OCI Storage<br/>/auditoria_humana")]
         GM --> H1
         G2 --> H2[("☁️ OCI Storage<br/>/processados/urgentes")]
-        G3 --> H3[("☁️ OCI Storage<br/>/processados/rotina")]
+        G3 --> H3[("☁️ OCI Storage<br/>/processados")]
     end
 
     style F fill:#FFF3CD,stroke:#FFE8A1,stroke-width:2px
@@ -107,6 +107,8 @@ flowchart TD
     style G1 fill:#E2E3E5,stroke:#D6D8DB,stroke-width:2px
     style G3 fill:#D4EDDA,stroke:#C3E6CB,stroke-width:2px
 ```
+
+O diagrama representa o fluxo da API consumida pelo React. A bancada Streamlit executa a ingestão e o pipeline diretamente no processo Python. O fluxo detalhado está no [Guia de Arquitetura](ARQUITETURA.md).
 
 ---
 
@@ -117,7 +119,7 @@ Testamos a robustez do **MediFlow** através dos 3 cenários clínicos obrigató
 | Cenário | Tipo de Documento | Score Extraído | Destino Atribuído | Status Resultante |
 | :--- | :--- | :---: | :--- | :---: |
 | **1. Rotina** | RX de Tórax Normal | `0.94` (High) | `PRONTUARIO_ELETRONICO` | <mark>🟢 PROCESSADO</mark> |
-| **2. Urgência** | Angiotomografia (TEP Agudo - CID I26.9) | `0.98` (High) | `FILA_URGENCIA_MEDICA` | <mark>🚨 URGENTE (ALERTA)</mark> |
+| **2. Urgência** | Angiotomografia (TEP Agudo - CID I26.9) | `0.98` (High) | `FILA_URGENCIA_MEDICA` | <mark>🚨 PROCESSADO — prioridade URGENTE, com alerta simulado</mark> |
 | **3. Ambíguo** | Receita Manuscrita Rasurada | `0.65` (Low) | `FILA_REVISAO_HUMANA` | <mark>🟡 EM_REVISAO</mark> |
 
 ---
@@ -133,37 +135,43 @@ Testamos a robustez do **MediFlow** através dos 3 cenários clínicos obrigató
 <br>
 
 ### `POST /api/v1/triagens`
-* **Descrição:** Envia um arquivo (PDF, Imagem, TXT) para triagem assíncrona.
+* **Descrição:** Envia texto clínico em JSON ou arquivo (PDF, imagem ou TXT) em multipart para triagem assíncrona.
 * **Resposta de Sucesso (`HTTP 202 Accepted`):**
 ```json
 {
-  "documento_id": "DOC-8F31A92B",
+  "documento_id": "DOC-CLIN-2026-8F31A92B",
   "status": "RECEBIDO",
-  "mensagem": "Documento recebido e enviado para processamento assíncrono.",
-  "timestamp": "2026-10-20T08:00:00Z"
+  "status_url": "/api/v1/triagens/DOC-CLIN-2026-8F31A92B/status",
+  "historico_url": "/api/v1/triagens/DOC-CLIN-2026-8F31A92B/historico",
+  "mensagem": "Documento textual aceito e enfileirado para processamento."
 }
 ```
 
 ### `GET /api/v1/triagens/{documento_id}`
-* **Descrição:** Consulta o status do processamento e obtém o payload JSON final.
-* **Resposta de Sucesso (`HTTP 200 OK`):**
+* **Descrição:** Retorna o resultado completo da triagem. Consulte esta rota após `GET /api/v1/triagens/{documento_id}/status` informar `concluido: true`.
+* **Exemplo resumido da resposta (`HTTP 200 OK`):**
+
 ```json
 {
-  "documento_id": "DOC-8F31A92B",
+  "documento_id": "DOC-CLIN-2026-8F31A92B",
   "status": "PROCESSADO",
   "classificacao": {
-    "categoria": "LAUDO_EXAME_IMAGEM",
-    "prioridade": "ROTINA"
+    "tipo_documento": "LAUDO_EXAME_IMAGEM",
+    "nivel_prioridade": "ROTINA"
   },
   "qualidade": {
     "score_combinado": 0.94,
-    "requer_auditoria_humana": false
+    "limiar_aplicado": 0.85
   },
   "decisao_roteamento": {
-    "destinos": ["PRONTUARIO_ELETRONICO"]
+    "destino_principal": "PRONTUARIO_ELETRONICO",
+    "destinos": ["PRONTUARIO_ELETRONICO"],
+    "requer_auditoria_humana": false
   }
 }
 ```
+
+A resposta completa segue o contrato `TriagemMediFlow`. O campo `status` informa o resultado funcional, inclusive estados de erro retornados com HTTP `200`. Consulte o [Guia de Integração da API](docs/GUIA_INTEGRACAO_API.md) para o contrato completo.
 
 </details>
 
@@ -184,29 +192,29 @@ g10-brasil-equipe-15_mediflow/
 │   ├── ingestion/                              # Ingestão blindada (10MB, 20 págs, sanitização de PDF/TXT/Imagens)
 │   ├── schemas/                                # Contrato Canônico Pydantic v2 (clinical.py)
 │   ├── services/                               # Serviços de Integração (GeminiService com REST e timeout 30s)
-│   │   └── gemini_service.py                   # Integração estruturada Pydantic com duplo fallback (3.8 Flash + 3.5 Lite)
+│   │   └── gemini_service.py                   # Integração Gemini com Flash-Lite principal, Flash alternativo e fallback local
 │   ├── storage/                                # Conector OCI Object Storage Always Free (oci_storage.py)
 │   ├── workflow/                               # Grafo de Decisão Clínica LangGraph (StateGraph)
 │   └── config.py                               # Configurações globais e variáveis de ambiente
 ├── scripts/                                    # Utilitários de homologação e scripts de diagnóstico
 │   ├── testar_simulacao_oci.py                 # Validação da simulação de falhas OCI do catálogo EPT v1.0 (§12)
 │   └── testar_oci.py                           # Validação real ponta a ponta no bucket OCI Always Free
-├── tests/                                      # Suíte Oficial Pytest com 304 testes automatizados
+├── tests/                                      # Testes automatizados com Pytest
 │   ├── fixtures/                               # 79 fixtures canônicos (demo, catalogo, manifest.csv)
-│   ├── test_workflow.py                        # 85 testes de roteamento e arestas LangGraph
-│   ├── test_contrato_fixtures.py               # 79 testes de regras R1 a R8 e ponto fixo
-│   ├── test_api.py                             # 40 testes de endpoints REST FastAPI e EPT
-│   ├── test_extraction_adapter.py              # 18 testes do adaptador de envelopes de extração
-│   ├── test_ingestion.py                       # 18 testes de arquivos físicos e limites de segurança
-│   ├── test_gemini_service.py                  # 11 testes unitários do GeminiService (REST, timeout 30s e fallback)
-│   ├── test_gemini_workflow_adapter.py         # 11 testes de integração GeminiService x Workflow
-│   ├── test_audit_items.py                     # 8 testes dedicados de auditoria técnica e sanidade
-│   ├── test_oci_storage.py                     # 8 testes de persistência OCI com SDK simulado (mock)
-│   ├── test_schemas.py                         # 7 testes de validação Pydantic v2
-│   ├── test_streamlit_pipeline.py              # 6 testes do pipeline Streamlit preservando sinais
-│   ├── test_gemini_prioridades_dosagem.py      # 5 testes de prioridades e dosagens na extração
-│   ├── test_exemplos_extracao_workflow.py      # 4 testes dos exemplos oficiais no workflow
-│   └── test_pr13_persistencia_pendente.py      # 4 testes de persistência pendente e retentativa OCI
+│   ├── test_workflow.py                        # Roteamento e arestas LangGraph
+│   ├── test_contrato_fixtures.py               # Contratos das fixtures e regras R1 a R8
+│   ├── test_api.py                            # Endpoints REST FastAPI e EPT
+│   ├── test_extraction_adapter.py             # Adaptação de envelopes de extração
+│   ├── test_ingestion.py                      # Formatos, limites e rejeições de arquivos
+│   ├── test_gemini_service.py                 # GeminiService, transporte REST, timeout e fallback
+│   ├── test_gemini_workflow_adapter.py        # Integração entre GeminiService e workflow
+│   ├── test_audit_items.py                    # Auditoria técnica e sanidade
+│   ├── test_oci_storage.py                    # Persistência OCI com SDK simulado
+│   ├── test_schemas.py                        # Validação Pydantic v2
+│   ├── test_streamlit_pipeline.py             # Pipeline Streamlit e preservação de sinais
+│   ├── test_gemini_prioridades_dosagem.py      # Prioridades e dosagens na extração
+│   ├── test_exemplos_extracao_workflow.py      # Exemplos de extração no workflow
+│   └── test_pr13_persistencia_pendente.py     # Persistência pendente e retentativa OCI
 ├── testar_gemini.py                            # Script de validação manual da IA com Google Gemini
 ├── frontend/                                   # (Recomendado) Portal Web Corporativo (React SPA - Giovane Brandino)
 ├── ARQUITETURA.md                              # Especificação Técnica Oficial da Arquitetura
@@ -224,11 +232,11 @@ g10-brasil-equipe-15_mediflow/
 
 | Integrante | Função / Papel no Projeto | Especialidade & Atuação |
 | :--- | :--- | :--- |
-| **Luciana Freitag** | 👑 AI Engineer (Líder) | Pydantic Schemas, System Prompts & GeminiService |
-| **Giovane Brandino** | 🎨 Frontend Lead & Developer | Portal Web Corporativo em React SPA, Wireframes & UX |
-| **Iza Paloma M. Coelho** | ☁️ Cloud & AI Agent Lead | OCI Object Storage Always Free, LangGraph & Grafo Condicional |
-| **Cristiano Oliveira** | ⚙️ Backend Architect & Developer | API REST FastAPI Assíncrona, Ingestão & Notificações |
-| **William** | 🧪 QA & Requirements Lead | Especificação Funcional v1.0 & Suíte de 304 Testes Pytest |
+| **Luciana Freitag** | 👑 Líder do projeto e de Engenharia de IA | GeminiService multimodal, schemas Pydantic, prompts, fallbacks e testes de extração. |
+| **Giovane Brandino** | 🎨 Líder e desenvolvedor de frontend | Portal React, telas de envio, acompanhamento, filas e resultado, modo demo e integração com a API. |
+| **Iza Paloma M. Coelho** | ☁️ Líder de Agentes de IA e Nuvem | Grafo de decisão em LangGraph, adaptação da extração do Gemini ao workflow, conector OCI, persistência e recuperação do histórico, testes no bucket real e segregação dos resultados por status. |
+| **Cristiano Oliveira** | ⚙️ Arquiteto e desenvolvedor de backend | Arquitetura, API REST assíncrona em FastAPI, ingestão, integração do Gemini e do LangGraph à API, tratamento de falhas e retentativas de persistência. |
+| **William** | 🧪 Líder de QA e Requisitos | Especificação Funcional v1.2, análise de requisitos, plano de testes, fixtures e critérios de validação. |
 
 </div>
 
@@ -255,7 +263,8 @@ cp .env.example .env
 > - `LIMIAR_CONFIANCA`: Ponto de corte do score de confiança combinado (padrão `0.85`). Documentos com score abaixo desse valor são retidos compulsoriamente em `EM_REVISAO` (`FILA_REVISAO_HUMANA`), e o valor aplicado é retornado pela API em `qualidade.limiar_aplicado`.
 > - Credenciais OCI (opcionais em modo demo/simulação local).
 
-### 2️⃣ Executar a Bateria de 304 Testes Automatizados
+<a id="testes-automatizados"></a>
+### 2️⃣ Executar os testes automatizados
 ```bash
 python -m pytest
 ```
