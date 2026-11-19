@@ -233,12 +233,24 @@ def test_servico_nao_declara_extracao_valida_com_cid_conflitante():
         ("29 anos", 29),
         (" 29 ANOS ", 29),
         ("1 ano", 1),
+        ("45a", 45),
+        ("45 a", 45),
+        ("45 a.", 45),
+        ("45a.", 45),
+        ("45 anos.", 45),
+        ("1 ano.", 1),
     ],
     ids=[
         "numero-textual",
         "idade-com-anos",
         "espacos-e-maiusculas",
         "ano-singular",
+        "abreviacao-compacta",
+        "abreviacao-com-espaco",
+        "abreviacao-com-ponto",
+        "abreviacao-compacta-com-ponto",
+        "anos-com-ponto",
+        "ano-singular-com-ponto",
     ],
 )
 def test_normaliza_idade_textual_inequivoca(
@@ -273,6 +285,9 @@ def test_normaliza_idade_textual_inequivoca(
         "-5",
         "29.5 anos",
         "aproximadamente 29 anos",
+        "45.",
+        "45 dias",
+        "~45a",
     ],
     ids=[
         "idades-alternativas",
@@ -280,6 +295,9 @@ def test_normaliza_idade_textual_inequivoca(
         "numero-negativo",
         "numero-decimal",
         "idade-aproximada",
+        "numero-com-ponto-sem-unidade",
+        "idade-em-dias",
+        "abreviacao-aproximada",
     ],
 )
 def test_sinaliza_idade_textual_invalida_sem_escolher_numero(idade):
@@ -354,3 +372,119 @@ def test_normaliza_aliases_de_hipotese_e_descricoes_vazias(payload, esperado):
 def test_rejeita_hipoteses_diagnosticas_conflitantes(payload):
     with pytest.raises(ValueError, match="Diagnósticos conflitantes"):
         modulo.normalizar_payload_extracao(payload)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"diagnostico": "Faringite", "cid": "J02", "cid_extraido": "J06"},
+        {"diagnostico": "Faringite", "cid_extraido": "J02", "cid_sugerido": "J06"},
+        {"diagnostico_principal": "Faringite", "cid": "J02", "cid_sugerido": "J06"},
+        {"cid": "J02", "cid_extraido": "J06"},
+    ],
+    ids=[
+        "texto-cid-e-cid-extraido",
+        "texto-cid-extraido-e-cid-sugerido",
+        "alias-diagnostico-cid-e-cid-sugerido",
+        "sem-diagnostico-cids-raiz",
+    ],
+)
+def test_rejeita_cids_conflitantes_com_diagnostico_textual(payload):
+    original = deepcopy(payload)
+
+    with pytest.raises(ValueError, match="CIDs conflitantes na resposta."):
+        modulo.normalizar_payload_extracao(payload)
+
+    assert payload == original
+
+
+def test_rejeita_cid_nao_textual_com_diagnostico_textual():
+    payload = {"diagnostico": "Faringite", "cid": ["J02"]}
+    original = deepcopy(payload)
+
+    with pytest.raises(ValueError, match="CID deve ser texto ou null."):
+        modulo.normalizar_payload_extracao(payload)
+
+    assert payload == original
+
+
+@pytest.mark.parametrize(
+    ("payload", "cid_esperado"),
+    [
+        ({"diagnostico": "Faringite", "cid_extraido": "   "}, None),
+        ({"diagnostico": "Faringite", "cid": "", "cid_extraido": " J02 "}, "J02"),
+        ({"diagnostico": "Faringite", "cid": "J02", "cid_extraido": "J02"}, "J02"),
+    ],
+    ids=[
+        "cid-espacos-vira-none",
+        "cid-vazio-preserva-cid-extraido-valido",
+        "cids-textuais-identicos",
+    ],
+)
+def test_normaliza_cid_com_diagnostico_textual(payload, cid_esperado):
+    original = deepcopy(payload)
+
+    normalizado = modulo.normalizar_payload_extracao(payload)
+    dados = modulo.DadosClinicosExtraidos.model_validate(normalizado)
+
+    assert normalizado["cid"] == cid_esperado
+    assert dados.cid == cid_esperado
+    assert payload == original
+
+
+def test_servico_preserva_entidades_clinicas_com_idade_em_meses():
+    payload = {
+        "paciente": {
+            "nome": "Bebê Fictício",
+            "idade": "4 meses",
+        },
+        "medico": {
+            "nome": "Dra. Ana Fictícia",
+            "crm": {"numero": "123456", "uf": "SP"},
+        },
+        "diagnostico_principal": "Bronquiolite aguda",
+        "cid_extraido": "J21.9",
+        "medicamentos": [
+            {
+                "nome": "Solução fisiológica 0,9%",
+                "dosagem": "5 mL",
+                "frequencia": "6/6h",
+            }
+        ],
+        "urgencia": "SIM",
+        "score_confianca_extracao": 0.92,
+        "campos_incertos": [],
+        "conflitos": [],
+    }
+
+    with patch.object(modulo, "genai") as sdk:
+        modelo = sdk.GenerativeModel.return_value
+        modelo.generate_content.return_value.text = json.dumps(payload)
+
+        servico = modulo.GeminiService(
+            api_key="chave-ficticia",
+            model_name="modelo-ficticio",
+        )
+
+        with patch.object(
+            servico,
+            "_fallback_envelope",
+            side_effect=AssertionError("Não deveria usar fallback."),
+        ):
+            envelope = servico.extrair_dados_clinicos_envelope(
+                conteudo_texto="Documento exclusivamente fictício."
+            )
+
+    dados = envelope["dados_clinicos"]
+
+    assert dados.paciente.nome == "Bebê Fictício"
+    assert dados.paciente.idade is None
+    assert dados.medico.nome == "Dra. Ana Fictícia"
+    assert dados.medico.crm.numero == "123456"
+    assert dados.medico.crm.uf == "SP"
+    assert dados.diagnostico == "Bronquiolite aguda"
+    assert dados.cid == "J21.9"
+    assert len(dados.medicamentos) == 1
+    assert dados.medicamentos[0].nome == "Solução fisiológica 0,9%"
+    assert envelope["urgencia"] == "SIM"
+    assert envelope["campos_incertos"] == ["paciente.idade"]
