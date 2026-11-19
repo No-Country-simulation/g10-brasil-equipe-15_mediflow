@@ -34,7 +34,7 @@ from src.app.quality_indicator import (
     montar_triagem_erro_processamento,
 )
 from src.app.triage_pipeline import processar_documento_com_agente
-from src.ingestion import DocumentLoader, IngestaoError, resolver_mime_type
+from src.ingestion import DocumentLoader, IngestaoError, TamanhoExcedidoError, resolver_mime_type
 from src.schemas import (
     Classificacao,
     ClassificacaoClinica,
@@ -418,10 +418,22 @@ with st.sidebar:
                 )
             except IngestaoError as e:
                 logger.warning("Rejeição na borda (%s) para '%s': %s", e.codigo, uploaded_file.name, e.mensagem)
-                msg_borda = MENSAGENS_BORDA_INGESTAO.get(
-                    e.codigo,
-                    "Não foi possível validar o arquivo na ingestão. Verifique o formato e a integridade do documento e tente novamente.",
-                )
+                if isinstance(e, TamanhoExcedidoError) and e.total_paginas is not None:
+                    limite_pag = e.limite_paginas or DocumentLoader.LIMITE_MAXIMO_PAGINAS
+                    msg_borda = (
+                        f"O documento PDF possui {e.total_paginas} páginas e excede o limite de "
+                        f"{limite_pag} páginas configurado para o MVP. Envie um documento menor ou dividido."
+                    )
+                elif isinstance(e, TamanhoExcedidoError) and e.tamanho_bytes is not None:
+                    msg_borda = (
+                        "O arquivo excede o limite de 10 MB configurado para o MVP. "
+                        "Envie um documento menor ou comprimido."
+                    )
+                else:
+                    msg_borda = MENSAGENS_BORDA_INGESTAO.get(
+                        e.codigo,
+                        "Não foi possível validar o arquivo na ingestão. Verifique o formato e a integridade do documento e tente novamente.",
+                    )
                 st.error(f"Rejeição na borda (`{e.codigo}`): {msg_borda}", title="Arquivo Inválido")
             except Exception as err_leitura:
                 logger.warning("Falha de leitura na ingestão para '%s': %s", uploaded_file.name, err_leitura)
