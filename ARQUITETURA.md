@@ -4,7 +4,7 @@
 > **Projeto 2:** Agente Autônomo para Triagem, Extração e Roteamento de Documentos Clínicos  
 > **Equipe 15:** MediFlow  
 > **Manual Oficial de Referência:** `34aa946f-2883-4917-aec1-aae0df0f43d1.pdf`  
-> **Implementação Central:** [`src/schemas/clinical.py`](src/schemas/clinical.py) | **Suíte de Testes:** 304 testes automatizados via Pytest (base `develop`)  
+> **Implementação Central:** [`src/schemas/clinical.py`](src/schemas/clinical.py) | **Suíte de Testes:** testes automatizados com Pytest; execuções de referência na seção 7
 
 ---
 
@@ -21,7 +21,7 @@ O **MediFlow** é um agente autônomo inteligente projetado para os setores de *
 | **Extração Estruturada com LLM Multimodal** | Extração de entidades clínicas via Google Gemini (modelos `gemini-3.8-flash` e `gemini-3.5-flash-lite`) com *Structured Outputs* nativos via Pydantic v2: Paciente, Médico/CRM com UF paulista/nacional, Diagnóstico/CID-10, Medicamentos (nome, dose, frequência), Exames/Analitos laboratoriais (RF-12) e declaração de urgência. Inclui resiliência REST, timeout de 30s e duplo fallback seguro. | [`src/services/gemini_service.py`](src/services/gemini_service.py), [`src/agents/`](src/agents/) & [`src/schemas/clinical.py`](src/schemas/clinical.py) |
 | **Grafo de Decisão Condicional (LangGraph)** | Grafo de estados (`StateGraph`) com nós de extração, validação de regras clínicas e arestas condicionais de roteamento para 5 departamentos. | [`src/workflow/`](src/workflow/) |
 | **Tratamento de Urgências e Human-in-the-Loop** | Notificação imediata para a equipe de plantão em casos urgentes e retenção obrigatória em fila de auditoria humana (*Human-in-the-Loop*) em caso de ambiguidade, rasura, campo vital ausente ou score $< 0.85$. | [`src/workflow/graph.py`](src/workflow/graph.py) |
-| **Persistência OCI Object Storage (Always Free)** | Organização e segregação de arquivos e metadados em buckets gratuitos da nuvem Oracle (`/recebidos`, `/processados/urgentes`, `/processados/rotina`, `/auditoria_humana`). | [`src/storage/`](src/storage/) |
+| **Persistência OCI Object Storage (Always Free)** | Organização e segregação de arquivos e metadados em buckets gratuitos da nuvem Oracle (`/recebidos`, `/processados/urgentes`, `/processados`, `/auditoria_humana`). | [`src/storage/`](src/storage/) |
 | **Demonstração dos 3 Cenários Obrigatórios** | Cobertura comprovada por testes e dados sintéticos: (1) Fluxo Padrão de Rotina, (2) Urgência Médica (TEP Agudo), (3) Caso Ambíguo para Revisão Humana. | [`tests/fixtures/demo/`](tests/fixtures/demo/) |
 | **Diferenciais Implementados** | Interface web em Streamlit para Human-in-the-Loop, validação determinística de conflitos clínicos e governança com 79 fixtures oficiais. | [`src/app/`](src/app/), [`src/workflow/graph.py`](src/workflow/graph.py) & [`src/schemas/clinical.py`](src/schemas/clinical.py) |
 
@@ -50,9 +50,9 @@ flowchart TD
         ERR_GATEWAY["Nível 1: ErroResposta<br/>(HTTP 400 / 413 / 415)"]
     end
 
-    subgraph AI_CORE["🤖 Camada 2: Inteligência Multimodal (Gemini 3.8 Flash & 3.5 Flash-Lite)"]
+    subgraph AI_CORE["🤖 Camada 2: Inteligência Multimodal (Gemini Flash-Lite principal / Flash alternativo)"]
         OCR["Extração de Texto & Mídia<br/>(PyMuPDF + Bytes Multimodais)"]
-        LLM["Google Gemini (3.8 Flash & 3.5 Lite)<br/>(Extração Estruturada Pydantic v2)"]
+        LLM["Google Gemini (Flash-Lite principal / Flash alternativo)<br/>(Extração Estruturada Pydantic v2)"]
         SCHEMA["Contrato Canônico Pydantic v2<br/>(src/schemas/clinical.py)"]
     end
 
@@ -75,7 +75,7 @@ flowchart TD
     end
 
     REACT -->|Upload & Polling| API_GATEWAY
-    STREAMLIT -->|Upload Direto / REST| API_GATEWAY
+    STREAMLIT -->|Processamento direto pelo pipeline| LOADER
     API_CLI -->|Integração B2B| API_GATEWAY
 
     API_GATEWAY -->|Encaminha Documento| LOADER
@@ -99,9 +99,11 @@ flowchart TD
     Q_REV --> OCI_AUDIT
     Q_MISTO --> OCI_AUDIT
     
-    Q_REV -.->|Feedback Médico Human-in-the-Loop| STREAMLIT
-    Q_REV -.->|Aprovação Médica HiTL| REACT
+    Q_REV -.->|Inspeção da fila lógica de revisão| STREAMLIT
+    Q_REV -.->|Consulta do resultado em revisão| REACT
 ```
+
+O React envia documentos e consulta resultados pela API FastAPI. A bancada Streamlit executa o pipeline diretamente no processo Python. No MVP, a revisão humana é uma fila lógica para inspeção dos resultados. Aprovação, rejeição e correção interativa ficam fora do escopo.
 
 ---
 
@@ -126,7 +128,7 @@ flowchart TD
     - **Saídas Estruturadas Nativas (Pydantic v2):** Utiliza `response_mime_type: "application/json"` validado com `ClassificacaoDocumento` e `DadosClinicosExtraidos`, garantindo validação rigorosa sem alucinação de formato.
     - **Defesa Contra Prompt Injection:** Todo conteúdo documental é envolvido nas tags `<documento_clinico>` e interpretado estritamente como dado passivo.
     - **Duplo Fallback de Alta Disponibilidade:**
-      1. *Fallback de Modelos:* Tenta o modelo de nova geração `gemini-3.8-flash` e, em caso de instabilidade, tenta `gemini-3.5-flash-lite`.
+      1. *Fallback de Modelos:* Tenta primeiro `gemini-3.5-flash-lite` e, em caso de falha, tenta `gemini-3.8-flash`.
       2. *Fallback Clínico (Fail-Safe Seção 12 da E.F. v1.0):* Se houver falha total ou ausência de chave de API, gera `ClassificacaoDocumento(tipo_documento=NAO_IDENTIFICADO, score=0.0)`, desviando o documento para `FILA_REVISAO_HUMANA` sem quebrar a API.
   - **Contrato Canônico Pydantic v2 ([`src/schemas/clinical.py`](src/schemas/clinical.py)):** Modelo de dados unificado com validação estrita de tokens, enums resilientes via `_missing_` e suporte a submodelos dedicados (`Paciente`, `Medico`, `Crm`, `ItemExameLaboratorial`, `ConflitoQualidade`).
 
@@ -139,9 +141,9 @@ flowchart TD
 
 ### 3.4 Camada 4: Armazenamento OCI Always Free (`src/storage/`)
 - **Objetivo:** Persistência em nuvem segura em conformidade com as diretrizes do edital da Oracle.
-- **Política Always Free:** Utiliza exclusivamente a camada gratuita da Oracle Cloud Infrastructure, segregando objetos em pastas lógicas no bucket `mediflow-documentos-clinicos`.
+- **Configuração OCI:** O bucket é definido por `OCI_BUCKET_NAME`. Nas validações reais registradas pela equipe, foi utilizado `mediflow-documentos`. A configuração e os custos dos recursos da publicação devem ser conferidos no ambiente da entrega.
 
-### 3.5 Camada 5: Apresentação e Integração (Estratégia Dual: React + Streamlit via FastAPI)
+### 3.5 Camada 5: Apresentação e Integração — React via API e Streamlit direto
 A camada de apresentação do MediFlow adota a **Estratégia Dual**, garantindo aderência total ao edital da Oracle e maturidade de engenharia corporativa:
 
 - **Portal Web Corporativo (React SPA — Giovane):**
@@ -155,11 +157,11 @@ A camada de apresentação do MediFlow adota a **Estratégia Dual**, garantindo 
 
 - **FastAPI REST Gateway Assíncrono (`src/api/`):**
   - Servidor backend padronizado com documentação OpenAPI/Swagger interativa automática (`/docs`).
-  - Responde com `HTTP 202 Accepted` em operações assíncronas e gerencia a esteira de Background Tasks, servindo de forma agnóstica tanto ao React quanto ao Streamlit e a sistemas legados hospitalares (HIS/PEP).
+  - Responde com `HTTP 202 Accepted` nas submissões assíncronas e executa o processamento em background. O React consome a API por HTTP/JSON. A bancada Streamlit chama o pipeline diretamente.
   - **Especificação dos Endpoints Oficiais (`/api/v1`):**
     - `POST /api/v1/triagens`: Recebe payloads em JSON (`CriarTriagemTextoRequest`) ou `multipart/form-data` (arquivos até 10MB/20 páginas). Valida integridade e retorna imediatamente `HTTP 202 Accepted` contendo `documento_id`, `status: "RECEBIDO"`, `status_url` e `historico_url`.
     - `GET /api/v1/triagens/{id}`: Retorna o modelo canônico completo [`TriagemMediFlow`](src/schemas/clinical.py) enriquecido com o roteamento do LangGraph e metadados OCI.
-    - `GET /api/v1/triagens/{id}/status`: Consulta ultra-leve de polling contendo status (`RECEBIDO`, `PROCESSANDO`, `PROCESSADO`, `EM_REVISAO`, `ERRO_PROCESSAMENTO`), destinos hospitalares e flag de auditoria.
+    - `GET /api/v1/triagens/{id}/status`: Retorna o status (`RECEBIDO`, `PROCESSANDO`, `PROCESSADO`, `EM_REVISAO`, `ERRO_PROCESSAMENTO` ou `ERRO_PERSISTENCIA`), os destinos, a indicação de revisão humana e o campo `concluido` para controlar o polling.
     - `GET /api/v1/triagens/{id}/historico`: Linha do tempo auditável de eventos emitidos durante o ciclo de vida do documento (ingestão, extração, roteamento LangGraph e OCI).
     - `GET /api/v1/health`: Endpoint de sanidade e liveness probe para orquestradores de contêiner e monitoramento hospitalar.
   - **Blindagem Contra Falhas e Segurança:**
@@ -185,7 +187,7 @@ stateDiagram-v2
     
     state PROCESSANDO {
         [*] --> IngestaoSanitizacao: Validação 10MB / 20 págs / MIME
-        IngestaoSanitizacao --> ExtracaoMultimodal: Gemini (3.8 Flash / 3.5 Lite) + Schemas
+        IngestaoSanitizacao --> ExtracaoMultimodal: Gemini (Flash-Lite principal / Flash alternativo) + Schemas
         ExtracaoMultimodal --> AvaliacaoRegras: Pydantic v2 & LangGraph
         AvaliacaoRegras --> [*]
     }
@@ -261,12 +263,12 @@ graph TD
 
 ## 📋 5. O Contrato Canônico de Dados (`TriagemMediFlow`)
 
-Abaixo está o payload canônico oficial gerado pelo MediFlow, modelado a partir do exemplo oficial das páginas 4 e 5 do manual da Oracle:
+Exemplo ilustrativo de uma triagem urgente sem pendências, com alerta simulado e persistência confirmada. Os valores representam um cenário fictício; o contrato é definido em `src/schemas/clinical.py`.
 
 ```json
 {
-  "status": "processado",
-  "documento_id": "DOC-CLIN-2026-8942",
+  "status": "PROCESSADO",
+  "documento_id": "DOC-CLIN-2026-8F31A92B",
   "classificacao": {
     "tipo_documento": "LAUDO_EXAME_IMAGEM",
     "especialidade": ["Radiologia", "Pneumologia"],
@@ -306,14 +308,17 @@ Abaixo está o payload canônico oficial gerado pelo MediFlow, modelado a partir
     "requer_auditoria_humana": false,
     "justificativa_roteamento": "Achado crítico de alta gravidade (TEP agudo) detectado em paciente sintomático.",
     "notificacao": {
-      "canal": "Alerta_Plantao_Medico",
-      "mensagem": "ALERTA URGENTE: Laudo crítico de TEP Agudo para paciente Carlos Eduardo Mendes no Pronto-Socorro."
+      "gerada": true,
+      "canal": "SIMULADO_SLACK_PLANTAO",
+      "mensagem": "ALERTA URGENTE [DOC-CLIN-2026-8F31A92B]: Tromboembolismo Pulmonar Agudo (TEP)",
+      "status": "REGISTRADA"
     }
   },
   "armazenamento_oci": {
-    "bucket": "mediflow-documentos-clinicos",
-    "caminho_objeto": "processados/urgentes/DOC-CLIN-2026-8942.json",
-    "status_backup": "sucesso"
+    "bucket": "mediflow-documentos",
+    "caminho_objeto": "processados/urgentes/DOC-CLIN-2026-8F31A92B/resultado.json",
+    "status_backup": "sucesso",
+    "modo_simulacao": false
   },
   "erro": null
 }
@@ -336,46 +341,48 @@ A persistência em nuvem é operada pelo conector [`src/storage/oci_storage.py`]
 A segregação dos documentos no bucket `mediflow-documentos` obedece à hierarquia abaixo:
 
 ```text
-mediflow-documentos/ (Bucket OCI Always Free - Tenancy izapalomaa)
-│
-├── recebidos/                                  <- Mídia original no momento do upload (PDF/JPG/TXT)
-│   ├── DOC-CLIN-2026-8942.pdf
-│   └── DOC-A757DAD2.jpg
-│
-├── processados/                                <- Documentos triados com sucesso
-│   ├── urgentes/                               <- Encaminhados para plantão médico de urgência
-│   │   └── DOC-CLIN-2026-8942.json
-│   └── rotina/                                 <- Prontuário Eletrônico, Farmácia e Auditoria TISS
-│       └── DOC-B1234567.json
-│
-└── auditoria_humana/                           <- Documentos retidos para revisão (Human-in-the-Loop)
-    ├── baixa_confianca/                        <- Score combinado < 0.85 ou rasuras
-    └── dados_incompletos/                      <- Ausência de CRM, médico ou hipótese diagnóstica
+mediflow-documentos/
+├── recebidos/
+│   └── {documento_id}/
+│       └── original.{ext}
+├── processados/
+│   ├── {documento_id}/
+│   │   └── resultado.json
+│   └── urgentes/
+│       └── {documento_id}/
+│           └── resultado.json
+├── auditoria_humana/
+│   └── {documento_id}/
+│       └── resultado.json
+└── historico/
+    └── {documento_id}/
+        └── {evento_id}.json
 ```
 
 ---
 
-## 🧪 7. Engenharia de Qualidade e Suíte de Testes (304 Testes)
+## 🧪 7. Engenharia de Qualidade e Testes Automatizados
 
-A conformidade do MediFlow com os requisitos funcionais e com o edital da Oracle é auditada por uma suíte de 304 testes automatizados coletados no Pytest na base `develop`:
+Os testes automatizados cobrem contratos, ingestão, extração, roteamento, API e persistência. A quantidade de casos varia conforme o commit e as suítes selecionadas. Cada evidência deve identificar a versão testada, o comando executado e o resultado.
 
-| Módulo de Teste | Quantidade | Escopo e Cobertura Técnica |
-| :--- | :---: | :--- |
-| **`tests/test_workflow.py`** | **85 testes** | Grafo LangGraph completo, nós de decisão, arestas condicionais, avaliação de score e roteamento para os 5 destinos. |
-| **`tests/test_contrato_fixtures.py`** | **79 testes** | Validação canônica dos 79 fixtures oficiais (William) contra o modelo Pydantic v2 e regras R1 a R8 (consistência de ponto fixo determinístico). |
-| **`tests/test_api.py`** | **40 testes** | Endpoints REST FastAPI assíncronos (HTTP 202), validações de erro (400, 415, 422), polling de status, histórico, simulações OCI e health check (EPT CT-001 a CT-080). |
-| **`tests/test_extraction_adapter.py`** | **18 testes** | Adaptação e normalização dos envelopes de extração clínica para entrada do grafo LangGraph. |
-| **`tests/test_ingestion.py`** | **18 testes** | Ingestão robusta, validação de arquivos físicos (.pdf, .jpg, .webp, rejeição de .docx), limites estritos de 10.00MB e 20 páginas, PDFs protegidos e corrompidos. |
-| **`tests/test_gemini_service.py`** | **11 testes** | Testes unitários do GeminiService: transporte REST, timeout de 30s, Saída Estruturada Pydantic v2, duplo fallback e fail-safe sem chave. |
-| **`tests/test_gemini_workflow_adapter.py`** | **11 testes** | Integração entre as saídas do GeminiService e o adaptador determinístico do workflow. |
-| **`tests/test_audit_items.py`** | **8 testes** | Auditoria clínica de sanidade: descarte de diagnóstico restrito a lab, urgência indeterminada, persistência e sanitização. |
-| **`tests/test_oci_storage.py`** | **8 testes** | Conector OCI Object Storage simulado (mock), validação de `if-none-match`, preservação de bytes, paginação e propagação de erros. |
-| **`tests/test_schemas.py`** | **7 testes** | Schemas Pydantic v2, serialização JSON, aliases de retrocompatibilidade e tratamento de erros de Nível 1 e 2. |
-| **`tests/test_streamlit_pipeline.py`** | **6 testes** | Conexão da bancada Streamlit com o pipeline do agente e preservação dos sinais clínicos. |
-| **`tests/test_gemini_prioridades_dosagem.py`** | **5 testes** | Validação de prioridades e dosagens extraídas sem alucinação ou perda de sinais. |
-| **`tests/test_exemplos_extracao_workflow.py`** | **4 testes** | Validação de ponta a ponta dos exemplos oficiais de extração no workflow. |
-| **`tests/test_pr13_persistencia_pendente.py`** | **4 testes** | Cenários de falha de persistência OCI e preservação da decisão para retry. |
-| **Total da Suíte Oficial (`develop`)** | **304 testes** | **Cobertura integral (1 skipped esperado de isolamento legado)** |
+| Área | Cobertura |
+| :--- | :--- |
+| Workflow | Qualidade, campos obrigatórios, urgência, revisão humana, justificativas e destinos. |
+| Contratos e fixtures | Validação Pydantic, serialização e coerência das respostas esperadas. |
+| API | Submissão assíncrona, validações de entrada, status, resultado, histórico e tratamento de erros. |
+| Ingestão | Formatos aceitos, limites de tamanho e páginas, arquivos protegidos, vazios e corrompidos. |
+| Gemini e adaptadores | Respostas simuladas, normalização, preservação dos dados e tratamento de falhas. |
+| OCI | Escrita e leitura com cliente de teste, integridade, idempotência, prefixos e retentativa. |
+| Streamlit | Pipeline, indicadores de qualidade e persistência com mensagens públicas seguras. |
+
+### Execuções de referência
+
+- Revisão integrada do PR #26: **220 testes aprovados e 1 pulado**, na combinação local do commit `5ad3865` com a `develop` no `54eac2b`. Foram executadas as suítes de persistência Streamlit, indicadores de qualidade, pipeline Streamlit, API, histórico OCI, workflow e ingestão.
+- Frontend React: **298 testes aprovados em 25 arquivos**, no commit `18b234b8`, com 2 workers.
+
+Essas execuções correspondem às versões e aos conjuntos de testes indicados. Os resultados da versão publicada devem ser registrados com o SHA da entrega.
+
+Os testes com respostas simuladas verificam contratos e regras. As chamadas com Gemini real e as operações no bucket real possuem evidências próprias de execução.
 
 ---
 
@@ -399,7 +406,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # Configurar GEMINI_API_KEY e credenciais OCI Always Free
 
-# 5. Executar a suíte completa de 304 testes automatizados
+# 5. Executar os testes automatizados
 python -m pytest
 
 # 6. Testes Manuais Opcionais (Cloud OCI e IA Gemini)
@@ -463,21 +470,21 @@ g10-brasil-equipe-15_mediflow/
 │   ├── testar_simulacao_oci.py                 <- Validação da simulação de falhas OCI do catálogo EPT v1.0 (§12)
 │   └── testar_oci.py                           <- Validação real ponta a ponta no bucket OCI Always Free
 │
-├── tests/                                      <- Suíte Oficial de Testes Automatizados (304 testes)
-│   ├── test_workflow.py                        <- 85 testes: transições e arestas do LangGraph
-│   ├── test_contrato_fixtures.py               <- 79 testes: ponto fixo dos fixtures e regras R1 a R8
-│   ├── test_api.py                             <- 40 testes: endpoints REST FastAPI e EPT
-│   ├── test_extraction_adapter.py              <- 18 testes: adaptador de envelopes clínicos
-│   ├── test_ingestion.py                       <- 18 testes: arquivos reais, PDF, JPG, WEBP e DOCX (415)
-│   ├── test_gemini_service.py                  <- 11 testes unitários do GeminiService (REST, 30s e fallback)
-│   ├── test_gemini_workflow_adapter.py         <- 11 testes: integração GeminiService x Workflow
-│   ├── test_audit_items.py                     <- 8 testes dedicados de auditoria técnica e sanidade
-│   ├── test_oci_storage.py                     <- 8 testes: persistência OCI com SDK simulado (mock)
-│   ├── test_schemas.py                         <- 7 testes: Pydantic v2 e envelopes de erro Nível 1 e 2
-│   ├── test_streamlit_pipeline.py              <- 6 testes: pipeline Streamlit e preservação de sinais
-│   ├── test_gemini_prioridades_dosagem.py      <- 5 testes: prioridades e dosagens na extração
-│   ├── test_exemplos_extracao_workflow.py      <- 4 testes: exemplos de extração no workflow
-│   ├── test_pr13_persistencia_pendente.py      <- 4 testes: resiliência de persistência pendente OCI
+├── tests/                                      <- Testes automatizados com Pytest
+│   ├── test_workflow.py                        <- Transições e arestas do LangGraph
+│   ├── test_contrato_fixtures.py               <- Contratos das fixtures e regras R1 a R8
+│   ├── test_api.py                            <- Endpoints REST FastAPI e EPT
+│   ├── test_extraction_adapter.py             <- Adaptação de envelopes clínicos
+│   ├── test_ingestion.py                      <- Formatos, limites e rejeições de arquivos
+│   ├── test_gemini_service.py                 <- GeminiService, transporte REST, timeout e fallback
+│   ├── test_gemini_workflow_adapter.py        <- Integração entre GeminiService e workflow
+│   ├── test_audit_items.py                    <- Auditoria técnica e sanidade
+│   ├── test_oci_storage.py                    <- Persistência OCI com SDK simulado
+│   ├── test_schemas.py                        <- Pydantic v2 e envelopes de erro
+│   ├── test_streamlit_pipeline.py             <- Pipeline Streamlit e preservação de sinais
+│   ├── test_gemini_prioridades_dosagem.py      <- Prioridades e dosagens na extração
+│   ├── test_exemplos_extracao_workflow.py      <- Exemplos de extração no workflow
+│   ├── test_pr13_persistencia_pendente.py     <- Persistência pendente e retentativa OCI
 │   └── fixtures/                               <- Base de 79 fixtures canônicos
 │       ├── demo/                               <- 12 casos essenciais para o pitch (TXT, PDF, JPG, JSON)
 │       ├── catalogo/                           <- 67 casos avançados (qualidade, borda, limites)
@@ -493,38 +500,11 @@ g10-brasil-equipe-15_mediflow/
 
 ---
 
-### 9.2 Sugestão Arquitetural para o Frontend React (`frontend/`)
+### 9.2 Frontend React implementado (`frontend/`)
 
-Para manter o desacoplamento arquitetural e permitir que **Giovane Brandino** desenvolva a Single Page Application (SPA) em React com máxima produtividade e sem misturar dependências do Node.js com o Python, recomenda-se a seguinte estrutura de pastas na raiz do projeto:
+O portal utiliza React, TypeScript, Vite e Tailwind CSS. A comunicação com a API usa Fetch, com acompanhamento do processamento pela rota de status.
 
-```text
-frontend/                                       <- Aplicação Web Corporativa (React SPA — Giovane Brandino)
-├── public/                                     <- Assets estáticos públicos (favicons, logos hospitalares)
-├── src/
-│   ├── assets/                                 <- Imagens, ícones médicos SVG e estilos
-│   ├── components/                             <- Componentes de UI modulares e reutilizáveis
-│   │   ├── common/                             <- Botões, Badges de Status, Modais, Spinners de Loading
-│   │   ├── triage/                             <- CardTriagem, ScoreBadge, TabelaMedicamentos, AlertaUrgencia
-│   │   ├── viewer/                             <- Visualizador de PDF e Imagens Lado a Lado
-│   │   └── upload/                             <- Dropzone com validação prévia de tamanho (10MB no client)
-│   ├── hooks/                                  <- Custom React Hooks
-│   │   ├── useTriage.ts                        <- Disparo de triagem e controle de requisições
-│   │   └── usePolling.ts                       <- Polling assíncrono para GET /api/v1/triagens/{id}
-│   ├── pages/                                  <- Telas / Rotas da Aplicação
-│   │   ├── HomePage.tsx                        <- Apresentação e visão geral do MediFlow
-│   │   ├── UploadPage.tsx                      <- Tela de envio e pré-visualização de documentos
-│   │   ├── DashboardPage.tsx                   <- Visão geral das filas hospitalares (Kanban de triagem)
-│   │   └── AuditPage.tsx                       <- Bancada Human-in-the-Loop para casos EM_REVISAO
-│   ├── services/                               <- Camada de Comunicação com o Backend
-│   │   └── api.ts                              <- Cliente Axios configurado para a API FastAPI
-│   ├── types/                                  <- Tipagens TypeScript sincronizadas com o Contrato
-│   │   └── clinical.ts                         <- Interface TriagemMediFlow, Enums, ErroResposta
-│   ├── styles/                                 <- Configurações de TailwindCSS e temas visuais
-│   ├── App.tsx                                 <- Gerenciador de rotas e layout global
-│   └── main.tsx                                <- Ponto de entrada da aplicação
-├── package.json                                <- Dependências do ecossistema Node/React (Vite, Axios, Tailwind)
-├── vite.config.ts                              <- Configuração do bundler Vite (com proxy para http://localhost:8000)
-├── tailwind.config.js                          <- Design System médico (paleta: azul, verde, vermelho de alerta)
-└── README.md                                   <- Guia rápido de instalação (npm install && npm run dev)
-```
+A estrutura implementada, os comandos de execução, as variáveis de ambiente e as limitações do modo de demonstração estão documentados no [README do frontend](frontend/README.md).
+
+O login é de demonstração. A fila de revisão humana permite consultar os resultados, conforme o escopo do MVP.
 
