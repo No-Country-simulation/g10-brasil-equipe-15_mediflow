@@ -154,7 +154,7 @@ def normalizar_idade_extracao(payload: Dict[str, Any]) -> Dict[str, Any]:
         return normalizado
 
     correspondencia = re.fullmatch(
-        r"([0-9]{1,3})(?:\s+anos?)?",
+        r"([0-9]{1,3})(?:\s*(?:anos?|a)\.?)?",
         idade.strip(),
         flags=re.IGNORECASE,
     )
@@ -195,8 +195,8 @@ def normalizar_payload_extracao(payload: Any) -> Dict[str, Any]:
     campos_descricao = {"descricao", "hipotese", "texto", "termo"}
     descricoes = set()
     cids_encontrados = []
-    encontrou_objeto = False
     encontrou_diagnostico = False
+    encontrou_cid = False
 
     for campo in campos_diagnostico:
         if campo not in payload:
@@ -206,7 +206,6 @@ def normalizar_payload_extracao(payload: Any) -> Dict[str, Any]:
         valores_descricao = [valor]
 
         if isinstance(valor, dict):
-            encontrou_objeto = True
             if not campos_descricao.intersection(valor) or set(valor) - (
                 campos_descricao | {"cid_extraido"}
             ):
@@ -216,11 +215,15 @@ def normalizar_payload_extracao(payload: Any) -> Dict[str, Any]:
                 descricao for chave, descricao in valor.items()
                 if chave in campos_descricao
             ]
-            cid = valor.get("cid_extraido")
-            if cid is not None:
-                if not isinstance(cid, str):
-                    raise ValueError("CID do diagnóstico deve ser texto ou null.")
-                cids_encontrados.append(cid)
+            if "cid_extraido" in valor:
+                encontrou_cid = True
+                cid = valor.get("cid_extraido")
+                if cid is not None:
+                    if not isinstance(cid, str):
+                        raise ValueError("CID do diagnóstico deve ser texto ou null.")
+                    cid = cid.strip()
+                    if cid:
+                        cids_encontrados.append(cid)
 
         for descricao in valores_descricao:
             if descricao is None:
@@ -235,17 +238,20 @@ def normalizar_payload_extracao(payload: Any) -> Dict[str, Any]:
         raise ValueError("Diagnósticos conflitantes na resposta.")
     if encontrou_diagnostico:
         normalizado["diagnostico"] = next(iter(descricoes), None)
-    if not encontrou_objeto:
-        return normalizado
 
     for campo in ("cid", "cid_extraido", "cid_sugerido"):
-        cid = payload.get(campo)
+        if campo not in payload:
+            continue
+        encontrou_cid = True
+        cid = normalizado.pop(campo)
 
         if cid is not None:
             if not isinstance(cid, str):
                 raise ValueError("CID deve ser texto ou null.")
 
-            cids_encontrados.append(cid)
+            cid = cid.strip()
+            if cid:
+                cids_encontrados.append(cid)
 
     if cids_encontrados:
         primeiro_cid = cids_encontrados[0]
@@ -254,6 +260,8 @@ def normalizar_payload_extracao(payload: Any) -> Dict[str, Any]:
             raise ValueError("CIDs conflitantes na resposta.")
 
         normalizado["cid"] = primeiro_cid
+    elif encontrou_cid:
+        normalizado["cid"] = None
 
     return normalizado
 
