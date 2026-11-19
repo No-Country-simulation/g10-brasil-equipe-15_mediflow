@@ -44,7 +44,7 @@
       "medicamentos": [
         {
           "nome": "Morfina 10 mg/mL",
-          "dosagem": null,
+          "dosagem": "1 mL",
           "frequencia": null
         },
         {
