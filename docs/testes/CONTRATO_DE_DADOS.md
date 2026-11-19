@@ -167,8 +167,8 @@ Entrada de Documento
 
 | Nível de Erro | Formato Retornado | Quando Ocorre | Exemplos nos Fixtures |
 | :--- | :--- | :--- | :--- |
-| **Nível 1: Requisição Inválida (HTTP)** | `ErroResposta {http, codigo_funcional, mensagem}` | O documento é rejeitado no portão de entrada antes de entrar na esteira clínica. | Os 8 fixtures `Validacao_*` (arquivo corrompido, tamanho > 10MB, mime não suportado). |
-| **Nível 2: Erro de Leitura/Processamento** | `TriagemMediFlow {status=ERRO_PROCESSAMENTO, erro={codigo, mensagem}}` | O arquivo foi aceito pelo gateway, mas sua leitura técnica falhou internamente. | `Qualidade_Pdf_ComSenha` (`PDF_PROTEGIDO`), `Qualidade_Pdf_Corrompido` (`PDF_CORROMPIDO`). |
+| **Nível 1: Requisição Inválida (HTTP)** | `ErroResposta {http, codigo_funcional, mensagem}` | O documento é rejeitado no portão de entrada antes de entrar na esteira clínica (sem gerar `documento_id` e sem acionar o Gemini). | Os 12 fixtures `Validacao_*` e `Limite_*` (tamanho > 10 MB, PDF > 20 páginas, formato/MIME inválido, campos inválidos) e, na borda da API REST conforme EF v1.2 §10.1, `PDF_PROTEGIDO` e `PDF_CORROMPIDO` (`HTTP 422`). |
+| **Nível 2: Erro de Leitura/Processamento** | `TriagemMediFlow {status=ERRO_PROCESSAMENTO, erro={codigo, mensagem}}` | O documento foi aceito pela borda (gerou `documento_id`), mas falhou posteriormente durante a análise/grafo. | Fixtures históricos de contrato `Qualidade_Pdf_ComSenha` (`PDF_PROTEGIDO`) e `Qualidade_Pdf_Corrompido` (`PDF_CORROMPIDO`) preservados para validação do modelo `TriagemMediFlow` em `ERRO_PROCESSAMENTO`; na API REST (`POST /api/v1/triagens`), ambos são rejeitados imediatamente na borda com `HTTP 422` (harmonização com EF v1.2 §10.1). |
 
 ### Exemplo JSON de Nível 1 (`ErroResposta`):
 ```jsonc
