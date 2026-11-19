@@ -3,7 +3,7 @@ MediFlow — Schemas de Transporte da API REST (DTOs)
 Modelos específicos para endpoints HTTP assíncronos e contratos de rede.
 """
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 
 
@@ -83,4 +83,4 @@ class ErroEnvelope(BaseModel):
     """Envelope padronizado de erro seguro (CT-077 e CT-080)."""
     codigo: str
     mensagem: str
-    detalhes: Optional[Dict[str, Any]] = None
+    detalhes: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None

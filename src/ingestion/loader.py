@@ -28,9 +28,25 @@ class IngestaoError(Exception):
 
 class TamanhoExcedidoError(IngestaoError):
     """Disparado quando o arquivo excede o limite máximo de bytes ou páginas permitidos."""
-    def __init__(self, tamanho_bytes: Optional[int] = None, limite_bytes: Optional[int] = None, mensagem: Optional[str] = None):
+    def __init__(
+        self,
+        tamanho_bytes: Optional[int] = None,
+        limite_bytes: Optional[int] = None,
+        mensagem: Optional[str] = None,
+        total_paginas: Optional[int] = None,
+        limite_paginas: Optional[int] = None,
+    ):
+        self.tamanho_bytes = tamanho_bytes
+        self.limite_bytes = limite_bytes
+        self.total_paginas = total_paginas
+        self.limite_paginas = limite_paginas
         if mensagem:
             msg = mensagem
+        elif total_paginas is not None and limite_paginas is not None:
+            msg = (
+                f"PDF válido de {total_paginas} páginas: excede o limite de "
+                f"{limite_paginas} páginas fixado para o MVP (A6)."
+            )
         elif tamanho_bytes is not None and limite_bytes is not None:
             msg = f"O arquivo possui {tamanho_bytes / (1024*1024):.2f}MB, excedendo o limite de {limite_bytes / (1024*1024):.2f}MB."
         else:
@@ -195,15 +211,36 @@ class DocumentLoader:
             raise DocumentoCorrompidoError(f"PDF_CORROMPIDO: Estrutura inválida de arquivo PDF ({str(e)})")
 
         with doc:
-            if doc.is_encrypted:
+            try:
+                tem_trailer_encrypt = doc.xref_get_key(-1, "Encrypt")[0] != "null"
+            except Exception:
+                tem_trailer_encrypt = False
+
+            possui_criptografia = (
+                doc.is_encrypted
+                or bool(doc.needs_pass)
+                or bool((doc.metadata or {}).get("encryption"))
+                or tem_trailer_encrypt
+            )
+            if possui_criptografia:
                 raise DocumentoProtegidoError("PDF_PROTEGIDO: O arquivo está criptografado/protegido por senha.")
+
+            if b"%%EOF" not in conteudo_bytes[-2048:]:
+                raise DocumentoCorrompidoError(
+                    "PDF_CORROMPIDO: O arquivo PDF está truncado ou sem marcador de fim de arquivo (%%EOF)."
+                )
 
             total_paginas = len(doc)
             if total_paginas == 0:
                 raise DocumentoCorrompidoError("PDF_CORROMPIDO: O arquivo PDF não possui páginas válidas.")
             if total_paginas > DocumentLoader.LIMITE_MAXIMO_PAGINAS:
                 raise TamanhoExcedidoError(
-                    mensagem=f"PDF válido de {total_paginas} páginas: excede o limite de {DocumentLoader.LIMITE_MAXIMO_PAGINAS} páginas fixado para o MVP (A6)."
+                    total_paginas=total_paginas,
+                    limite_paginas=DocumentLoader.LIMITE_MAXIMO_PAGINAS,
+                    mensagem=(
+                        f"PDF válido de {total_paginas} páginas: excede o limite de "
+                        f"{DocumentLoader.LIMITE_MAXIMO_PAGINAS} páginas fixado para o MVP (A6)."
+                    ),
                 )
 
             textos_paginas = []
@@ -212,10 +249,12 @@ class DocumentLoader:
             for pagina in doc:
                 try:
                     txt = pagina.get_text("text") or ""
-                    textos_paginas.append(txt)
-                    if not txt.strip():
-                        paginas_vazias += 1
-                except Exception:
+                except Exception as e:
+                    raise DocumentoCorrompidoError(
+                        f"PDF_CORROMPIDO: Falha estrutural ao ler página do PDF ({str(e)})"
+                    )
+                textos_paginas.append(txt)
+                if not txt.strip():
                     paginas_vazias += 1
 
             texto_completo = "\n\n--- Quebra de Página ---\n\n".join(textos_paginas) if total_paginas > 1 else "".join(textos_paginas)
