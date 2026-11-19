@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.api.routes import router as api_v1_router
+from src.config import CORS_ORIGINS
 from src.schemas import CodigoErro
 
 logger = logging.getLogger("mediflow.api")
@@ -21,12 +22,14 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# Configuração de CORS para suportar o Portal React SPA e a Bancada Streamlit
+# CORS: o portal React fica na mesma origem da API (Nginx na OCI, proxy do Vite no dev)
+# e o Streamlit chama a API pelo servidor, então nenhum deles depende de CORS.
+# Outras origens só entram se listadas em CORS_ORIGINS.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 

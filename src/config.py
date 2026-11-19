@@ -29,3 +29,9 @@ OCI_NAMESPACE = os.getenv("OCI_NAMESPACE", "")
 # Ambiente
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# Origens que podem chamar a API pelo navegador (separadas por vírgula).
+# Vazio = só a mesma origem (na OCI o Nginx serve o front e a API no mesmo endereço).
+CORS_ORIGINS = [
+    o.strip().rstrip("/") for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()
+]
