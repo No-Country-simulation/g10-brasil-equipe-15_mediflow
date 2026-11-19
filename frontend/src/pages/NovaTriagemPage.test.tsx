@@ -155,6 +155,43 @@ describe('NovaTriagemPage', () => {
     expect(botaoEnviar()).toBeEnabled()
   })
 
+  it('mostra erro específico de páginas quando a API devolve 413 por limite de páginas', async () => {
+    fetchMock.mockResolvedValue(
+      json(413, {
+        codigo: 'ARQUIVO_MAIOR_QUE_LIMITE',
+        mensagem: 'O documento PDF possui 21 páginas e excede o limite operacional de 20 páginas (Regra A6).',
+        detalhes: { motivo: 'PAGINAS_EXCEDIDAS', total_paginas: 21, limite_paginas: 20 },
+      }),
+    )
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.upload(screen.getByLabelText('Selecionar arquivo'), pdf())
+    await user.click(botaoEnviar())
+
+    const alerta = await screen.findByRole('alert')
+    expect(alerta).toHaveTextContent('O PDF tem 21 páginas e excede o limite de 20 páginas.')
+    expect(alerta).not.toHaveTextContent(/10 MB/)
+    expect(screen.queryByText(/Processamento de/)).not.toBeInTheDocument()
+    expect(lerRegistro()).toEqual([])
+  })
+
+  it.each([
+    ['PDF_CORROMPIDO', /corrompido ou truncado/i],
+    ['PDF_PROTEGIDO', /protegido por senha/i],
+  ])('rejeita %s (422) na borda sem navegar para processamento', async (codigo, textoEsperado) => {
+    fetchMock.mockResolvedValue(json(422, { codigo, mensagem: 'Erro na borda' }))
+    const user = userEvent.setup()
+    renderPagina()
+
+    await user.upload(screen.getByLabelText('Selecionar arquivo'), pdf())
+    await user.click(botaoEnviar())
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(textoEsperado)
+    expect(screen.queryByText(/Processamento de/)).not.toBeInTheDocument()
+    expect(lerRegistro()).toEqual([])
+  })
+
   it('mostra erro de conexão quando a API está fora do ar', async () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
     const user = userEvent.setup()

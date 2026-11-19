@@ -145,7 +145,7 @@ A rota escolhe o modo pelo `Content-Type`.
 | `documento_id` | não | Identificador customizado. |
 | `canal_origem` | não | Padrão no formulário: `"Prontuário"`. |
 
-Limite de **20 páginas** para PDF. Confirmado em `src/ingestion/loader.py` (`LIMITE_MAXIMO_PAGINAS = 20`). Exceder o limite retorna HTTP 413 com `codigo: "ARQUIVO_MAIOR_QUE_LIMITE"`.
+Limite de **20 páginas** para PDF. Confirmado em `src/ingestion/loader.py` (`LIMITE_MAXIMO_PAGINAS = 20`). Exceder o limite retorna HTTP 413 com `codigo: "ARQUIVO_MAIOR_QUE_LIMITE"`, mensagem específica de páginas e `detalhes: { "motivo": "PAGINAS_EXCEDIDAS", "total_paginas": ..., "limite_paginas": 20 }`.
 
 #### Cabeçalho de homologação (uso interno)
 
@@ -359,12 +359,12 @@ Para triagens em `ERRO_PERSISTENCIA`: reenvia os artefatos ao OCI **sem reexecut
 | 400 | `REQUISICAO_INVALIDA` | JSON malformado. | Avisar erro de formato. |
 | 404 | `DOCUMENTO_NAO_ENCONTRADO` | ID inexistente (ou perdido após reinício da API). | Voltar à lista com aviso. |
 | 409 | `DOCUMENTO_ID_CONFLITANTE` | `documento_id` já existente. | Pedir outro ID ou deixar o sistema gerar. |
-| 413 | `ARQUIVO_MAIOR_QUE_LIMITE` | Arquivo acima de 10 MB. | Bloquear no envio e orientar a comprimir. |
+| 413 | `ARQUIVO_MAIOR_QUE_LIMITE` | Arquivo acima de 10 MB (`detalhes.motivo = "TAMANHO_EXCEDIDO"`) ou PDF acima de 20 páginas (`detalhes.motivo = "PAGINAS_EXCEDIDAS"`). | Diferenciar tamanho vs. páginas por `detalhes.motivo` e orientar a comprimir ou dividir o PDF. |
 | 415 | `FORMATO_NAO_SUPORTADO` | Extensão não suportada. | Listar: PDF, JPG, PNG, WEBP, TXT. |
 | 415 | `MIME_INVALIDO` | Conteúdo não condiz com a extensão. | Avisar arquivo inválido. |
-| 422 | `CAMPOS_INVALIDOS` | Sem arquivo nem texto, JSON vazio ou arquivo de 0 bytes. | Realçar os campos obrigatórios. |
-| 422 | `PDF_PROTEGIDO` | PDF com senha. | Pedir PDF sem senha. |
-| 422 | `PDF_CORROMPIDO` | PDF corrompido ou truncado. | Pedir novo upload. |
+| 422 | `CAMPOS_INVALIDOS` | Sem arquivo nem texto, JSON vazio, arquivo de 0 bytes ou tipos inválidos no envelope JSON (`CriarTriagemTextoRequest`). | Realçar os campos obrigatórios/inválidos. |
+| 422 | `PDF_PROTEGIDO` | PDF com senha (abertura `user_pw` ou restrição `owner_pw`). | Pedir PDF sem senha. |
+| 422 | `PDF_CORROMPIDO` | PDF corrompido, truncado (sem `%%EOF`) ou com página ilegível estruturalmente. | Pedir novo upload. |
 | 502 | `ERRO_PERSISTENCIA` | Só em `reprocessar-persistencia`, quando o OCI falha. | Oferecer "tentar novamente". |
 
 Não implementados hoje: `401/403` (sem autenticação), `429`, `503/504` e `PROVEDOR_INDISPONIVEL`. A EF os prevê "quando configurados". `500 ERRO_INTERNO` é tratado pelo handler global registrado em `src/api/main.py`.

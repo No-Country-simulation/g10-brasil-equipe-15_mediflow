@@ -1324,3 +1324,148 @@ def test_triagem_urgente_na_retentativa(sinal, urgente_esperado):
         )
 
     assert _triagem_urgente_na_retentativa(triagem) is urgente_esperado
+
+
+# ==============================================================================
+# SUÍTE: REJEIÇÃO NA BORDA (HTTP 413 PÁGINAS/TAMANHO E HTTP 422)
+# ==============================================================================
+
+def test_limite_paginas_21_retorna_413_com_detalhes_paginas_sem_acionar_gemini(client, monkeypatch):
+    """PDF de 21 páginas (< 10 MB) retorna 413 informando páginas excedidas, sem documento_id nem Gemini."""
+    from pathlib import Path
+    from unittest.mock import MagicMock
+    from src.api.routes import triagem_service
+
+    gemini_mock = MagicMock()
+    monkeypatch.setattr(triagem_service, "_obter_gemini_service", lambda: gemini_mock)
+
+    caminho_fixture = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "catalogo"
+        / "Limite_Paginas_21_Digitalizado"
+        / "Limite_Paginas_21_Digitalizado.pdf"
+    )
+    conteudo_pdf = caminho_fixture.read_bytes()
+    assert len(conteudo_pdf) < 10 * 1024 * 1024
+
+    res = client.post(
+        "/api/v1/triagens",
+        files={"file": (caminho_fixture.name, io.BytesIO(conteudo_pdf), "application/pdf")},
+    )
+    assert res.status_code == 413
+    body = res.json()
+    assert body["codigo"] == CodigoErro.ARQUIVO_MAIOR_QUE_LIMITE.value
+    assert "documento_id" not in body
+    assert "21 páginas" in body["mensagem"]
+    assert "20 páginas" in body["mensagem"]
+    assert "10.00 MB" not in body["mensagem"]
+    assert body["detalhes"] == {
+        "motivo": "PAGINAS_EXCEDIDAS",
+        "total_paginas": 21,
+        "limite_paginas": 20,
+    }
+    assert not gemini_mock.classificar_documento.called
+    assert not gemini_mock.extrair_dados_clinicos_envelope.called
+
+
+def test_limite_tamanho_acima_10mb_retorna_413_com_detalhes_tamanho(client, monkeypatch):
+    """Arquivo acima de 10 MB retorna 413 com detalhes.motivo == TAMANHO_EXCEDIDO, sem documento_id nem Gemini."""
+    from unittest.mock import MagicMock
+    from src.api.routes import triagem_service
+
+    gemini_mock = MagicMock()
+    monkeypatch.setattr(triagem_service, "_obter_gemini_service", lambda: gemini_mock)
+
+    tamanho_10_5mb = (10 * 1024 * 1024) + (512 * 1024)
+    conteudo_grande = b"A" * tamanho_10_5mb
+    res = client.post(
+        "/api/v1/triagens",
+        files={"file": ("grande.txt", io.BytesIO(conteudo_grande), "text/plain")},
+    )
+    assert res.status_code == 413
+    body = res.json()
+    assert body["codigo"] == CodigoErro.ARQUIVO_MAIOR_QUE_LIMITE.value
+    assert "documento_id" not in body
+    assert "10.00 MB" in body["mensagem"]
+    assert body["detalhes"]["motivo"] == "TAMANHO_EXCEDIDO"
+    assert body["detalhes"]["tamanho_bytes"] == tamanho_10_5mb
+    assert body["detalhes"]["limite_bytes"] == 10 * 1024 * 1024
+    assert not gemini_mock.classificar_documento.called
+
+
+def test_rejeicao_borda_422_pdf_truncado_e_owner_password_sem_documento_id_nem_gemini(client, monkeypatch):
+    """Rejeição imediata na borda (HTTP 422) para PDF truncado e PDF com senha (user_pw e owner_pw)."""
+    from pathlib import Path
+    from unittest.mock import MagicMock
+    from src.api.routes import triagem_service
+
+    gemini_mock = MagicMock()
+    monkeypatch.setattr(triagem_service, "_obter_gemini_service", lambda: gemini_mock)
+
+    # 1. PDF truncado em 40% e 85% (antes reparado silenciosamente pelo PyMuPDF)
+    pdf_valido = (Path(__file__).resolve().parent.parent / "data" / "samples" / "01_laudo_rotina.pdf").read_bytes()
+    for fracao in (0.4, 0.85):
+        pdf_truncado = pdf_valido[: int(len(pdf_valido) * fracao)]
+        res = client.post(
+            "/api/v1/triagens",
+            files={"file": (f"truncado_{fracao}.pdf", io.BytesIO(pdf_truncado), "application/pdf")},
+        )
+        assert res.status_code == 422
+        body = res.json()
+        assert body["codigo"] == CodigoErro.PDF_CORROMPIDO.value
+        assert "documento_id" not in body
+
+    # 2. PDF protegido apenas por owner_pw (restrição de permissões)
+    doc_fitz = fitz.open()
+    doc_fitz.new_page().insert_text((50, 50), "Laudo protegido com senha de proprietário.")
+    pdf_owner_bytes = doc_fitz.tobytes(
+        encryption=fitz.PDF_ENCRYPT_AES_256,
+        owner_pw="master123",
+        permissions=fitz.PDF_PERM_PRINT,
+    )
+    doc_fitz.close()
+
+    res_owner = client.post(
+        "/api/v1/triagens",
+        files={"file": ("protegido_owner.pdf", io.BytesIO(pdf_owner_bytes), "application/pdf")},
+    )
+    assert res_owner.status_code == 422
+    body_owner = res_owner.json()
+    assert body_owner["codigo"] == CodigoErro.PDF_PROTEGIDO.value
+    assert "documento_id" not in body_owner
+
+    assert not gemini_mock.classificar_documento.called
+    assert not gemini_mock.extrair_dados_clinicos_envelope.called
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"canal_origem": "Pronto_Socorro"},
+        {"documento_texto": "   "},
+        {"documento_texto": 123},
+        {"documento_texto": ["lista", "invalida"]},
+        {"documento_texto": "Laudo válido", "metadados": "nao_e_dict"},
+        {"documento_texto": "Laudo válido", "documento_id": 123},
+        {"documento_texto": "Laudo válido", "canal_origem": 999},
+    ],
+)
+def test_rejeicao_borda_422_campos_invalidos_envelope_json_sem_documento_id_nem_gemini(
+    client, monkeypatch, payload
+):
+    """Payloads JSON com campos obrigatórios ausentes ou tipos inválidos retornam 422 CAMPOS_INVALIDOS."""
+    from unittest.mock import MagicMock
+    from src.api.routes import triagem_service
+
+    gemini_mock = MagicMock()
+    monkeypatch.setattr(triagem_service, "_obter_gemini_service", lambda: gemini_mock)
+
+    res = client.post("/api/v1/triagens", json=payload)
+    assert res.status_code == 422
+    body = res.json()
+    assert body["codigo"] == CodigoErro.CAMPOS_INVALIDOS.value
+    assert "documento_id" not in body
+    assert not gemini_mock.classificar_documento.called
+    assert not gemini_mock.extrair_dados_clinicos_envelope.called

@@ -41,13 +41,15 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     if isinstance(detail, dict):
         codigo = detail.get("codigo", "ERRO_REQUISICAO")
         mensagem = detail.get("mensagem", str(exc.detail))
+        content = {"codigo": codigo, "mensagem": mensagem}
+        if detail.get("detalhes") is not None:
+            content["detalhes"] = detail["detalhes"]
     else:
-        codigo = "ERRO_REQUISICAO"
-        mensagem = str(detail)
+        content = {"codigo": "ERRO_REQUISICAO", "mensagem": str(detail)}
 
     return JSONResponse(
         status_code=exc.status_code,
-        content={"codigo": codigo, "mensagem": mensagem},
+        content=content,
     )
 
 

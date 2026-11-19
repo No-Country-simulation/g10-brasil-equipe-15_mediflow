@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, Response, UploadFile, status
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from src.ingestion import IngestaoError
 from src.schemas import CodigoErro, TriagemMediFlow
@@ -39,7 +40,7 @@ router = APIRouter(prefix="/api/v1", tags=["Triagem Clínica"])
         202: {"description": "Documento aceito e enfileirado para processamento."},
         400: {"model": ErroEnvelope, "description": "Requisição ou JSON malformado."},
         409: {"model": ErroEnvelope, "description": "Identificador em conflito."},
-        413: {"model": ErroEnvelope, "description": "Arquivo maior que o limite (10 MB)."},
+        413: {"model": ErroEnvelope, "description": "Arquivo maior que o limite (10 MB ou 20 páginas)."},
         415: {"model": ErroEnvelope, "description": "Formato não suportado ou MIME inválido."},
         422: {"model": ErroEnvelope, "description": "Campos obrigatórios ausentes ou arquivo vazio."},
     },
@@ -62,7 +63,7 @@ async def submeter_triagem(
     x_mediflow_simulacao_oci = request.headers.get("x-mediflow-simulacao-oci")
 
     # Cenário A: Requisição em formato JSON (CT-001, CT-008, CT-012)
-    if "application/json" in content_type:
+    if "application/json" in content_type.lower():
         try:
             body_bytes = await request.body()
             if not body_bytes or not body_bytes.strip():
@@ -87,8 +88,27 @@ async def submeter_triagem(
                 detail={"codigo": CodigoErro.CAMPOS_INVALIDOS.value, "mensagem": "Envelope JSON vazio."},
             )
 
-        texto = dados.get("documento_texto") or dados.get("texto")
-        if not texto or not str(texto).strip():
+        try:
+            payload = CriarTriagemTextoRequest.model_validate(dados)
+        except ValidationError as err_validacao:
+            detalhes_campos = [
+                {
+                    "campo": ".".join(str(parte) for parte in item.get("loc", ())) or "body",
+                    "motivo": str(item.get("msg", "Valor inválido.")),
+                }
+                for item in err_validacao.errors()
+            ]
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "codigo": CodigoErro.CAMPOS_INVALIDOS.value,
+                    "mensagem": "Campos inválidos ou ausentes na requisição.",
+                    "detalhes": detalhes_campos,
+                },
+            )
+
+        texto = payload.documento_texto or payload.texto
+        if not texto or not texto.strip():
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
@@ -97,21 +117,21 @@ async def submeter_triagem(
                 },
             )
 
-        doc_id_informado = dados.get("documento_id")
-        origem = dados.get("canal_origem", "Prontuário")
-        meta = dict(dados.get("metadados", {}))
+        doc_id_informado = payload.documento_id
+        origem = payload.canal_origem or "Prontuário"
+        meta = dict(payload.metadados or {})
         if x_mediflow_simulacao_oci:
             meta["simular_falha_oci"] = x_mediflow_simulacao_oci.strip().upper()
             meta["modo_simulacao"] = True
 
         try:
             doc_id = triagem_service.submeter_texto(
-                texto=str(texto),
+                texto=texto,
                 documento_id=doc_id_informado,
                 canal_origem=origem,
                 metadados=meta,
             )
-        except IngestaoError as e:
+        except (IngestaoError, ValueError) as e:
             raise _tratar_erro_ingestao(e)
 
         background_tasks.add_task(triagem_service.executar_triagem, doc_id)
@@ -349,7 +369,7 @@ def _tratar_erro_ingestao(erro: Exception) -> HTTPException:
             detail={"codigo": code, "mensagem": msg},
         )
 
-    if "não suportado" in msg.lower() or "não suportada" in msg.lower() or code == CodigoErro.FORMATO_NAO_SUPORTADO.value:
+    if code == CodigoErro.FORMATO_NAO_SUPORTADO.value:
         return HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail={
@@ -357,7 +377,8 @@ def _tratar_erro_ingestao(erro: Exception) -> HTTPException:
                 "mensagem": "Formatos aceitos: PDF, JPG, PNG, WEBP e TXT.",
             },
         )
-    if "inconsistência" in msg.lower() or "inconsistente" in msg.lower() or code == CodigoErro.MIME_INVALIDO.value:
+
+    if code == CodigoErro.MIME_INVALIDO.value:
         return HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail={
@@ -365,15 +386,55 @@ def _tratar_erro_ingestao(erro: Exception) -> HTTPException:
                 "mensagem": "Conteúdo real incompatível com a extensão do arquivo.",
             },
         )
-    if "10.00 mb" in msg.lower() or code == CodigoErro.ARQUIVO_MAIOR_QUE_LIMITE.value:
+
+    if code == CodigoErro.ARQUIVO_MAIOR_QUE_LIMITE.value or "10.00 mb" in msg.lower():
+        total_paginas = getattr(erro, "total_paginas", None)
+        limite_paginas = getattr(erro, "limite_paginas", None)
+        eh_limite_paginas = (
+            total_paginas is not None
+            or limite_paginas is not None
+            or "página" in msg.lower()
+            or "pagina" in msg.lower()
+        )
+        if eh_limite_paginas:
+            detalhes_paginas: Dict[str, Any] = {"motivo": "PAGINAS_EXCEDIDAS"}
+            if total_paginas is not None:
+                detalhes_paginas["total_paginas"] = total_paginas
+            if limite_paginas is not None:
+                detalhes_paginas["limite_paginas"] = limite_paginas
+            if total_paginas is not None and limite_paginas is not None:
+                mensagem_limite = (
+                    f"O documento PDF possui {total_paginas} páginas e excede o limite "
+                    f"operacional de {limite_paginas} páginas (Regra A6)."
+                )
+            else:
+                mensagem_limite = "O documento PDF excede o limite operacional de 20 páginas (Regra A6)."
+            return HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail={
+                    "codigo": CodigoErro.ARQUIVO_MAIOR_QUE_LIMITE.value,
+                    "mensagem": mensagem_limite,
+                    "detalhes": detalhes_paginas,
+                },
+            )
+
+        tamanho_bytes = getattr(erro, "tamanho_bytes", None)
+        limite_bytes = getattr(erro, "limite_bytes", None)
+        detalhes_tamanho: Dict[str, Any] = {"motivo": "TAMANHO_EXCEDIDO"}
+        if tamanho_bytes is not None:
+            detalhes_tamanho["tamanho_bytes"] = tamanho_bytes
+        if limite_bytes is not None:
+            detalhes_tamanho["limite_bytes"] = limite_bytes
         return HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail={
                 "codigo": CodigoErro.ARQUIVO_MAIOR_QUE_LIMITE.value,
                 "mensagem": "Arquivo excede o limite operacional de 10.00 MB (Regra A6).",
+                "detalhes": detalhes_tamanho,
             },
         )
-    if "protegido" in msg.lower() or code == CodigoErro.PDF_PROTEGIDO.value:
+
+    if code == CodigoErro.PDF_PROTEGIDO.value:
         return HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
@@ -381,7 +442,42 @@ def _tratar_erro_ingestao(erro: Exception) -> HTTPException:
                 "mensagem": "PDF protegido por senha não pode ser processado.",
             },
         )
-    if "corrompido" in msg.lower() or code == CodigoErro.PDF_CORROMPIDO.value:
+
+    if code == CodigoErro.PDF_CORROMPIDO.value:
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "codigo": CodigoErro.PDF_CORROMPIDO.value,
+                "mensagem": "Arquivo PDF corrompido ou truncado.",
+            },
+        )
+
+    # Fallback para ValueError / exceções sem código de domínio explícito
+    if "não suportado" in msg.lower() or "não suportada" in msg.lower():
+        return HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail={
+                "codigo": CodigoErro.FORMATO_NAO_SUPORTADO.value,
+                "mensagem": "Formatos aceitos: PDF, JPG, PNG, WEBP e TXT.",
+            },
+        )
+    if "inconsistência" in msg.lower() or "inconsistente" in msg.lower():
+        return HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail={
+                "codigo": CodigoErro.MIME_INVALIDO.value,
+                "mensagem": "Conteúdo real incompatível com a extensão do arquivo.",
+            },
+        )
+    if "protegido" in msg.lower():
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "codigo": CodigoErro.PDF_PROTEGIDO.value,
+                "mensagem": "PDF protegido por senha não pode ser processado.",
+            },
+        )
+    if "corrompido" in msg.lower():
         return HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={

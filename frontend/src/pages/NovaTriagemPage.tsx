@@ -28,7 +28,7 @@ const AJUDA_SEM_CONTEUDO: Record<TipoEnvio, string> = {
   texto: 'Cole o texto para enviar.',
 }
 
-const AJUDA_PRONTO = 'Validação final de formato e tamanho também acontece na API.'
+const AJUDA_PRONTO = 'Validação final de formato, tamanho e páginas também acontece na API.'
 
 export function NovaTriagemPage() {
   const navigate = useNavigate()
