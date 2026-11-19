@@ -7,7 +7,40 @@ describe('mensagemDeErro', () => {
     expect(mensagemDeErro(new ApiError(413, 'ARQUIVO_MAIOR_QUE_LIMITE', 'Regra A6'))).toBe(
       'O arquivo excede o limite de 10 MB.',
     )
+    expect(
+      mensagemDeErro(
+        new ApiError(413, 'ARQUIVO_MAIOR_QUE_LIMITE', 'Arquivo excede 10.00 MB', {
+          motivo: 'TAMANHO_EXCEDIDO',
+          tamanho_bytes: 11_000_000,
+          limite_bytes: 10_485_760,
+        }),
+      ),
+    ).toBe('O arquivo excede o limite de 10 MB.')
     expect(mensagemDeErro(new ApiError(415, 'FORMATO_NAO_SUPORTADO', 'x'))).toMatch(/Formato não suportado/)
+  })
+
+  it('diferencia limite de páginas de limite de 10 MB em ARQUIVO_MAIOR_QUE_LIMITE (413)', () => {
+    expect(
+      mensagemDeErro(
+        new ApiError(
+          413,
+          'ARQUIVO_MAIOR_QUE_LIMITE',
+          'O documento PDF possui 21 páginas e excede o limite operacional de 20 páginas (Regra A6).',
+          { motivo: 'PAGINAS_EXCEDIDAS', total_paginas: 21, limite_paginas: 20 },
+        ),
+      ),
+    ).toBe('O PDF tem 21 páginas e excede o limite de 20 páginas.')
+
+    expect(
+      mensagemDeErro(
+        new ApiError(413, 'ARQUIVO_MAIOR_QUE_LIMITE', 'Limite excedido', { motivo: 'PAGINAS_EXCEDIDAS' }),
+      ),
+    ).toBe('O PDF excede o limite de 20 páginas.')
+
+    // Fallback defensivo quando `detalhes` não é enviado
+    expect(
+      mensagemDeErro(new ApiError(413, 'ARQUIVO_MAIOR_QUE_LIMITE', 'PDF válido de 21 páginas: excede o limite.')),
+    ).toBe('O PDF excede o limite de 20 páginas.')
   })
 
   it('explica quando o documento não existe (404)', () => {

@@ -68,12 +68,14 @@ def test_carregar_bytes_pdf():
 def test_limite_tamanho_excedido():
     """Valida bloqueio de segurança para uploads maiores que 10MB (alinhado a Limite_Tamanho_Acima10MB)"""
     tamanho_excessivo = 11 * 1024 * 1024  # 11MB
-    dados_ficticios = b"0" * 100  # não aloca 11MB em ram, testa a validação lógica
 
     with pytest.raises(TamanhoExcedidoError) as exc_info:
         DocumentLoader.validar_limite_tamanho(tamanho_excessivo)
 
     assert exc_info.value.codigo == "ARQUIVO_MAIOR_QUE_LIMITE"
+    assert exc_info.value.tamanho_bytes == tamanho_excessivo
+    assert exc_info.value.limite_bytes == DocumentLoader.LIMITE_MAXIMO_BYTES
+    assert exc_info.value.total_paginas is None
 
 
 def test_limite_paginas_excedido():
@@ -89,6 +91,8 @@ def test_limite_paginas_excedido():
         DocumentLoader.carregar_bytes(pdf_bytes, nome_arquivo="documento_longo_21paginas.pdf")
 
     assert exc_info.value.codigo == "ARQUIVO_MAIOR_QUE_LIMITE"
+    assert exc_info.value.total_paginas == 21
+    assert exc_info.value.limite_paginas == DocumentLoader.LIMITE_MAXIMO_PAGINAS
     assert "20 páginas" in exc_info.value.mensagem
 
 
@@ -131,6 +135,35 @@ def test_pdf_corrompido():
         DocumentLoader.carregar_bytes(bytes_corrompidos, nome_arquivo="exame_corrompido.pdf")
 
     assert exc_info.value.codigo == "PDF_CORROMPIDO"
+
+
+@pytest.mark.parametrize("fracao", [0.4, 0.85])
+def test_pdf_truncado_rejeitado_como_corrompido(fracao):
+    """Garante que PDFs truncados que o PyMuPDF repararia silenciosamente sejam rejeitados (PDF_CORROMPIDO)."""
+    pdf_valido = (SAMPLES_DIR / "01_laudo_rotina.pdf").read_bytes()
+    pdf_truncado = pdf_valido[: int(len(pdf_valido) * fracao)]
+
+    with pytest.raises(DocumentoCorrompidoError) as exc_info:
+        DocumentLoader.carregar_bytes(pdf_truncado, nome_arquivo="laudo_truncado.pdf")
+
+    assert exc_info.value.codigo == "PDF_CORROMPIDO"
+
+
+def test_pdf_protegido_apenas_owner_password():
+    """Garante detecção de PDF criptografado apenas com senha de proprietário (restrição de permissões)."""
+    doc_fitz = fitz.open()
+    doc_fitz.new_page().insert_text((50, 50), "Laudo protegido com senha de proprietário.")
+    pdf_owner_bytes = doc_fitz.tobytes(
+        encryption=fitz.PDF_ENCRYPT_AES_256,
+        owner_pw="master123",
+        permissions=fitz.PDF_PERM_PRINT,
+    )
+    doc_fitz.close()
+
+    with pytest.raises(DocumentoProtegidoError) as exc_info:
+        DocumentLoader.carregar_bytes(pdf_owner_bytes, nome_arquivo="exame_owner_pw.pdf")
+
+    assert exc_info.value.codigo == "PDF_PROTEGIDO"
 
 
 def test_carregamento_imagem_multimodal():
