@@ -3,7 +3,7 @@
 > **Projeto:** MediFlow — Agente Autônomo de Triagem e Roteamento Clínico  
 > **Programa:** Hackathon ONE G10 — Oracle Next Education & Alura  
 > **Contrato de Recursos:** 100% OCI Always Free (VM Compute Ampere A1 + Object Storage)  
-> **Arquitetura de Acesso:** Porta 80 única (Streamlit em `/` e FastAPI em `/api` e `/docs`)
+> **Arquitetura de Acesso:** Porta 80 única — Portal React SPA em `/`, FastAPI em `/api` e `/docs`, e Bancada Streamlit em `/streamlit/`
 
 ---
 
@@ -11,154 +11,150 @@
 
 Este guia orienta o desenvolvedor passo a passo a disponibilizar o **MediFlow** em uma máquina virtual pública na nuvem da Oracle, pronta para ser demonstrada e avaliada pela banca examinadora do Hackathon.
 
+```text
+                  ┌─────────────────────────────────────────────────────┐
+                  │             Oracle Cloud Always Free                │
+                  │                                                     │
+Internet          │  ┌─────────────────┐   /     ┌───────────────────┐  │
+(Banca / Usuários)├─►│     Nginx       ├────────►│  Portal React SPA │  │
+ (Porta 80 HTTP)  │  │  Proxy Reverso  │         │  (estáticos dist) │  │
+                  │  │   + Estáticos   │  :8000  └───────────────────┘  │
+                  │  │                 ├────────►┌───────────────────┐  │
+                  │  │                 │         │  FastAPI REST     │  │
+                  │  │                 │         │  (--workers 1)    │  │
+                  │  │                 │  :8501  │  (/api, /docs)    │  │
+                  │  │                 ├────┐    └─────────┬─────────┘  │
+                  │  └─────────────────┘    ▼              │            │
+                  │                  ┌──────────────┐      │ (Backup    │
+                  │                  │  Streamlit   │      │  e Sync)   │
+                  │                  │ (/streamlit/)├──────┤            │
+                  │                  └──────────────┘      ▼            │
+                  │                              ┌────────────────────┐ │
+                  │                              │ OCI Object Storage │ │
+                  │                              │  (Bucket do Grupo) │ │
+                  │                              └────────────────────┘ │
+                  └─────────────────────────────────────────────────────┘
 ```
-                  ┌───────────────────────────────────────────────┐
-                  │          Oracle Cloud Always Free             │
-                  │                                               │
-Internet          │  ┌────────────┐   :8000   ┌────────────────┐  │
-(Banca / Usuários)├─►│   Nginx    ├──────────►│  FastAPI REST  │  │
- (Porta 80 HTTP)  │  │   Proxy    │           │  (/api, /docs) │  │
-                  │  │  Reverso   │   :8501   └───────┬────────┘  │
-                  │  │            ├──────────┐        │           │
-                  │  └────────────┘          ▼        ▼           │
-                  │                   ┌──────────────┐│           │
-                  │                   │  Streamlit   ││ (Backup   │
-                  │                   │  Dashboard   ││  e Sync)  │
-                  │                   └──────────────┘│           │
-                  │                                   ▼           │
-                  │                        ┌────────────────────┐ │
-                  │                        │ OCI Object Storage │ │
-                  │                        │  (/recebidos, etc) │ │
-                  │                        └────────────────────┘ │
-                  └───────────────────────────────────────────────┘
-```
+
+> [!IMPORTANT]
+> **Reaproveitamento do OCI Object Storage do Grupo:** Não é obrigatório criar um novo bucket na mesma conta OCI da VM Compute. Como o `OCIStorage` autentica via API Key HTTPS (`OCI_USER_OCID`, `OCI_TENANCY_OCID`, `OCI_FINGERPRINT`, `OCI_KEY_FILE`, `OCI_NAMESPACE`, `OCI_BUCKET_NAME`), a VM pode gravar diretamente no bucket centralizado `mediflow-documentos` da conta do integrante responsável, desde que a conta e a chave permaneçam ativas durante o período da banca.
+
+> [!NOTE]
+> **Decisão D-01 (`--workers 1`):** A API mantém o índice de triagens em memória RAM durante a execução do processo. Por isso, o `docker-compose.yml` executa o Uvicorn obrigatoriamente com `--workers 1`, garantindo consistência no polling de `/status`, `/resultado` e `/historico`.
 
 ---
 
 ## 📋 Pré-Requisitos
 
 1. Conta ativa no programa **Oracle Cloud Always Free**.
-2. Par de chaves SSH (gerado no seu computador via `ssh-keygen` ou gerado automaticamente pelo console da OCI ao criar a VM).
-3. Chaves e variáveis configuradas no seu arquivo `.env` (incluindo `GEMINI_API_KEY` e dados da OCI).
+2. Par de chaves SSH (gerado via `ssh-keygen` ou baixado do console OCI ao criar a VM).
+3. Arquivo `.env` com `GEMINI_API_KEY` (recomenda-se chave com cota disponível para o dia da banca) e credenciais OCI do bucket `mediflow-documentos`.
+4. Chave privada da API OCI (`.pem`, ex.: `mediflow_api_key.pem`) renomeada como `oci_api_key.pem` na raiz do projeto na VM.
 
 ---
 
 ## 🚀 Passo 1: Criar a Máquina Virtual na OCI (Console Web)
 
-1. Acesse o console da Oracle Cloud e vá em **Menu de Hambúrguer ☰ ➔ Compute (Recursos de Computação) ➔ Instances (Instâncias)**.
-2. Clique no botão **Create Instance (Criar Instância)**.
-3. Preencha as configurações recomendadas:
-   - **Name (Nome):** `mediflow-production`
-   - **Placement (Posicionamento):** Deixe o domínio de disponibilidade padrão.
-   - **Image and Shape (Imagem e Forma):**
-     - Clique em **Change Image** e selecione **Canonical Ubuntu** (versão 22.04 ou 24.04 Minimal/Server).
-     - Clique em **Change Shape**, selecione **Ampere (ARM Processor)**:
-       - Shape: `VM.Standard.A1.Flex`
-       - OCPUs: `2` a `4` (Always Free permite até 4 OCPUs)
-       - Memória RAM: `12` a `24 GB` (Always Free permite até 24 GB)
-   - **Networking (Rede):**
-     - Selecione sua VCN existente (ou deixe criar uma nova).
-     - Subnet pública.
-     - Certifique-se de marcar: **Assign a public IPv4 address (Atribuir endereço IPv4 público)**.
-   - **Add SSH keys (Chaves SSH):**
-     - Selecione *Paste public keys* e cole sua chave pública (`id_rsa.pub` ou `id_ed25519.pub`), ou clique em *Save private key* caso escolha gerar uma nova.
-4. Clique em **Create (Criar)** e aguarde a instância mudar para o status **Running (Verde)**. Anote o **Public IP Address (IP Público)** da VM.
+1. Acesse o console da Oracle Cloud e vá em **Menu ☰ ➔ Compute ➔ Instances**.
+2. Clique em **Create Instance**.
+3. Configurações recomendadas:
+   - **Name:** `mediflow-production`
+   - **Image:** **Canonical Ubuntu** (`22.04` ou `24.04` LTS).
+   - **Shape:** **Ampere (ARM64)** — `VM.Standard.A1.Flex` (`2` a `4` OCPUs, `12` a `24 GB` RAM — Always Free).
+   - **Networking:** VCN com subnet pública e **Assign a public IPv4 address** marcado.
+   - **Add SSH keys:** Cole sua chave pública (`id_ed25519.pub` / `id_rsa.pub`) ou salve a chave privada gerada.
+4. Clique em **Create** e anote o **Public IP Address**.
 
 ---
 
 ## 🔓 Passo 2: Liberar a Porta 80 na Security List da VCN
 
-Por padrão, a OCI só permite conexões SSH (porta 22). É necessário autorizar o tráfego HTTP na porta 80:
-
-1. Na página de detalhes da sua instância, clique no link da **Subnet (Sub-rede Pública)**.
-2. Clique na **Default Security List for...**.
-3. Em **Ingress Rules (Regras de Entrada)**, clique em **Add Ingress Rules**:
-   - **Source Type:** CIDR
-   - **Source CIDR:** `0.0.0.0/0` (qualquer endereço de internet)
-   - **IP Protocol:** TCP
-   - **Destination Port Range:** `80,443`
+1. Na página de detalhes da instância, clique na **Subnet Pública**.
+2. Clique na **Default Security List**.
+3. Em **Ingress Rules**, clique em **Add Ingress Rules**:
+   - **Source Type:** CIDR · **Source CIDR:** `0.0.0.0/0`
+   - **IP Protocol:** TCP · **Destination Port Range:** `80,443`
    - **Description:** `Acesso HTTP/HTTPS público MediFlow`
-4. Clique em **Add Ingress Rules**.
+4. Salve a regra.
 
 ---
 
-## 🔑 Passo 3: Enviar as Credenciais (.env e Chave OCI) para a VM
+## 🔑 Passo 3: Enviar `.env` e Chave OCI (`.pem`) para a VM
 
-Abra o terminal PowerShell na sua máquina local e envie com segurança os arquivos necessários para a VM via `scp`:
+No PowerShell da sua máquina local:
 
 ```powershell
-# Exemplo de comando no seu computador local:
-# Substitua <CAMINHO_SUA_CHAVE_SSH> e <IP_PUBLICO_DA_VM>
-
 # 1. Enviar o arquivo .env
 scp -i ~/.ssh/sua_chave_ssh .env ubuntu@<IP_PUBLICO_DA_VM>:~/.env
 
-# 2. Enviar a chave privada da OCI (se estiver usando chave .pem no projeto)
-scp -i ~/.ssh/sua_chave_ssh ./oci_api_key.pem ubuntu@<IP_PUBLICO_DA_VM>:~/oci_api_key.pem
+# 2. Enviar a chave privada OCI (renomeando para oci_api_key.pem na VM)
+scp -i ~/.ssh/sua_chave_ssh "C:\caminho\para\mediflow_api_key.pem" ubuntu@<IP_PUBLICO_DA_VM>:~/oci_api_key.pem
 ```
+
+> [!TIP]
+> Não é necessário alterar manualmente `OCI_KEY_FILE` dentro do `.env` para o container: o `deploy/docker-compose.yml` já monta `../oci_api_key.pem` em modo somente leitura em `/app/oci_api_key.pem` e sobrescreve `OCI_KEY_FILE=/app/oci_api_key.pem` nos serviços da API e do Streamlit.
 
 ---
 
-## 🛠️ Passo 4: Conectar na VM e Executar o Deploy Automatizado
+## 🛠️ Passo 4: Conectar na VM e Executar o Deploy Automatizado (Branch `main` / Tag `v1.2.0`)
 
-1. Conecte-se na sua máquina virtual via SSH:
+1. Conecte-se via SSH:
    ```bash
    ssh -i ~/.ssh/sua_chave_ssh ubuntu@<IP_PUBLICO_DA_VM>
    ```
 
-2. Clone o repositório oficial do MediFlow na VM:
+2. Clone o repositório oficial na branch congelada de produção (`main` / tag `v1.2.0`):
    ```bash
-   git clone https://github.com/No-Country-simulation/g10-brasil-equipe-15_mediflow.git
+   git clone --branch main https://github.com/No-Country-simulation/g10-brasil-equipe-15_mediflow.git
    cd g10-brasil-equipe-15_mediflow
    ```
 
-3. Mova os arquivos de credenciais enviados para o projeto:
+3. Mova o `.env` e a chave `.pem` para a raiz do projeto:
    ```bash
    mv ~/.env .env
-   # Se enviou a chave .pem:
    mv ~/oci_api_key.pem ./oci_api_key.pem
-   chmod 600 oci_api_key.pem
+   chmod 600 ./oci_api_key.pem
    ```
 
-4. Dê permissão de execução e rode o script de implantação automatizada:
+4. Execute o script automatizado de implantação:
    ```bash
    chmod +x deploy/deploy_oci.sh
    ./deploy/deploy_oci.sh
    ```
 
-O script irá automaticamente:
-- Instalar Docker Engine e Docker Compose (se necessário).
-- Liberar as portas 80 e 443 no firewall local do Linux (`iptables`/`ufw`).
-- Construir a imagem da aplicação.
-- Iniciar os contêineres em segundo plano com reinicialização automática (`restart: unless-stopped`).
+O script automaticamente:
+- Valida a presença de `.env` e `oci_api_key.pem`.
+- Instala Docker Engine e Docker Compose (se necessário).
+- Libera as portas `80` e `443` no firewall local (`ufw`/`iptables`).
+- Faz o build multi-stage do Portal React + Nginx e dos containers FastAPI e Streamlit.
+- Inicia a stack em segundo plano com reinicialização automática (`restart: unless-stopped`).
 
 ---
 
-## 🌐 Passo 5: Como Demonstrar para a Banca Avaliadora
+## 🌐 Passo 5: URLs de Demonstração para a Banca Avaliadora
 
-Com o deploy finalizado, você tem um ambiente profissional pronto para a apresentação do Pitch:
-
-| Serviço | URL de Acesso Público | Para que serve na Demonstração |
+| Serviço | URL de Acesso Público | Uso na Apresentação |
 | :--- | :--- | :--- |
-| **Painel Streamlit** | `http://<IP_PUBLICO>/` | Demonstração visual interativa, upload de documentos, gráficos e auditoria médica. |
-| **Swagger OpenAPI** | `http://<IP_PUBLICO>/docs` | Comprovação técnica para os avaliadores de backend da Oracle (executar requisições assíncronas 202). |
-| **Health Check REST** | `http://<IP_PUBLICO>/api/v1/health` | Prova de vitalidade e monitoramento dos serviços. |
+| **Portal Web (React SPA)** | `http://<IP_PUBLICO>/` | Interface principal do MediFlow (Login demo: CRM `145892` · UF `SP` · Senha `mediflow`). |
+| **Swagger OpenAPI** | `http://<IP_PUBLICO>/docs` | Comprovação técnica dos endpoints REST assíncronos (`202 Accepted`, status, histórico). |
+| **Health Check REST** | `http://<IP_PUBLICO>/api/v1/health` | Prova de vitalidade (`api`, `langgraph` e `oci_storage` online). |
+| **Bancada Streamlit (HiTL)** | `http://<IP_PUBLICO>/streamlit/` | Painel auxiliar de laboratório e auditoria médica. |
 
 ---
 
 ## 🔍 Diagnóstico e Comandos Úteis na VM
 
-Se precisar verificar logs ou status da aplicação conectada via SSH:
-
 ```bash
-# Ver status dos contêineres
+# Status e healthchecks dos contêineres
 docker compose -f deploy/docker-compose.yml ps
 
-# Ver logs em tempo real
+# Logs em tempo real (todos os serviços ou apenas API)
 docker compose -f deploy/docker-compose.yml logs -f
+docker compose -f deploy/docker-compose.yml logs -f mediflow-api
 
-# Reiniciar a stack
-docker compose -f deploy/docker-compose.yml restart
+# Atualizar para nova versão publicada na main
+git pull origin main
+docker compose -f deploy/docker-compose.yml up -d --build
 
 # Parar a aplicação
 docker compose -f deploy/docker-compose.yml down
@@ -169,4 +165,4 @@ docker compose -f deploy/docker-compose.yml down
 ## 🛡️ Segurança e LGPD (RNF-08)
 
 - A aplicação na OCI opera exclusivamente com dados sintéticos e fictícios.
-- As credenciais `.env` e arquivos `.pem` residem na VM e **nunca** são enviados para o repositório Git.
+- `.env` e `oci_api_key.pem` residem apenas na VM e são bloqueados tanto no `.gitignore` quanto no `.dockerignore`.

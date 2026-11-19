@@ -1,0 +1,25 @@
+# Ambiente virtual e caches Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Dependências e build local do Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Segredos e credenciais (nunca embutir em imagens Docker — injetar via env_file/volume)
+.env
+.env.*
+!.env.example
+!frontend/.env.example
+*.pem
+*.key
+
+# Arquivos temporários, Git e IDE
+.git/
+.vscode/
+.agents/
+temp/
+*.log

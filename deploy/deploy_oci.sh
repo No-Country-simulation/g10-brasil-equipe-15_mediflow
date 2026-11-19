@@ -29,30 +29,40 @@ if [ ! -f "${PROJECT_ROOT}/.env" ]; then
     echo -e "  nano .env"
     exit 1
 fi
-
 echo -e "${VERDE}[OK] Arquivo .env detectado.${NC}"
+
+# 2.1 Verifica existência da chave privada OCI (.pem) para montagem segura no container
+OCI_KEY_HOST="${OCI_KEY_HOST_PATH:-${PROJECT_ROOT}/oci_api_key.pem}"
+if [ ! -f "${OCI_KEY_HOST}" ]; then
+    echo -e "${VERMELHO}[ERRO] Chave privada OCI não encontrada em: ${OCI_KEY_HOST}${NC}"
+    echo -e "${AMARELO}Envie a chave .pem do bucket do grupo para a raiz do projeto como 'oci_api_key.pem' (chmod 600)${NC}"
+    echo -e "${AMARELO}ou defina OCI_KEY_HOST_PATH=/caminho/para/chave.pem antes de executar este script.${NC}"
+    exit 1
+fi
+chmod 600 "${OCI_KEY_HOST}" || true
+echo -e "${VERDE}[OK] Chave privada OCI detectada (${OCI_KEY_HOST}).${NC}"
 
 # 3. Instalação do Docker e Docker Compose (se não existirem)
 if ! command -v docker &> /dev/null; then
     echo -e "${AMARELO}[INFO] Docker não encontrado. Instalando Docker Engine...${NC}"
     sudo apt-get update
     sudo apt-get install -y ca-certificates curl gnupg lsb-release
-    
+
     sudo mkdir -p /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes
-    
+
     echo \
       "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
       $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-    
+
     sudo apt-get update
     sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-    
+
     # Permite executar docker sem sudo para o usuário atual
     sudo usermod -aG docker "$USER"
     echo -e "${VERDE}[OK] Docker instalado com sucesso.${NC}"
 else
-    echo -e "${VERDE}[OK] Docker já está instalado.$(docker --version)${NC}"
+    echo -e "${VERDE}[OK] Docker já está instalado. $(docker --version)${NC}"
 fi
 
 # 4. Liberação das portas no Firewall local da VM (Iptables / UFW)
@@ -69,7 +79,7 @@ else
     echo -e "${AMARELO}[INFO] Inserindo regra de liberação da porta 80 no iptables...${NC}"
     sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT || true
     sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT || true
-    
+
     # Salva regras se iptables-persistent estiver disponível
     if command -v netfilter-persistent &> /dev/null; then
         sudo netfilter-persistent save || true
@@ -77,7 +87,7 @@ else
 fi
 
 # 5. Execução do Docker Compose
-echo -e "${AMARELO}[INFO] Construindo imagens e iniciando os contêineres do MediFlow...${NC}"
+echo -e "${AMARELO}[INFO] Construindo imagens (React SPA + FastAPI + Streamlit) e iniciando os contêineres...${NC}"
 docker compose -f deploy/docker-compose.yml down --remove-orphans || true
 docker compose -f deploy/docker-compose.yml up -d --build
 
@@ -91,9 +101,10 @@ echo -e "\n${VERDE}=============================================================
 echo -e "${VERDE}  🎉 MediFlow implantado com sucesso na Oracle Cloud (OCI)!       ${NC}"
 echo -e "${VERDE}==================================================================${NC}"
 echo -e "Acesse os serviços pelo navegador:"
-echo -e "  🌐 ${VERDE}Dashboard Streamlit:${NC} http://${IP_PUBLICO}/"
-echo -e "  📖 ${VERDE}Documentação Swagger API:${NC} http://${IP_PUBLICO}/docs"
-echo -e "  🩺 ${VERDE}Health Check REST:${NC} http://${IP_PUBLICO}/api/v1/health"
+echo -e "  🌐 ${VERDE}Portal Web (React SPA):${NC}    http://${IP_PUBLICO}/"
+echo -e "  📖 ${VERDE}Documentação Swagger API:${NC}  http://${IP_PUBLICO}/docs"
+echo -e "  🩺 ${VERDE}Health Check REST:${NC}         http://${IP_PUBLICO}/api/v1/health"
+echo -e "  🧪 ${VERDE}Bancada Streamlit (HiTL):${NC}  http://${IP_PUBLICO}/streamlit/"
 echo -e "\nComandos úteis para monitoramento:"
 echo -e "  docker compose -f deploy/docker-compose.yml ps"
 echo -e "  docker compose -f deploy/docker-compose.yml logs -f"

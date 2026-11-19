@@ -1,5 +1,6 @@
 # MediFlow — Orquestração de Contêineres de Produção (Docker Compose)
-# Stack completa: Nginx (Porta 80) -> FastAPI (8000) & Streamlit (8501)
+# Stack completa (Porta 80 única):
+#   Nginx -> Portal React SPA (/) + FastAPI REST (/api, /docs) + Bancada Streamlit (/streamlit/)
 
 services:
   mediflow-api:
@@ -7,12 +8,16 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 2
+    # Decisão D-01 (estado em memória RAM por processo): manter obrigatoriamente --workers 1
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 1
     env_file:
       - ../.env
     environment:
       - PYTHONPATH=/app
       - ENVIRONMENT=production
+      - OCI_KEY_FILE=/app/oci_api_key.pem
+    volumes:
+      - ${OCI_KEY_HOST_PATH:-../oci_api_key.pem}:/app/oci_api_key.pem:ro
     restart: unless-stopped
     networks:
       - mediflow-net
@@ -28,17 +33,20 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    command: streamlit run src/app/streamlit_app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true --browser.gatherUsageStats=false
+    command: streamlit run src/app/streamlit_app.py --server.port=8501 --server.address=0.0.0.0 --server.baseUrlPath=/streamlit --server.headless=true --browser.gatherUsageStats=false
     env_file:
       - ../.env
     environment:
       - PYTHONPATH=/app
       - ENVIRONMENT=production
+      - OCI_KEY_FILE=/app/oci_api_key.pem
+    volumes:
+      - ${OCI_KEY_HOST_PATH:-../oci_api_key.pem}:/app/oci_api_key.pem:ro
     restart: unless-stopped
     networks:
       - mediflow-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8501/streamlit/_stcore/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -46,11 +54,11 @@ services:
 
   mediflow-nginx:
     container_name: mediflow-nginx
-    image: nginx:1.25-alpine
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.nginx
     ports:
       - "80:80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       mediflow-api:
         condition: service_started
