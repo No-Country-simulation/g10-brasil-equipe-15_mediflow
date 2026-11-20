@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 import streamlit as st
 from dotenv import load_dotenv
 
+from src.app.gemini_key import resolver_chave_gemini_efetiva
 from src.app.oci_persistence import (
     executar_persistencia_triagem,
     resolver_caminho_resultado_oci,
@@ -444,13 +445,23 @@ with st.sidebar:
 
     st.markdown("---")
     chave_env = os.getenv("GEMINI_API_KEY", "")
-    tem_chave_valida = bool(chave_env and not chave_env.startswith("sua_chave"))
+    _, tem_chave_servidor = resolver_chave_gemini_efetiva("", chave_env)
     api_key_custom = st.text_input(
         "🔑 Chave Gemini API (Opcional):",
-        value=chave_env if tem_chave_valida else "",
+        value="",
         type="password",
-        help="Insira sua chave do Google AI Studio para inferência ao vivo com Gemini Multimodal.",
+        placeholder=(
+            "Usando chave configurada no servidor"
+            if tem_chave_servidor
+            else "Cole sua chave do Google AI Studio"
+        ),
+        help=(
+            "Opcional: deixe em branco para usar a chave configurada no servidor, "
+            "ou informe uma chave própria para sobrescrevê-la nesta sessão."
+        ),
     )
+    if tem_chave_servidor and not api_key_custom.strip():
+        st.caption("Chave do servidor ativa (mantida apenas no backend).")
 
     st.markdown("---")
     st.markdown("**Hackathon ONE G10 — Oracle & Alura**")
@@ -580,8 +591,12 @@ if doc_ingerido is not None:
             if executar_ia:
                 with st.spinner("Analisando documento clínico com Gemini Multimodal e Motor LangGraph..."):
                     try:
+                        chave_efetiva, chave_ativa = resolver_chave_gemini_efetiva(
+                            api_key_custom,
+                            chave_env,
+                        )
                         service = GeminiService(
-                            api_key=api_key_custom or os.getenv("GEMINI_API_KEY"),
+                            api_key=chave_efetiva,
                             model_name=os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
                         )
                         mime_tipo = resolver_mime_type(doc_ingerido)
@@ -613,7 +628,7 @@ if doc_ingerido is not None:
                             "classif_obj": entrada_wf.classificacao,
                             "dados_ext_obj": entrada_wf.dados_extraidos,
                             "urgencia_efetiva": entrada_wf.urgencia,
-                            "chave_ativa": bool(api_key_custom or tem_chave_valida),
+                            "chave_ativa": chave_ativa,
                             "fallback_llm": eh_fallback_llm,
                             "simulado": False,
                         }

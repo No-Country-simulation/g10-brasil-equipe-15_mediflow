@@ -1,0 +1,73 @@
+# MediFlow — Orquestração de Contêineres de Produção (Docker Compose)
+# Stack completa (Porta 80 única):
+#   Nginx -> Portal React SPA (/) + FastAPI REST (/api, /docs) + Bancada Streamlit (/streamlit/)
+
+services:
+  mediflow-api:
+    container_name: mediflow-api
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    # Decisão D-01 (estado em memória RAM por processo): manter obrigatoriamente --workers 1
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 1
+    env_file:
+      - ../.env
+    environment:
+      - PYTHONPATH=/app
+      - ENVIRONMENT=production
+      - OCI_KEY_FILE=/app/oci_api_key.pem
+    volumes:
+      - ${OCI_KEY_HOST_PATH:-../oci_api_key.pem}:/app/oci_api_key.pem:ro
+    restart: unless-stopped
+    networks:
+      - mediflow-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  mediflow-streamlit:
+    container_name: mediflow-streamlit
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: streamlit run src/app/streamlit_app.py --server.port=8501 --server.address=0.0.0.0 --server.baseUrlPath=/streamlit --server.headless=true --browser.gatherUsageStats=false
+    env_file:
+      - ../.env
+    environment:
+      - PYTHONPATH=/app
+      - ENVIRONMENT=production
+      - OCI_KEY_FILE=/app/oci_api_key.pem
+    volumes:
+      - ${OCI_KEY_HOST_PATH:-../oci_api_key.pem}:/app/oci_api_key.pem:ro
+    restart: unless-stopped
+    networks:
+      - mediflow-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/streamlit/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  mediflow-nginx:
+    container_name: mediflow-nginx
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.nginx
+    ports:
+      - "80:80"
+    depends_on:
+      mediflow-api:
+        condition: service_started
+      mediflow-streamlit:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - mediflow-net
+
+networks:
+  mediflow-net:
+    driver: bridge
