@@ -7,13 +7,13 @@
   <!-- BADGES SHIELDS.IO -->
   <p>
     <a href="#-equipe-15---hackathon-one-g10"><img src="https://img.shields.io/badge/Equipe%2015-Hackathon%20ONE-blueviolet?style=for-the-badge&logo=rocket&logoColor=white" alt="Equipe 15"></a>
-    <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.12"></a>
-    <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/FastAPI-0.111-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI"></a>
-    <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/Pydantic-v2-E92063?style=for-the-badge&logo=pydantic&logoColor=white" alt="Pydantic v2"></a>
-    <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/Google%20Gemini-AI-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Google Gemini"></a>
-    <a href="#-tecnologias-e-stack"><img src="https://img.shields.io/badge/OCI-Always%20Free-F80000?style=for-the-badge&logo=oracle&logoColor=white" alt="OCI Always Free"></a>
+    <a href="#-arquitetura-e-fluxo-de-dados"><img src="https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.12"></a>
+    <a href="#-endpoints-da-api-rest"><img src="https://img.shields.io/badge/FastAPI-0.111-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI"></a>
+    <a href="#-principais-funcionalidades"><img src="https://img.shields.io/badge/Pydantic-v2-E92063?style=for-the-badge&logo=pydantic&logoColor=white" alt="Pydantic v2"></a>
+    <a href="#-arquitetura-e-fluxo-de-dados"><img src="https://img.shields.io/badge/Google%20Gemini-AI-4285F4?style=for-the-badge&logo=google&logoColor=white" alt="Google Gemini"></a>
+    <a href="#-arquitetura-e-fluxo-de-dados"><img src="https://img.shields.io/badge/OCI-Always%20Free-F80000?style=for-the-badge&logo=oracle&logoColor=white" alt="OCI Always Free"></a>
     <a href="#testes-automatizados"><img src="https://img.shields.io/badge/Pytest-Testes%20automatizados-blue?style=for-the-badge&logo=pytest&logoColor=white" alt="Testes automatizados com Pytest"></a>
-    <a href="#-status-do-projeto"><img src="https://img.shields.io/badge/Status-Em%20Desenvolvimento-yellow?style=for-the-badge&logo=github&logoColor=white" alt="Status"></a>
+    <a href="#-cenários-de-demonstração"><img src="https://img.shields.io/badge/Status-MVP%20v1.0%20(Em%20Evolu%C3%A7%C3%A3o)-2E7D32?style=for-the-badge&logo=github&logoColor=white" alt="Status MVP v1.0 (Em Evolução)"></a>
   </p>
 
   <p>
@@ -307,7 +307,7 @@ uvicorn src.api.main:app --reload --port 8000
 ---
 
 > [!NOTE]
-> **Delimitação de Escopo do MVP:** A fila de trabalho e o histórico em execução no servidor FastAPI operam em memória RAM durante a vida do processo (sem continuidade entre reinícios), enquanto os documentos originais e resultados JSON são persistidos no OCI Object Storage. O sistema não utiliza motor OCR local offline (como Tesseract): PDFs digitais usam PyMuPDF e imagens/digitalizados dependem da análise multimodal via `GeminiService`.
+> **Delimitação de Escopo do MVP:** A fila de trabalho e o histórico em execução no servidor FastAPI operam em memória RAM durante a vida do processo (sem continuidade entre reinícios), enquanto os documentos originais, os resultados JSON e os snapshots do histórico de eventos são persistidos no OCI Object Storage (quando configurado). O sistema não utiliza motor OCR local offline (como Tesseract): PDFs digitais usam PyMuPDF e imagens/digitalizados dependem da análise multimodal via `GeminiService`. A consulta ao Catálogo CID dos Fixtures MediFlow e à Farmacopeia dos Fixtures MediFlow ficou como implementação futura.
 
 > [!WARNING]
 > **Privacidade e LGPD (RNF-08):** O MediFlow utiliza **exclusivamente massa de dados sintética/fictícia**. NENHUM dado real de paciente ou profissional de saúde é manipulado no repositório.
