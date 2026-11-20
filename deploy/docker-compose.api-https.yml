@@ -37,7 +37,7 @@ services:
     env_file:
       - ../.env
     environment:
-      - API_DOMAIN=${API_DOMAIN:?Defina API_DOMAIN no .env (ex.: 168.138.147.117.sslip.io)}
+      - "API_DOMAIN=${API_DOMAIN:?Defina API_DOMAIN no .env (ex.: 168.138.147.117.sslip.io)}"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
