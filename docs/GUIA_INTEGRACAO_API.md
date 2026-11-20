@@ -701,7 +701,7 @@ Todos os itens anteriormente pendentes foram verificados e validados contra o c�
 | **Idempotência de triagem** | `src/api/service.py` L1002–1012 | Trava de concorrência ativa: `_locks_processamento[doc_id] = asyncio.Lock()`. Evita execução duplicada entre background task e polling síncrono. |
 | **Envelope de Erro** | `src/api/main.py` | Exception handlers realizam o *unwrap* de `detail`. Clientes recebem sempre `{codigo, mensagem}` diretamente. |
 | **Tratamento de 500** | `src/api/main.py` | Handler global captura exceções não tratadas e responde `{codigo: "ERRO_INTERNO", mensagem: "Ocorreu um erro interno no servidor."}`. |
-| **CORS** | `src/api/main.py` | `CORSMiddleware` configurado com `allow_origins=["*"]`, permitindo requisições diretas ou via proxy Vite. |
+| **CORS** | `src/api/main.py`, `src/config.py` | `CORSMiddleware` configurado com `allow_origins=CORS_ORIGINS` (vazio por padrão = apenas mesma origem, compatível com proxy Vite em dev e Nginx na OCI), `allow_credentials=False` e `allow_methods=["GET", "POST"]`. Origens externas devem ser declaradas em `CORS_ORIGINS` no `.env`. |
 | **Limite de Páginas PDF** | `src/ingestion/loader.py` L204 | `LIMITE_MAXIMO_PAGINAS = 20`. Se ultrapassado, devolve HTTP 413 (`ARQUIVO_MAIOR_QUE_LIMITE`). |
 | **Formatos e WEBP** | `src/ingestion/loader.py` | Conjunto `FORMATOS_SUPORTADOS = {".pdf", ".txt", ".png", ".jpg", ".jpeg", ".webp"}` com validação de magic bytes (`RIFF...WEBP`). |
 | **Chaveamento Fixtures** | `frontend/src/services/api.ts` | `import.meta.env.VITE_USAR_FIXTURES === 'true'` desvia chamadas para `apiSimulada.ts` com dados mockados. |
