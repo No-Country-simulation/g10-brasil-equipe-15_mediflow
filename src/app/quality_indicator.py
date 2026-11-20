@@ -706,6 +706,66 @@ def _extrair_heuristica_estrita_documento(
     )
 
 
+_MOTIVO_SCORE_ABAIXO = "Score combinado abaixo do limiar configurado."
+
+
+def score_forcado_da_fixture(doc_ingerido: Any) -> Optional[Dict[str, float]]:
+    """Devolve `modo_fixture.score_forcado` quando o documento é fixture funcional oficial."""
+    fixture_dados = _localizar_fixture_oficial(doc_ingerido)
+    if not fixture_dados or fixture_dados.get("tipo_de_teste") != "funcional":
+        return None
+    score_forcado = (fixture_dados.get("modo_fixture") or {}).get("score_forcado") or {}
+    forcados = {
+        campo: float(score_forcado[campo])
+        for campo in ("score_classificacao", "score_extracao")
+        if campo in score_forcado
+    }
+    return forcados or None
+
+
+def aplicar_score_forcado(
+    estado_wf: Dict[str, Any],
+    score_forcado: Dict[str, Any],
+    limiar: float,
+) -> Dict[str, Any]:
+    """
+    Substitui os scores calculados pelo grafo pelos da fixture e refaz a decisão de roteamento.
+    O resto da extração (campos, conflitos, urgência) continua o calculado.
+    """
+    from src.workflow.graph import (
+        decidir_revisao,
+        decidir_rotina,
+        decidir_urgencia,
+        escolher_caminho,
+    )
+
+    q_atual = estado_wf["qualidade"]
+    sc_class = float(score_forcado.get("score_classificacao", q_atual.score_classificacao))
+    sc_ext = float(score_forcado.get("score_extracao", q_atual.score_extracao))
+    sc_comb = min(sc_class, sc_ext)
+
+    motivos = [m for m in q_atual.motivos_revisao if m != _MOTIVO_SCORE_ABAIXO]
+    if sc_comb < limiar:
+        motivos.append(_MOTIVO_SCORE_ABAIXO)
+
+    estado_wf["qualidade"] = q_atual.model_copy(
+        update={
+            "score_classificacao": sc_class,
+            "score_extracao": sc_ext,
+            "score_combinado": sc_comb,
+            "motivos_revisao": motivos,
+        }
+    )
+    rota = escolher_caminho(estado_wf)
+    if rota == "urgencia":
+        estado_wf.update(decidir_urgencia(estado_wf))
+    elif rota == "revisao":
+        estado_wf.update(decidir_revisao(estado_wf))
+    else:
+        estado_wf.update(decidir_rotina(estado_wf))
+    return estado_wf
+
+
 def executar_modo_simulado_documento(
     doc_ingerido: Any,
     *,
@@ -720,13 +780,7 @@ def executar_modo_simulado_documento(
     3. Se for documento arbitrário, usa extração heurística estrita sem inventar dados;
        mídias sem texto extraível recebem urgencia='INDETERMINADO' e seguem para revisão humana.
     """
-    from src.workflow.graph import (
-        criar_grafo,
-        decidir_revisao,
-        decidir_rotina,
-        decidir_urgencia,
-        escolher_caminho,
-    )
+    from src.workflow.graph import criar_grafo
     from src.workflow.state import EntradaWorkflow
 
     doc_id = getattr(doc_ingerido, "documento_id", "DOC-SIMULADO")
@@ -772,37 +826,7 @@ def executar_modo_simulado_documento(
             estado_wf = criar_grafo().invoke({"entrada": entrada})
 
             if "score_extracao" in score_forcado:
-                q_atual = estado_wf["qualidade"]
-                sc_class = float(
-                    score_forcado.get("score_classificacao", q_atual.score_classificacao)
-                )
-                sc_ext = float(score_forcado["score_extracao"])
-                sc_comb = min(sc_class, sc_ext)
-
-                motivos = [
-                    m
-                    for m in q_atual.motivos_revisao
-                    if m != "Score combinado abaixo do limiar configurado."
-                ]
-                if sc_comb < limiar:
-                    motivos.append("Score combinado abaixo do limiar configurado.")
-
-                q_forcada = q_atual.model_copy(
-                    update={
-                        "score_classificacao": sc_class,
-                        "score_extracao": sc_ext,
-                        "score_combinado": sc_comb,
-                        "motivos_revisao": motivos,
-                    }
-                )
-                estado_wf["qualidade"] = q_forcada
-                rota = escolher_caminho(estado_wf)
-                if rota == "urgencia":
-                    estado_wf.update(decidir_urgencia(estado_wf))
-                elif rota == "revisao":
-                    estado_wf.update(decidir_revisao(estado_wf))
-                else:
-                    estado_wf.update(decidir_rotina(estado_wf))
+                aplicar_score_forcado(estado_wf, score_forcado, limiar)
 
             return estado_wf
 

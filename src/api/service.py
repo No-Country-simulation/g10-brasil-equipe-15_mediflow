@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import json
 import logging
 import os
+from pathlib import Path
 import re
 from threading import Lock
 from typing import Any, Dict, List, Optional
@@ -42,6 +43,7 @@ from src.workflow.extraction_adapter import entrada_do_envelope
 from src.schemas.clinical import ClassificacaoClinica, NivelPrioridade
 from src.services.gemini_service import VERSAO_PROMPT, GeminiService
 from src.api.schemas import EventoHistorico
+from src.app.quality_indicator import aplicar_score_forcado, score_forcado_da_fixture
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,14 @@ class ConectorOCIIndisponivel(RuntimeError):
 
 class ConflitoIntegridadeOCI(RuntimeError):
     """O original armazenado diverge do documento enviado."""
+
+_PASTA_FIXTURES = Path(__file__).resolve().parents[2] / "tests" / "fixtures"
+
+
+def _fixture_mode_ativo() -> bool:
+    """FIXTURE_MODE=true aplica o score forçado das fixtures oficiais. Desligado por padrão."""
+    return os.getenv("FIXTURE_MODE", "false").strip().lower() in ("true", "1")
+
 
 def _caminho_resultado_oci(documento_id: str, status: StatusTriagem, urgente: bool) -> str:
     if status == StatusTriagem.EM_REVISAO:
@@ -361,6 +371,23 @@ class TriagemService:
             )
 
             saida_workflow = self._grafo.invoke({"entrada": entrada_workflow})
+
+            # Só com FIXTURE_MODE ligado: fixtures de fronteira (ex.: Borda_Score_084)
+            # trazem o score que devem demonstrar em modo_fixture.score_forcado.
+            if _fixture_mode_ativo():
+                score_forcado = score_forcado_da_fixture(doc)
+                if score_forcado:
+                    logger.info(
+                        "FIXTURE_MODE: aplicando score forçado %s ao documento %s",
+                        score_forcado,
+                        documento_id,
+                    )
+                    aplicar_score_forcado(saida_workflow, score_forcado, limiar_efetivo)
+                elif not _PASTA_FIXTURES.is_dir():
+                    logger.warning(
+                        "FIXTURE_MODE ligado, mas %s não existe; score forçado ignorado.",
+                        _PASTA_FIXTURES,
+                    )
         except Exception:
             logger.exception("Falha na extração ou no grafo da triagem %s", documento_id)
             mensagem = "Não foi possível concluir o processamento do documento."

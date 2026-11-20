@@ -29,6 +29,8 @@ COPY src/ /app/src/
 COPY data/ /app/data/
 COPY .streamlit/ /app/.streamlit/
 COPY pytest.ini /app/pytest.ini
+# Catálogo de fixtures: só é lido com FIXTURE_MODE=true (score forçado dos casos de fronteira)
+COPY tests/fixtures/ /app/tests/fixtures/
 
 # Portas de serviço expostas (8000: FastAPI REST | 8501: Streamlit Dashboard)
 EXPOSE 8000 8501

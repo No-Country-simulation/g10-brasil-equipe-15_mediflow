@@ -261,6 +261,7 @@ cp .env.example .env
 > ⚙️ **Variáveis de Ambiente Essenciais (`.env`):**
 > - `GEMINI_API_KEY`: Chave da API do Google AI Studio para o extrator multimodal.
 > - `LIMIAR_CONFIANCA`: Ponto de corte do score de confiança combinado (padrão `0.85`). Documentos com score abaixo desse valor são retidos compulsoriamente em `EM_REVISAO` (`FILA_REVISAO_HUMANA`), e o valor aplicado é retornado pela API em `qualidade.limiar_aplicado`.
+> - `FIXTURE_MODE`: `true` faz as fixtures oficiais de fronteira (ex.: `Borda_Score_084`) usarem o score de `modo_fixture.score_forcado` no lugar do calculado, para demonstrar a revisão humana. Padrão `false`; ligar só em ambiente de demonstração.
 > - Credenciais OCI (opcionais em modo demo/simulação local).
 
 <a id="testes-automatizados"></a>
