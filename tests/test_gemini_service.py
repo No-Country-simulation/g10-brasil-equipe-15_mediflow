@@ -91,7 +91,10 @@ class TestGeminiService:
 
         with patch("src.services.gemini_service.genai.GenerativeModel", return_value=mock_model):
             service = GeminiService(api_key="chave_teste")
-            resultado = service.extrair_dados_clinicos("Texto do laudo com achado crítico.")
+            resultado = service.extrair_dados_clinicos(
+                "Texto do laudo com achado crítico.\n"
+                "D-Dímero: 2800 ng/mL (referência < 500) ALTO."
+            )
 
             assert isinstance(resultado, DadosClinicosExtraidos)
             assert resultado.paciente.nome == "João da Silva"
