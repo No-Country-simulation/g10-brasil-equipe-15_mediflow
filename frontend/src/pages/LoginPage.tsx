@@ -1,7 +1,7 @@
 import { useId, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router'
-import { Button, Field, Icon, Input, Select } from '../components/ui'
+import { Button, Field, Icon, Input, MarcaMediFlow, Select } from '../components/ui'
 import type { IconName } from '../components/ui'
 import { useSessao } from '../hooks/useSessao'
 import type { EstadoLogin } from '../hooks/useSessao'
@@ -39,10 +39,7 @@ function CaixaAviso({ aviso }: { aviso: Aviso }) {
 function PainelMarca() {
   return (
     <aside className="flex w-full shrink-0 flex-col justify-between gap-8 bg-sidebar p-6 sm:p-10 lg:w-140 lg:p-14">
-      <div className="flex items-center gap-2.5">
-        <Icon name="logo-marca" size={32} />
-        <span className="text-xl font-semibold tracking-[-0.2px] text-sidebar-text-strong">MediFlow</span>
-      </div>
+      <MarcaMediFlow />
       <div className="flex flex-col gap-5">
         <p className="m-0 text-heading font-semibold text-sidebar-text-strong">
           Triagem clínica com IA, cada documento no lugar certo.

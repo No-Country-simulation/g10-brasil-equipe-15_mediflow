@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router'
 import { useSessao } from '../../hooks/useSessao'
 import { CRM_LOGADO_TEXTO, MEDICO_LOGADO } from '../../lib/medicoLogado'
-import { Icon } from '../ui'
+import { MarcaMediFlow } from '../ui'
 import { DemoNotice } from './DemoNotice'
 import { NavItem } from './NavItem'
 import { UserCard } from './UserCard'
@@ -17,9 +17,8 @@ export function Sidebar() {
   return (
     // Abaixo de 1024px (fora do Figma, que é só desktop) a sidebar vira um bloco no topo da página.
     <aside className="flex w-full shrink-0 flex-col gap-4 bg-sidebar px-4 py-4 lg:sticky lg:top-0 lg:h-screen lg:w-58 lg:gap-7 lg:py-6">
-      <div className="flex w-full items-center gap-2.5 px-2">
-        <Icon name="logo-marca" size={32} />
-        <span className="text-xl font-semibold tracking-[-0.2px] text-sidebar-text-strong">MediFlow</span>
+      <div className="w-full px-2">
+        <MarcaMediFlow />
       </div>
 
       <nav aria-label="Principal" className="flex w-full flex-wrap gap-1 lg:flex-col lg:flex-nowrap">

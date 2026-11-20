@@ -21,32 +21,33 @@
   --color-surface: #ffffff;
   --color-subtle: #f8fafc;
   --color-muted: #eef1f5;
-  --color-selected: #eef3fd;
+  --color-selected: #e8f6f7;
   --color-disabled: #d5dce6;
   --color-progress-track: #e6ebf2;
-  --color-progress-muted: #7c93bf;
+  --color-progress-muted: #6fa9ae;
 
   /* Bordas */
   --color-border: #dde3ea;
   --color-border-subtle: #eef1f5;
   --color-border-input: #c4cdd8;
   --color-border-dashed: #b7c3d3;
-  --color-border-info: #c9d8f6;
+  --color-border-info: #bfe3e6;
 
   /* Texto */
   --color-text: #0f1b2d;
   --color-text-secondary: #4a5568;
   --color-text-body: #334155;
   --color-text-placeholder: #5b6577;
-  --color-accent: #1747aa;
-  --color-info-panel-text: #1e3a6e;
-  --color-link: #1f5bd6;
+  --color-accent: #0a5e66;
+  --color-info-panel-text: #0c4a50;
+  --color-link: #0d737c;
   --color-on-primary: #ffffff;
 
-  /* Marca */
-  --color-primary: #1f5bd6;
-  /* Não existe no Figma: hover do botão primário (primário ~8% mais escuro). */
-  --color-primary-hover: #1a4fba;
+  /* Marca: teal escuro derivado da logomarca da Luciana (o ciano/verde do logo é claro demais
+     para texto branco). Primário 5,6:1 e hover 7,4:1 contra branco. Os tons de info e seleção
+     acompanham o mesmo matiz. */
+  --color-primary: #0d737c;
+  --color-primary-hover: #0a5f67;
 
   /* Badges (tons de status) */
   --color-status-neutral-bg: #eef1f5;
@@ -68,8 +69,8 @@
   --color-status-warning-chip: #ffe7c2;
   --color-status-warning-chip-fg: #6b3800;
   --color-status-warning-soft: #fffaf2;
-  --color-status-info-bg: #e8effc;
-  --color-status-info-fg: #1747aa;
+  --color-status-info-bg: #e6f5f6;
+  --color-status-info-fg: #0a5e66;
   --color-status-error-bg: #eef0f4;
   --color-status-error-fg: #2a3140;
   --color-status-error-border: #9aa5b4;
