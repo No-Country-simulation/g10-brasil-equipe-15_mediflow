@@ -1,0 +1,19 @@
+# MediFlow — Caddy Reverse Proxy com HTTPS Automático (Let's Encrypt)
+# Modo enxuto para VM OCI Always Free (1 GB RAM) + Frontend React na Vercel
+# Requer API_DOMAIN definido no .env (ex.: 168.138.147.117.sslip.io)
+
+{$API_DOMAIN} {
+    encode zstd gzip
+
+    # Suporta uploads de até 10 MB (Regra A6) + overhead multipart/form-data
+    request_body {
+        max_size 15MB
+    }
+
+    reverse_proxy mediflow-api:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}

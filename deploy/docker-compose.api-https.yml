@@ -1,0 +1,58 @@
+# MediFlow — Stack Enxuta de Produção (API FastAPI + Caddy HTTPS Automático)
+# Indicada para VM OCI Always Free E2.1.Micro (1 GB RAM) + Portal React hospedado na Vercel.
+# Requisitos no .env: API_DOMAIN (ex.: 168.138.147.117.sslip.io) e CORS_ORIGINS (ex.: https://seu-app.vercel.app)
+
+services:
+  mediflow-api:
+    container_name: mediflow-api
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    # Decisão D-01 (estado em memória RAM por processo): manter obrigatoriamente --workers 1
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 1
+    env_file:
+      - ../.env
+    environment:
+      - PYTHONPATH=/app
+      - ENVIRONMENT=production
+      - OCI_KEY_FILE=/app/oci_api_key.pem
+    volumes:
+      - ${OCI_KEY_HOST_PATH:-../oci_api_key.pem}:/app/oci_api_key.pem:ro
+    restart: unless-stopped
+    networks:
+      - mediflow-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  mediflow-caddy:
+    container_name: mediflow-caddy
+    image: caddy:2.8-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    env_file:
+      - ../.env
+    environment:
+      - API_DOMAIN=${API_DOMAIN:?Defina API_DOMAIN no .env (ex.: 168.138.147.117.sslip.io)}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      mediflow-api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - mediflow-net
+
+networks:
+  mediflow-net:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

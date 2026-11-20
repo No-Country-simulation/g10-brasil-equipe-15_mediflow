@@ -166,3 +166,40 @@ docker compose -f deploy/docker-compose.yml down
 
 - A aplicação na OCI opera exclusivamente com dados sintéticos e fictícios.
 - `.env` e `oci_api_key.pem` residem apenas na VM e são bloqueados tanto no `.gitignore` quanto no `.dockerignore`.
+
+---
+
+## ⚡ Modo Enxuto: Frontend React na Vercel + API com HTTPS na VM OCI (`E2.1.Micro` 1 GB RAM)
+
+Para VMs Always Free com **1 GB de RAM** (`VM.Standard.E2.1.Micro`), recomenda-se manter o **Portal React na Vercel (HTTPS)** e executar na VM OCI apenas **`mediflow-api` (`--workers 1`) + `mediflow-caddy` (HTTPS automático Let's Encrypt)**, sem subir Streamlit nem compilar Node/Vite na VM (~420 MB de RAM em execução).
+
+### 1. Criar Swap de 2 GB na VM Ubuntu (recomendado em 1 GB RAM)
+```bash
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+### 2. Configurar `API_DOMAIN` e `CORS_ORIGINS` no `.env` da VM
+Adicione/ajuste no `.env` da raiz do projeto na VM:
+```dotenv
+API_DOMAIN=<IP_PUBLICO_DA_VM>.sslip.io
+CORS_ORIGINS=https://<url-do-portal-na-vercel>
+```
+> Certifique-se de que as portas **80 e 443 (TCP, `0.0.0.0/0`)** estejam liberadas na **Security List** da VCN na OCI (a porta 80 é necessária para o desafio HTTP-01 do Let's Encrypt e redirecionamento para HTTPS).
+
+### 3. Executar o deploy enxuto na VM
+```bash
+chmod +x deploy/deploy_oci_api_https.sh
+./deploy/deploy_oci_api_https.sh
+```
+
+### 4. Configurar a Vercel (Frontend React)
+Nas variáveis de ambiente do projeto na Vercel:
+```dotenv
+VITE_API_URL=https://<IP_PUBLICO_DA_VM>.sslip.io
+VITE_USAR_FIXTURES=false
+```
+Após salvar e fazer redeploy na Vercel, valide o cadeado HTTPS em `https://<IP_PUBLICO_DA_VM>.sslip.io/api/v1/health` e teste os 3 cenários clínicos diretamente pela interface React na Vercel.
