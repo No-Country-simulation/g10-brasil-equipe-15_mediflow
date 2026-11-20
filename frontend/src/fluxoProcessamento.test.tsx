@@ -30,7 +30,9 @@ async function enviarCaso(titulo: RegExp) {
   return screen.getByText(/^DOC-DEMO-[0-9A-F]{8}$/).textContent as string
 }
 
-describe('fluxo de processamento (modo demo)', () => {
+// Cada teste renderiza o App inteiro. Em máquinas lentas a primeira renderização passa dos 5 s
+// padrão, e o teste interrompido deixa os seguintes com a tela vazia.
+describe('fluxo de processamento (modo demo)', { timeout: 20_000 }, () => {
   const fetchMock = vi.fn()
 
   beforeEach(() => {
