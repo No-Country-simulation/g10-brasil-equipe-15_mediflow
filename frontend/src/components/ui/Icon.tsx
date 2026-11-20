@@ -11,7 +11,6 @@ import Eye from '../../assets/icons/eye.svg?react'
 import Info from '../../assets/icons/info.svg?react'
 import List from '../../assets/icons/list.svg?react'
 import Lock from '../../assets/icons/lock.svg?react'
-import LogoMarca from '../../assets/icons/logo-marca.svg?react'
 import Logout from '../../assets/icons/logout.svg?react'
 import Plus from '../../assets/icons/plus.svg?react'
 import Search from '../../assets/icons/search.svg?react'
@@ -31,7 +30,6 @@ const icons = {
   info: Info,
   list: List,
   lock: Lock,
-  'logo-marca': LogoMarca,
   logout: Logout,
   plus: Plus,
   search: Search,
@@ -49,7 +47,7 @@ type IconProps = Omit<SVGProps<SVGSVGElement>, 'name'> & {
   title?: string
 }
 
-/** Ícones da Biblioteca do Figma. Herdam a cor do texto via currentColor (exceto `logo-marca`). */
+/** Ícones da Biblioteca do Figma. Herdam a cor do texto via currentColor. */
 export function Icon({ name, size, title, ...props }: IconProps) {
   const Component = icons[name]
   const a11y = title ? { role: 'img', 'aria-label': title } : { 'aria-hidden': true }
