@@ -1,0 +1,33 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+ATESTADO MÉDICO
+Atestado em que o nome do paciente muda de grafia entre cabeçalho e corpo
+
+Fixture: Conflito_Gravidade_Baixa
+Paciente: Thiago Pelegrini Moraes
+Idade: 33 anos
+Documento: DOC-ATE-2026-0052
+Data: 18/10/2026
+Origem: Ambulatório de Clínica Médica
+
+FINALIDADE
+Atestado de comparecimento de 1 dia.
+
+TEXTO DO ATESTADO
+Atesto que o paciente compareceu a consulta em 18/10/2026, permanecendo no serviço por aproximadamente 3 horas.
+
+DIAGNÓSTICO / CID
+Cefaleia tensional — CID-10 G44.2.
+
+OBSERVAÇÃO
+O nome consta como Thiago Pelegrini Moraes no cabeçalho e como Thiago Pelegrini Morais no corpo do atestado. Trata-se do mesmo paciente, prontuário 512884.
+
+------------------------------------------------------------------------------
+Dra. Camila Ferreira Lopes
+CRM 198765-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Conflito_Gravidade_Baixa · dados sintéticos · página 1 de 1

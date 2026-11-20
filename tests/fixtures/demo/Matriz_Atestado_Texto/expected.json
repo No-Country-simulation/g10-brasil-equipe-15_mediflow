@@ -1,0 +1,73 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Matriz_Atestado_Texto",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "demo/Matriz_Atestado_Texto/Matriz_Atestado_Texto.txt",
+      "pdf": "demo/Matriz_Atestado_Texto/Matriz_Atestado_Texto.pdf",
+      "jpg": "demo/Matriz_Atestado_Texto/Matriz_Atestado_Texto.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-CB23EE91",
+    "classificacao": {
+      "tipo_documento": "ATESTADO_MEDICO",
+      "especialidade": [
+        "Clínica Médica"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Thiago Almeida Santos",
+        "idade": 29
+      },
+      "medico": {
+        "nome": "Dr. Paulo Mendes Rocha",
+        "crm": {
+          "numero": "203114",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Infecção viral de vias aéreas superiores",
+      "cid": "J06.9",
+      "exames": [],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "PRONTUARIO_ELETRONICO",
+      "destinos": [
+        "PRONTUARIO_ELETRONICO"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: ATESTADO_MEDICO encaminhado para PRONTUARIO_ELETRONICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Ausência de medicamentos e exames NÃO força revisão",
+    "Diagnóstico presente mantém o fluxo automático",
+    "Destino PRONTUARIO_ELETRONICO"
+  ],
+  "observacoes": ""
+}

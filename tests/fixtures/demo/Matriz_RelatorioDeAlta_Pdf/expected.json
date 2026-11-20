@@ -1,0 +1,83 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Matriz_RelatorioDeAlta_Pdf",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "demo/Matriz_RelatorioDeAlta_Pdf/Matriz_RelatorioDeAlta_Pdf.txt",
+      "pdf": "demo/Matriz_RelatorioDeAlta_Pdf/Matriz_RelatorioDeAlta_Pdf.pdf",
+      "jpg": "demo/Matriz_RelatorioDeAlta_Pdf/Matriz_RelatorioDeAlta_Pdf.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-4AC9E58E",
+    "classificacao": {
+      "tipo_documento": "RELATORIO_ALTA_INTERNACAO",
+      "especialidade": [
+        "Clínica Médica",
+        "Pneumologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Beatriz Gonçalves Pereira",
+        "idade": 63
+      },
+      "medico": {
+        "nome": "Dra. Helena Prado",
+        "crm": {
+          "numero": "187432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Pneumonia adquirida na comunidade",
+      "cid": "J18.9",
+      "exames": [
+        "Tomografia de tórax"
+      ],
+      "medicamentos": [
+        {
+          "nome": "Amoxicilina + clavulanato",
+          "dosagem": "875/125 mg",
+          "frequencia": null
+        }
+      ],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "PRONTUARIO_ELETRONICO",
+      "destinos": [
+        "PRONTUARIO_ELETRONICO"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: RELATORIO_ALTA_INTERNACAO encaminhado para PRONTUARIO_ELETRONICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Relatório de alta multimodal",
+    "Diagnóstico, CID e medicação de alta extraídos",
+    "Destino PRONTUARIO_ELETRONICO",
+    "Sem revisão"
+  ],
+  "observacoes": ""
+}

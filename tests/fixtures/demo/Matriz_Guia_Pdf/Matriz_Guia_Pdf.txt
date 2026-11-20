@@ -1,0 +1,33 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+GUIA DE SOLICITAÇÃO DE PROCEDIMENTO
+Ressonância magnética — eletiva
+
+Fixture: Matriz_Guia_Pdf
+Paciente: Luciana Martins Costa
+Idade: 46 anos
+Documento: DOC-GUI-2026-0006
+Data: 16/10/2026
+Origem: Ambulatório de Ortopedia
+
+DIAGNÓSTICO / CID
+Lombalgia crônica com radiculopatia — CID-10 M54.5.
+
+PROCEDIMENTO SOLICITADO
+Ressonância magnética de coluna lombar, sem contraste.
+
+JUSTIFICATIVA CLÍNICA
+Dor lombar há 6 meses, refratária a tratamento conservador por 12 semanas, com irradiação para membro inferior direito.
+
+AUTORIZAÇÃO
+Solicitação eletiva. Aguardando autorização da operadora.
+
+------------------------------------------------------------------------------
+Dr. André Luiz Barbosa
+CRM 165432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_Guia_Pdf · dados sintéticos · página 1 de 1

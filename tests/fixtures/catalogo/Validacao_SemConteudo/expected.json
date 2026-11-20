@@ -1,0 +1,21 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Validacao_SemConteudo",
+  "documento_ficticio": true,
+  "tipo_de_teste": "negativo_tecnico",
+  "entrada": {
+    "requisicao": "POST /api/v1/triagens",
+    "arquivo": "Validacao_SemConteudo.http"
+  },
+  "resposta_esperada": {
+    "http": 422,
+    "codigo_funcional": "CAMPOS_INVALIDOS",
+    "mensagem": "Requisição sem arquivo e sem documento_texto."
+  },
+  "assercoes": [
+    "Requisição válida em sintaxe, vazia em conteúdo.",
+    "Nenhuma inferência é executada para entrada inválida",
+    "Mensagem de erro é segura, sem stack trace ou segredo"
+  ],
+  "observacoes": "O expected deste fixture é um envelope de erro, não um JSON de triagem."
+}

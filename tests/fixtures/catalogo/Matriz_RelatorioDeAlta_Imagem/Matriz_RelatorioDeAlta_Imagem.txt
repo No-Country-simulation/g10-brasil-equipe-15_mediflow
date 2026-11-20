@@ -1,0 +1,37 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RELATÓRIO DE ALTA HOSPITALAR
+Internação por insuficiência cardíaca — alta por melhora
+
+Fixture: Matriz_RelatorioDeAlta_Imagem
+Paciente: José Ricardo Almeida
+Idade: 68 anos
+Documento: DOC-ALT-2026-0019
+Data: 18/10/2026
+Origem: Enfermaria 2A
+
+PERÍODO DE INTERNAÇÃO
+Admissão em 11/10/2026, alta em 18/10/2026.
+
+DIAGNÓSTICO PRINCIPAL
+Insuficiência cardíaca congestiva descompensada — CID-10 I50.0.
+
+RESUMO
+Paciente internado com dispneia progressiva, edema de membros inferiores e ortopneia. Tratado com diurético endovenoso e otimização de terapia oral, com melhora funcional.
+
+MEDICAÇÕES DE ALTA
+Furosemida 40 mg — 1 comprimido por via oral pela manhã, uso contínuo.
+Carvedilol 6,25 mg — 1 comprimido por via oral a cada 12 horas, uso contínuo.
+
+ORIENTAÇÕES
+Restrição hídrica de 1,5 L/dia, controle de peso diário e retorno em 7 dias.
+
+------------------------------------------------------------------------------
+Dr. Paulo Mendes Rocha
+CRM 203114-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_RelatorioDeAlta_Imagem · dados sintéticos · página 1 de 1

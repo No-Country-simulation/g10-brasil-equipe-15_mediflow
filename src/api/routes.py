@@ -1,0 +1,491 @@
+"""
+MediFlow — Rotas da API REST (/api/v1)
+Implementa os endpoints assíncronos de triagem, consulta de status, histórico e health check.
+"""
+import json
+import logging
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, Response, UploadFile, status
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
+
+from src.ingestion import IngestaoError
+from src.schemas import CodigoErro, TriagemMediFlow
+from src.api.schemas import (
+    CriarTriagemTextoRequest,
+    TriagemCriadaResponse,
+    StatusTriagemResponse,
+    EventoHistorico,
+    HealthResponse,
+    ErroEnvelope,
+)
+from src.api.service import (
+    ConectorOCIIndisponivel,
+    ConflitoIntegridadeOCI,
+    triagem_service,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/v1", tags=["Triagem Clínica"])
+
+
+@router.post(
+    "/triagens",
+    response_model=TriagemCriadaResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Submissão Assíncrona de Documento Clínico (JSON ou Multipart)",
+    responses={
+        202: {"description": "Documento aceito e enfileirado para processamento."},
+        400: {"model": ErroEnvelope, "description": "Requisição ou JSON malformado."},
+        409: {"model": ErroEnvelope, "description": "Identificador em conflito."},
+        413: {"model": ErroEnvelope, "description": "Arquivo maior que o limite (10 MB ou 20 páginas)."},
+        415: {"model": ErroEnvelope, "description": "Formato não suportado ou MIME inválido."},
+        422: {"model": ErroEnvelope, "description": "Campos obrigatórios ausentes ou arquivo vazio."},
+    },
+)
+async def submeter_triagem(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    file: Optional[UploadFile] = File(default=None),
+    documento_id: Optional[str] = Form(default=None),
+    canal_origem: Optional[str] = Form(default="Prontuário"),
+    documento_texto: Optional[str] = Form(default=None),
+):
+    """
+    Submissão assíncrona de documento para triagem clínica:
+    - Aceita payload JSON (`application/json`) para envio textual (CT-001).
+    - Aceita `multipart/form-data` para envio de arquivos PDF, imagens ou texto (CT-002, CT-003).
+    - Retorna HTTP 202 com URLs de acompanhamento (CT-001).
+    """
+    content_type = request.headers.get("content-type", "")
+    x_mediflow_simulacao_oci = request.headers.get("x-mediflow-simulacao-oci")
+
+    # Cenário A: Requisição em formato JSON (CT-001, CT-008, CT-012)
+    if "application/json" in content_type.lower():
+        try:
+            body_bytes = await request.body()
+            if not body_bytes or not body_bytes.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail={"codigo": CodigoErro.CAMPOS_INVALIDOS.value, "mensagem": "Corpo JSON vazio."},
+                )
+            try:
+                texto_json = body_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                texto_json = body_bytes.decode("latin-1", errors="replace")
+            dados = json.loads(texto_json)
+        except json.JSONDecodeError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"codigo": CodigoErro.REQUISICAO_INVALIDA.value, "mensagem": "JSON malformado."},
+            )
+
+        if not dados or not isinstance(dados, dict) or len(dados) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"codigo": CodigoErro.CAMPOS_INVALIDOS.value, "mensagem": "Envelope JSON vazio."},
+            )
+
+        try:
+            payload = CriarTriagemTextoRequest.model_validate(dados)
+        except ValidationError as err_validacao:
+            detalhes_campos = [
+                {
+                    "campo": ".".join(str(parte) for parte in item.get("loc", ())) or "body",
+                    "motivo": str(item.get("msg", "Valor inválido.")),
+                }
+                for item in err_validacao.errors()
+            ]
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "codigo": CodigoErro.CAMPOS_INVALIDOS.value,
+                    "mensagem": "Campos inválidos ou ausentes na requisição.",
+                    "detalhes": detalhes_campos,
+                },
+            )
+
+        texto = payload.documento_texto or payload.texto
+        if not texto or not texto.strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "codigo": CodigoErro.CAMPOS_INVALIDOS.value,
+                    "mensagem": "É preciso enviar documento_texto ou arquivo.",
+                },
+            )
+
+        doc_id_informado = payload.documento_id
+        origem = payload.canal_origem or "Prontuário"
+        meta = dict(payload.metadados or {})
+        if x_mediflow_simulacao_oci:
+            meta["simular_falha_oci"] = x_mediflow_simulacao_oci.strip().upper()
+            meta["modo_simulacao"] = True
+
+        try:
+            doc_id = triagem_service.submeter_texto(
+                texto=texto,
+                documento_id=doc_id_informado,
+                canal_origem=origem,
+                metadados=meta,
+            )
+        except (IngestaoError, ValueError) as e:
+            raise _tratar_erro_ingestao(e)
+
+        background_tasks.add_task(triagem_service.executar_triagem, doc_id)
+
+        return TriagemCriadaResponse(
+            documento_id=doc_id,
+            status="RECEBIDO",
+            status_url=f"/api/v1/triagens/{doc_id}/status",
+            historico_url=f"/api/v1/triagens/{doc_id}/historico",
+            mensagem="Documento textual aceito e enfileirado para processamento.",
+        )
+
+    # Cenário B: Requisição Multipart / Form-Data (CT-002, CT-003, CT-007, CT-010)
+    if file is not None:
+        conteudo = await file.read()
+        if len(conteudo) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"codigo": CodigoErro.CAMPOS_INVALIDOS.value, "mensagem": "Arquivo vazio (0 bytes)."},
+            )
+
+        nome = file.filename or "documento.pdf"
+        meta = {}
+        if x_mediflow_simulacao_oci:
+            meta["simular_falha_oci"] = x_mediflow_simulacao_oci.strip().upper()
+            meta["modo_simulacao"] = True
+
+        try:
+            doc_id = triagem_service.submeter_arquivo(
+                conteudo=conteudo,
+                nome_arquivo=nome,
+                documento_id=documento_id,
+                canal_origem=canal_origem or "Upload",
+                metadados=meta,
+            )
+        except (IngestaoError, ValueError) as e:
+            raise _tratar_erro_ingestao(e)
+
+        background_tasks.add_task(triagem_service.executar_triagem, doc_id)
+
+        return TriagemCriadaResponse(
+            documento_id=doc_id,
+            status="RECEBIDO",
+            status_url=f"/api/v1/triagens/{doc_id}/status",
+            historico_url=f"/api/v1/triagens/{doc_id}/historico",
+            mensagem=f"Arquivo '{nome}' aceito e enfileirado para processamento.",
+        )
+
+    # Caso receba documento_texto via form-data
+    if documento_texto and documento_texto.strip():
+        try:
+            doc_id = triagem_service.submeter_texto(
+                texto=documento_texto,
+                documento_id=documento_id,
+                canal_origem=canal_origem or "Prontuário",
+            )
+        except IngestaoError as e:
+            raise _tratar_erro_ingestao(e)
+
+        background_tasks.add_task(triagem_service.executar_triagem, doc_id)
+
+        return TriagemCriadaResponse(
+            documento_id=doc_id,
+            status="RECEBIDO",
+            status_url=f"/api/v1/triagens/{doc_id}/status",
+            historico_url=f"/api/v1/triagens/{doc_id}/historico",
+            mensagem="Documento textual aceito e enfileirado para processamento.",
+        )
+
+    # CT-007: Nem arquivo nem texto enviados
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={
+            "codigo": CodigoErro.CAMPOS_INVALIDOS.value,
+            "mensagem": "É preciso enviar arquivo ou documento_texto.",
+        },
+    )
+
+
+@router.get(
+    "/triagens/{documento_id}",
+    summary="Consulta Resultado Completo da Triagem (CT-073)",
+    responses={
+        200: {"description": "Payload completo TriagemMediFlow."},
+        404: {"model": ErroEnvelope, "description": "Documento não encontrado."},
+    },
+)
+def obter_resultado_triagem(documento_id: str):
+    """Retorna o payload completo da triagem no estado terminal (CT-073)."""
+    # Se ainda estiver em processamento pendente, executa sincronamente para responder
+    status_atual = triagem_service.obter_status(documento_id)
+    if status_atual is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "codigo": "DOCUMENTO_NAO_ENCONTRADO",
+                "mensagem": f"Documento '{documento_id}' não encontrado.",
+            },
+        )
+
+    triagem = triagem_service.obter_triagem(documento_id)
+    if not triagem:
+        # Finaliza processamento pendente
+        triagem = triagem_service.executar_triagem(documento_id)
+
+    return triagem.model_dump(mode="json")
+
+
+@router.get(
+    "/triagens/{documento_id}/status",
+    response_model=StatusTriagemResponse,
+    summary="Polling de Status de Processamento",
+)
+def obter_status_triagem(documento_id: str):
+    """Consulta leve de status para acompanhamento de tela."""
+    status_atual = triagem_service.obter_status(documento_id)
+    if status_atual is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "codigo": "DOCUMENTO_NAO_ENCONTRADO",
+                "mensagem": f"Documento '{documento_id}' não encontrado.",
+            },
+        )
+
+    triagem = triagem_service.obter_triagem(documento_id)
+    decisao = triagem.decisao_roteamento if triagem else None
+    destinos = [destino.value for destino in decisao.destinos] if decisao else []
+    requer_auditoria = decisao.requer_auditoria_humana if decisao else False
+
+    return StatusTriagemResponse(
+        documento_id=documento_id,
+        status=status_atual,
+        destinos=destinos,
+        requer_auditoria_humana=requer_auditoria,
+        concluido=(status_atual in ("PROCESSADO", "EM_REVISAO", "ERRO_PROCESSAMENTO", "ERRO_PERSISTENCIA")),
+    )
+
+
+@router.post(
+    "/triagens/{documento_id}/reprocessar-persistencia",
+    summary="Retenta a persistência OCI preservando a decisão prévia (RF-28, RF-30)",
+)
+def reprocessar_persistencia_triagem(documento_id: str):
+    """Retenta a gravação dos artefatos sem reexecutar a análise clínica."""
+    try:
+        triagem = triagem_service.reprocessar_persistencia_oci(documento_id)
+        return triagem.model_dump(mode="json")
+    except ValueError as erro:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "codigo": CodigoErro.REQUISICAO_INVALIDA.value,
+                "mensagem": str(erro),
+            },
+        ) from erro
+    except Exception as erro:
+        logger.exception(
+            "Falha na retentativa de persistência OCI para documento %s",
+            documento_id,
+        )
+
+        mensagem = (
+            "Falha ao persistir documento no armazenamento. "
+            "O resultado clínico está preservado."
+        )
+        if isinstance(erro, ConectorOCIIndisponivel):
+            mensagem = (
+                "Conector OCI não configurado ou indisponível. "
+                "A persistência durável não pode ser confirmada."
+            )
+        elif isinstance(erro, ConflitoIntegridadeOCI):
+            mensagem = (
+                "Conflito de integridade OCI: "
+                "o documento original diverge do arquivo armazenado."
+            )
+
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "codigo": CodigoErro.ERRO_PERSISTENCIA.value,
+                "mensagem": mensagem,
+            },
+        ) from erro
+
+@router.get(
+    "/triagens/{documento_id}/historico",
+    response_model=List[EventoHistorico],
+    summary="Linha do Tempo e Auditoria de Eventos (CT-070 a CT-072)",
+)
+def obter_historico_triagem(documento_id: str):
+    """Retorna eventos cronológicos de auditoria para o documento_id informado."""
+    status_atual = triagem_service.obter_status(documento_id)
+    if status_atual is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "codigo": "DOCUMENTO_NAO_ENCONTRADO",
+                "mensagem": f"Histórico do documento '{documento_id}' não encontrado.",
+            },
+        )
+
+    return triagem_service.obter_historico(documento_id)
+
+
+@router.get(
+    "/health",
+    response_model=HealthResponse,
+    summary="Health Check de Disponibilidade Operacional (CT-076)",
+)
+def health_check():
+    """Endpoint de prontidão e saúde dos serviços."""
+    return HealthResponse(
+        status="healthy",
+        versao="2.0.0",
+        servicos={
+            "api": "ok",
+            "langgraph": "ok",
+            "oci_storage": "ok",
+        },
+    )
+
+
+def _tratar_erro_ingestao(erro: Exception) -> HTTPException:
+    """Mapeia exceções da camada de ingestão para respostas HTTP canônicas seguras."""
+    msg = getattr(erro, "mensagem", None) or str(erro)
+    code = getattr(erro, "codigo", None)
+    if hasattr(code, "value"):
+        code = code.value
+    code = str(code) if code else ""
+
+    if code == "DOCUMENTO_ID_CONFLITANTE":
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"codigo": code, "mensagem": msg},
+        )
+
+    if code == CodigoErro.FORMATO_NAO_SUPORTADO.value:
+        return HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail={
+                "codigo": CodigoErro.FORMATO_NAO_SUPORTADO.value,
+                "mensagem": "Formatos aceitos: PDF, JPG, PNG, WEBP e TXT.",
+            },
+        )
+
+    if code == CodigoErro.MIME_INVALIDO.value:
+        return HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail={
+                "codigo": CodigoErro.MIME_INVALIDO.value,
+                "mensagem": "Conteúdo real incompatível com a extensão do arquivo.",
+            },
+        )
+
+    if code == CodigoErro.ARQUIVO_MAIOR_QUE_LIMITE.value or "10.00 mb" in msg.lower():
+        total_paginas = getattr(erro, "total_paginas", None)
+        limite_paginas = getattr(erro, "limite_paginas", None)
+        eh_limite_paginas = (
+            total_paginas is not None
+            or limite_paginas is not None
+            or "página" in msg.lower()
+            or "pagina" in msg.lower()
+        )
+        if eh_limite_paginas:
+            detalhes_paginas: Dict[str, Any] = {"motivo": "PAGINAS_EXCEDIDAS"}
+            if total_paginas is not None:
+                detalhes_paginas["total_paginas"] = total_paginas
+            if limite_paginas is not None:
+                detalhes_paginas["limite_paginas"] = limite_paginas
+            if total_paginas is not None and limite_paginas is not None:
+                mensagem_limite = (
+                    f"O documento PDF possui {total_paginas} páginas e excede o limite "
+                    f"operacional de {limite_paginas} páginas (Regra A6)."
+                )
+            else:
+                mensagem_limite = "O documento PDF excede o limite operacional de 20 páginas (Regra A6)."
+            return HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail={
+                    "codigo": CodigoErro.ARQUIVO_MAIOR_QUE_LIMITE.value,
+                    "mensagem": mensagem_limite,
+                    "detalhes": detalhes_paginas,
+                },
+            )
+
+        tamanho_bytes = getattr(erro, "tamanho_bytes", None)
+        limite_bytes = getattr(erro, "limite_bytes", None)
+        detalhes_tamanho: Dict[str, Any] = {"motivo": "TAMANHO_EXCEDIDO"}
+        if tamanho_bytes is not None:
+            detalhes_tamanho["tamanho_bytes"] = tamanho_bytes
+        if limite_bytes is not None:
+            detalhes_tamanho["limite_bytes"] = limite_bytes
+        return HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail={
+                "codigo": CodigoErro.ARQUIVO_MAIOR_QUE_LIMITE.value,
+                "mensagem": "Arquivo excede o limite operacional de 10.00 MB (Regra A6).",
+                "detalhes": detalhes_tamanho,
+            },
+        )
+
+    if code == CodigoErro.PDF_PROTEGIDO.value:
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "codigo": CodigoErro.PDF_PROTEGIDO.value,
+                "mensagem": "PDF protegido por senha não pode ser processado.",
+            },
+        )
+
+    if code == CodigoErro.PDF_CORROMPIDO.value:
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "codigo": CodigoErro.PDF_CORROMPIDO.value,
+                "mensagem": "Arquivo PDF corrompido ou truncado.",
+            },
+        )
+
+    # Fallback para ValueError / exceções sem código de domínio explícito
+    if "não suportado" in msg.lower() or "não suportada" in msg.lower():
+        return HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail={
+                "codigo": CodigoErro.FORMATO_NAO_SUPORTADO.value,
+                "mensagem": "Formatos aceitos: PDF, JPG, PNG, WEBP e TXT.",
+            },
+        )
+    if "inconsistência" in msg.lower() or "inconsistente" in msg.lower():
+        return HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail={
+                "codigo": CodigoErro.MIME_INVALIDO.value,
+                "mensagem": "Conteúdo real incompatível com a extensão do arquivo.",
+            },
+        )
+    if "protegido" in msg.lower():
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "codigo": CodigoErro.PDF_PROTEGIDO.value,
+                "mensagem": "PDF protegido por senha não pode ser processado.",
+            },
+        )
+    if "corrompido" in msg.lower():
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "codigo": CodigoErro.PDF_CORROMPIDO.value,
+                "mensagem": "Arquivo PDF corrompido ou truncado.",
+            },
+        )
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"codigo": CodigoErro.CAMPOS_INVALIDOS.value, "mensagem": msg},
+    )

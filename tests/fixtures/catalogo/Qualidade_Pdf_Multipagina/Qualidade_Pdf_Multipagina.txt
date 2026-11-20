@@ -1,0 +1,96 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RELATÓRIO DE ALTA HOSPITALAR
+Relatório extenso com seis páginas
+
+Fixture: Qualidade_Pdf_Multipagina
+Paciente: Iracema Barbosa Teixeira
+Idade: 74 anos
+Documento: DOC-Q-2026-0047
+Data: 18/10/2026
+Origem: Enfermaria 6B
+
+PERÍODO DE INTERNAÇÃO
+Admissão em 05/10/2026, alta em 18/10/2026 (13 dias).
+
+DIAGNÓSTICO PRINCIPAL
+Sepse de foco pulmonar — CID-10 A41.9.
+
+RESUMO DA INTERNAÇÃO
+Paciente internada com febre, tosse produtiva e rebaixamento do nível de consciência. Diagnosticada pneumonia com derrame parapneumônico, tratada com antibioticoterapia endovenosa por 14 dias e drenagem torácica.
+
+EVOLUÇÃO — DIA 1
+Dia 1 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 2
+Dia 2 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 3
+Dia 3 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 4
+Dia 4 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 5
+Dia 5 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 6
+Dia 6 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 7
+Dia 7 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 8
+Dia 8 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 9
+Dia 9 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 10
+Dia 10 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 11
+Dia 11 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 12
+Dia 12 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 13
+Dia 13 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 14
+Dia 14 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 15
+Dia 15 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 16
+Dia 16 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 17
+Dia 17 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 18
+Dia 18 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 19
+Dia 19 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+EVOLUÇÃO — DIA 20
+Dia 20 de internação: paciente em antibioticoterapia endovenosa, hemodinamicamente estável, afebril nas últimas 24 horas. Controle laboratorial diário sem novas alterações significativas. Fisioterapia respiratória mantida. Aceitação parcial da dieta, diurese preservada e balanço hídrico equilibrado nas últimas 24 horas.
+
+MEDICAÇÕES DE ALTA
+Amoxicilina + clavulanato 875/125 mg — 1 comprimido por via oral a cada 12 horas, por 7 dias.
+
+ORIENTAÇÕES
+Retorno em 7 dias com radiografia de controle. Sinais de alarme: febre, dispneia ou dor torácica.
+
+------------------------------------------------------------------------------
+Dr. Paulo Mendes Rocha
+CRM 203114-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Qualidade_Pdf_Multipagina · dados sintéticos · página 1 de 7

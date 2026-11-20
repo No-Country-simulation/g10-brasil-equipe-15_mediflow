@@ -1,0 +1,37 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+LAUDO DE EXAME LABORATORIAL
+Perfil lipídico e glicemia — rotina
+
+Fixture: Matriz_LaudoLaboratorial_Imagem
+Paciente: Sônia Regina Duarte
+Idade: 55 anos
+Documento: DOC-LAB-2026-0013
+Data: 16/10/2026
+Origem: Laboratório Central
+
+HIPÓTESE DIAGNÓSTICA
+Dislipidemia mista — CID-10 E78.2.
+
+MATERIAL
+Soro, coleta em 16/10/2026 às 07h20, jejum de 12 horas.
+
+RESULTADOS
+Colesterol total: 248 mg/dL (desejável < 190)
+LDL-colesterol: 168 mg/dL (desejável < 130)
+HDL-colesterol: 38 mg/dL (desejável > 40)
+Triglicerídeos: 210 mg/dL (desejável < 150)
+Glicemia de jejum: 98 mg/dL (referência 70–99)
+
+CONCLUSÃO
+Dislipidemia mista. Orientada dieta e retorno ambulatorial.
+
+------------------------------------------------------------------------------
+Dr. Marcos Vinícius Tavares
+CRM 176543-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_LaudoLaboratorial_Imagem · dados sintéticos · página 1 de 1

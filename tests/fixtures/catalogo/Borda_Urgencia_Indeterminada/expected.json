@@ -1,0 +1,84 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Borda_Urgencia_Indeterminada",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Borda_Urgencia_Indeterminada/Borda_Urgencia_Indeterminada.txt",
+      "pdf": "catalogo/Borda_Urgencia_Indeterminada/Borda_Urgencia_Indeterminada.pdf",
+      "jpg": "catalogo/Borda_Urgencia_Indeterminada/Borda_Urgencia_Indeterminada.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-151FDCA7",
+    "classificacao": {
+      "tipo_documento": "LAUDO_EXAME_LABORATORIAL",
+      "especialidade": [
+        "Nefrologia",
+        "Clínica Médica"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Nilo Sérgio Amarante",
+        "idade": 58
+      },
+      "medico": {
+        "nome": "Dra. Renata Silveira",
+        "crm": {
+          "numero": "145892",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Hipercalemia leve com função renal discretamente alterada",
+      "cid": null,
+      "exames": [
+        "Potássio",
+        "Creatinina",
+        "Hemoglobina"
+      ],
+      "medicamentos": [],
+      "urgencia": "INDETERMINADO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: urgência indeterminada (conta como campo incerto).",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "modo_fixture": {
+    "score_forcado": {
+      "score_classificacao": 0.93,
+      "score_extracao": 0.91
+    }
+  },
+  "assercoes": [
+    "Urgência INDETERMINADO conta como campo incerto e gera revisão (decisão A5)",
+    "Não é urgência confirmada: não há alerta nem fila de urgência",
+    "O documento não autoriza afirmar SIM nem NAO"
+  ],
+  "observacoes": "Caso criado em 21/10/2026 para isolar a regra A5. O laudo está completo e legível, mas não permite decidir a urgência — é a situação que a RF-13 manda marcar como INDETERMINADO em vez de declarar NAO."
+}

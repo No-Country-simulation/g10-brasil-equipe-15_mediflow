@@ -1,0 +1,80 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Matriz_Guia_Imagem",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Matriz_Guia_Imagem/Matriz_Guia_Imagem.txt",
+      "pdf": "catalogo/Matriz_Guia_Imagem/Matriz_Guia_Imagem.pdf",
+      "jpg": "catalogo/Matriz_Guia_Imagem/Matriz_Guia_Imagem.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-D06D8B78",
+    "classificacao": {
+      "tipo_documento": "GUIA_PROCEDIMENTO",
+      "especialidade": [
+        "Gastroenterologia"
+      ],
+      "nivel_prioridade": "URGENTE",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Márcia Helena dos Santos",
+        "idade": 49
+      },
+      "medico": {
+        "nome": "Dr. Paulo Mendes Rocha",
+        "crm": {
+          "numero": "203114",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Hemorragia digestiva alta",
+      "cid": "K92.2",
+      "exames": [
+        "Endoscopia digestiva alta"
+      ],
+      "medicamentos": [],
+      "urgencia": "SIM"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_URGENCIA_MEDICA",
+      "destinos": [
+        "FILA_URGENCIA_MEDICA"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Urgência clínica: FILA_URGENCIA_MEDICA com alerta registrado. Sem ambiguidade, segue sem revisão humana.",
+      "notificacao": {
+        "gerada": true,
+        "canal": "SIMULADO_SLACK_PLANTAO",
+        "status": "REGISTRADA",
+        "mensagem": "ALERTA URGENTE [DOC-D06D8B78]: Hemorragia digestiva alta"
+      }
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Foto de guia com pedido de urgência",
+    "Sinal crítico detectado no texto",
+    "Destino FILA_URGENCIA_MEDICA com alerta"
+  ],
+  "observacoes": ""
+}

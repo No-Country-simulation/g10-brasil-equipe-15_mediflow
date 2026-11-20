@@ -1,0 +1,33 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+ATESTADO MÉDICO
+Atestado válido com exatamente 10 MB — no limite do upload
+
+Fixture: Limite_Tamanho_10MB
+Paciente: Cecília Andrade Vilela
+Idade: 29 anos
+Documento: DOC-ATE-2026-0055
+Data: 18/10/2026
+Origem: Upload manual
+
+FINALIDADE
+Atestado de afastamento de 1 dia.
+
+TEXTO DO ATESTADO
+Atesto que a paciente necessita de afastamento de suas atividades por 1 (um) dia, a contar de 18/10/2026.
+
+DIAGNÓSTICO / CID
+Cefaleia — CID-10 R51.
+
+OBSERVAÇÃO
+O arquivo tem exatamente 10 MB (10.485.760 bytes): está no limite fixado para o upload, e por isso deve ser aceito. O tamanho vem de um comentário de preenchimento antes do marcador de fim do PDF; o conteúdo clínico é o de qualquer atestado de uma página.
+
+------------------------------------------------------------------------------
+Dr. Marcos Vinícius Tavares
+CRM 176543-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Limite_Tamanho_10MB · dados sintéticos · página 1 de 1

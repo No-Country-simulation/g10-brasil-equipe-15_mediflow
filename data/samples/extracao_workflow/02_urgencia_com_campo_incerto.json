@@ -1,0 +1,41 @@
+{
+  "documento_id": "DOC-DB12E34D",
+  "classificacao": {
+    "tipo_documento": "RECEITUARIO_MEDICO",
+    "especialidade": [
+      "Cardiologia"
+    ],
+    "nivel_prioridade": "URGENTE",
+    "score_classificacao": 0.93
+  },
+  "dados_extraidos": {
+    "paciente": {
+      "nome": "Joana Batista Ferraz",
+      "idade": 58
+    },
+    "medico": {
+      "nome": "Dra. Camila Ferreira Lopes",
+      "crm": {
+        "numero": "198765",
+        "uf": "SP"
+      }
+    },
+    "diagnostico": "Crise hipertensiva",
+    "cid": "I16.9",
+    "exames": [],
+    "medicamentos": [
+      {
+        "nome": "Nitroprussiato de sódio",
+        "dosagem": null,
+        "frequencia": null
+      }
+    ],
+    "urgencia": "SIM"
+  },
+  "qualidade": {
+    "campos_incertos": [
+      "medicamentos[0].dosagem"
+    ],
+    "conflitos": []
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Qualidade_Foto_Desfocada",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Qualidade_Foto_Desfocada/Qualidade_Foto_Desfocada.txt",
+      "pdf": "catalogo/Qualidade_Foto_Desfocada/Qualidade_Foto_Desfocada.pdf",
+      "jpg": "catalogo/Qualidade_Foto_Desfocada/Qualidade_Foto_Desfocada.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-49029A6A",
+    "classificacao": {
+      "tipo_documento": "NAO_IDENTIFICADO",
+      "especialidade": [],
+      "nivel_prioridade": "NAO_IDENTIFICADA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": null,
+        "idade": null
+      },
+      "medico": {
+        "nome": null,
+        "crm": null
+      },
+      "diagnostico": null,
+      "cid": null,
+      "exames": [],
+      "medicamentos": [],
+      "urgencia": "INDETERMINADO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [
+        "paciente.nome",
+        "paciente.idade",
+        "medico.nome",
+        "medico.crm",
+        "diagnostico"
+      ],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: campos obrigatórios ausentes: diagnostico, medico.crm, medico.nome, paciente.idade, paciente.nome; tipo fora da taxonomia: NAO_IDENTIFICADO; prioridade não identificada; urgência indeterminada (conta como campo incerto).",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Imagem muito desfocada não permite extração",
+    "Nenhuma lacuna é preenchida",
+    "Revisão humana indicada"
+  ],
+  "observacoes": "JPG e PDF fortemente degradados; cabeçalho de identificação preservado."
+}

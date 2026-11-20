@@ -1,0 +1,84 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Matriz_RelatorioDeAlta_Imagem",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Matriz_RelatorioDeAlta_Imagem/Matriz_RelatorioDeAlta_Imagem.txt",
+      "pdf": "catalogo/Matriz_RelatorioDeAlta_Imagem/Matriz_RelatorioDeAlta_Imagem.pdf",
+      "jpg": "catalogo/Matriz_RelatorioDeAlta_Imagem/Matriz_RelatorioDeAlta_Imagem.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-A73B6A37",
+    "classificacao": {
+      "tipo_documento": "RELATORIO_ALTA_INTERNACAO",
+      "especialidade": [
+        "Cardiologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "José Ricardo Almeida",
+        "idade": 68
+      },
+      "medico": {
+        "nome": "Dr. Paulo Mendes Rocha",
+        "crm": {
+          "numero": "203114",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Insuficiência cardíaca congestiva descompensada",
+      "cid": "I50.0",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Furosemida",
+          "dosagem": "40 mg",
+          "frequencia": null
+        },
+        {
+          "nome": "Carvedilol",
+          "dosagem": "6,25 mg",
+          "frequencia": null
+        }
+      ],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "PRONTUARIO_ELETRONICO",
+      "destinos": [
+        "PRONTUARIO_ELETRONICO"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: RELATORIO_ALTA_INTERNACAO encaminhado para PRONTUARIO_ELETRONICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Foto de relatório de alta",
+    "Dois medicamentos extraídos com dose e frequência",
+    "Destino PRONTUARIO_ELETRONICO"
+  ],
+  "observacoes": ""
+}

@@ -1,0 +1,365 @@
+"""
+Testes unitários para o módulo de ingestão blindado de documentos (DocumentLoader).
+Valida leitura de PDFs, encoding Latin-1/UTF-8, limite de tamanho, senha e integridade.
+"""
+from pathlib import Path
+import pytest
+from src.ingestion import (
+    DocumentLoader,
+    DocumentoIngerido,
+    TamanhoExcedidoError,
+    DocumentoProtegidoError,
+    DocumentoCorrompidoError,
+    resolver_mime_type,
+    MIME_POR_FORMATO,
+)
+
+try:
+    import pymupdf as fitz
+except ImportError:
+    import fitz
+
+SAMPLES_DIR = Path(__file__).resolve().parent.parent / "data" / "samples"
+FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
+
+
+def test_carregar_pdf_rotina():
+    """Valida a leitura do PDF do Cenário 1 (Rotina - RX de Tórax)"""
+    pdf_path = SAMPLES_DIR / "01_laudo_rotina.pdf"
+    assert pdf_path.exists(), "PDF de teste deve existir em data/samples/"
+
+    doc = DocumentLoader.carregar_arquivo(pdf_path)
+
+    assert isinstance(doc, DocumentoIngerido)
+    assert doc.formato == "PDF"
+    assert doc.total_paginas == 1
+    assert doc.requer_ocr is False
+    assert "João Carlos da Silva" in doc.conteudo_texto
+    assert "RADIOGRAFIA DE TÓRAX" in doc.conteudo_texto
+    assert doc.metadados["total_caracteres"] > 100
+
+
+def test_carregar_pdf_urgencia_tep():
+    """Valida a leitura do PDF do Cenário 2 (Urgência Crítica - TEP)"""
+    pdf_path = SAMPLES_DIR / "02_laudo_urgencia_tep.pdf"
+    doc = DocumentLoader.carregar_arquivo(pdf_path)
+
+    assert doc.formato == "PDF"
+    assert "Maria Eduarda Santos" in doc.conteudo_texto
+    assert "TROMBOEMBOLISMO PULMONAR" in doc.conteudo_texto
+    assert "I26.9" in doc.conteudo_texto
+    assert doc.documento_id.startswith("DOC-")
+
+
+def test_carregar_bytes_pdf():
+    """Valida carregamento direto de bytes (upload via Streamlit/FastAPI)"""
+    pdf_path = SAMPLES_DIR / "02_laudo_urgencia_tep.pdf"
+    with open(pdf_path, "rb") as f:
+        bytes_data = f.read()
+
+    doc = DocumentLoader.carregar_bytes(bytes_data, nome_arquivo="upload_urgencia.pdf")
+
+    assert doc.nome_arquivo == "upload_urgencia.pdf"
+    assert doc.formato == "PDF"
+    assert doc.tamanho_bytes == len(bytes_data)
+    assert "Maria Eduarda Santos" in doc.conteudo_texto
+
+
+def test_limite_tamanho_excedido():
+    """Valida bloqueio de segurança para uploads maiores que 10MB (alinhado a Limite_Tamanho_Acima10MB)"""
+    tamanho_excessivo = 11 * 1024 * 1024  # 11MB
+
+    with pytest.raises(TamanhoExcedidoError) as exc_info:
+        DocumentLoader.validar_limite_tamanho(tamanho_excessivo)
+
+    assert exc_info.value.codigo == "ARQUIVO_MAIOR_QUE_LIMITE"
+    assert exc_info.value.tamanho_bytes == tamanho_excessivo
+    assert exc_info.value.limite_bytes == DocumentLoader.LIMITE_MAXIMO_BYTES
+    assert exc_info.value.total_paginas is None
+
+
+def test_limite_paginas_excedido():
+    """Valida bloqueio de segurança para PDFs com mais de 20 páginas (alinhado a Limite_Paginas_21)"""
+    doc_fitz = fitz.open()
+    for _ in range(21):
+        page = doc_fitz.new_page()
+        page.insert_text((50, 50), "Página de teste de limite.")
+    pdf_bytes = doc_fitz.tobytes()
+    doc_fitz.close()
+
+    with pytest.raises(TamanhoExcedidoError) as exc_info:
+        DocumentLoader.carregar_bytes(pdf_bytes, nome_arquivo="documento_longo_21paginas.pdf")
+
+    assert exc_info.value.codigo == "ARQUIVO_MAIOR_QUE_LIMITE"
+    assert exc_info.value.total_paginas == 21
+    assert exc_info.value.limite_paginas == DocumentLoader.LIMITE_MAXIMO_PAGINAS
+    assert "20 páginas" in exc_info.value.mensagem
+
+
+def test_tratamento_encoding_latin1():
+    """Valida fallback de encoding preservando acentos em laudos brasileiros antigos"""
+    texto_original = "PACIENTE: JOSÉ DA CONCEIÇÃO | PRESCRIÇÃO: ANALGÉSICO CARDÍACO"
+    bytes_latin1 = texto_original.encode("iso-8859-1")
+
+    doc = DocumentLoader.carregar_bytes(bytes_latin1, nome_arquivo="receita_antiga.txt")
+
+    assert doc.conteudo_texto == texto_original
+    assert "CONCEIÇÃO" in doc.conteudo_texto
+    assert "CARDÍACO" in doc.conteudo_texto
+    assert doc.metadados["encoding_detectado"] == "iso-8859-1"
+
+
+def test_pdf_protegido_por_senha():
+    """Valida detecção graciosa de PDF protegido por senha sem travar a aplicação"""
+    # Cria um PDF temporário criptografado em memória
+    doc_fitz = fitz.open()
+    doc_fitz.new_page()
+    pdf_com_senha_bytes = doc_fitz.tobytes(
+        encryption=fitz.PDF_ENCRYPT_AES_256,
+        user_pw="senha123",
+        owner_pw="master123"
+    )
+    doc_fitz.close()
+
+    with pytest.raises(DocumentoProtegidoError) as exc_info:
+        DocumentLoader.carregar_bytes(pdf_com_senha_bytes, nome_arquivo="exame_protegido.pdf")
+
+    assert exc_info.value.codigo == "PDF_PROTEGIDO"
+
+
+def test_pdf_corrompido():
+    """Valida detecção de arquivo PDF truncado ou corrompido"""
+    bytes_corrompidos = b"%PDF-1.4 corrompido e truncado pela metade..."
+
+    with pytest.raises(DocumentoCorrompidoError) as exc_info:
+        DocumentLoader.carregar_bytes(bytes_corrompidos, nome_arquivo="exame_corrompido.pdf")
+
+    assert exc_info.value.codigo == "PDF_CORROMPIDO"
+
+
+@pytest.mark.parametrize("fracao", [0.4, 0.85])
+def test_pdf_truncado_rejeitado_como_corrompido(fracao):
+    """Garante que PDFs truncados que o PyMuPDF repararia silenciosamente sejam rejeitados (PDF_CORROMPIDO)."""
+    pdf_valido = (SAMPLES_DIR / "01_laudo_rotina.pdf").read_bytes()
+    pdf_truncado = pdf_valido[: int(len(pdf_valido) * fracao)]
+
+    with pytest.raises(DocumentoCorrompidoError) as exc_info:
+        DocumentLoader.carregar_bytes(pdf_truncado, nome_arquivo="laudo_truncado.pdf")
+
+    assert exc_info.value.codigo == "PDF_CORROMPIDO"
+
+
+def test_pdf_protegido_apenas_owner_password():
+    """Garante detecção de PDF criptografado apenas com senha de proprietário (restrição de permissões)."""
+    doc_fitz = fitz.open()
+    doc_fitz.new_page().insert_text((50, 50), "Laudo protegido com senha de proprietário.")
+    pdf_owner_bytes = doc_fitz.tobytes(
+        encryption=fitz.PDF_ENCRYPT_AES_256,
+        owner_pw="master123",
+        permissions=fitz.PDF_PERM_PRINT,
+    )
+    doc_fitz.close()
+
+    with pytest.raises(DocumentoProtegidoError) as exc_info:
+        DocumentLoader.carregar_bytes(pdf_owner_bytes, nome_arquivo="exame_owner_pw.pdf")
+
+    assert exc_info.value.codigo == "PDF_PROTEGIDO"
+
+
+def test_carregamento_imagem_multimodal():
+    """Valida carregamento de fotos/imagens preservando bytes para o Gemini"""
+    bytes_imagem = b"\x89PNG\r\n\x1a\nfake_image_bytes"
+    doc = DocumentLoader.carregar_bytes(bytes_imagem, nome_arquivo="foto_receita.png")
+
+    assert doc.formato == "PNG"
+    assert doc.requer_ocr is True
+    assert doc.conteudo_bytes == bytes_imagem
+    assert doc.metadados["tipo"] == "imagem"
+
+
+def test_laudo_curto_sem_falso_positivo_ocr():
+    """Garante que atestados médicos curtos não sejam falsamente marcados como 'precisa de OCR'"""
+    texto_curto = "Atesto que o paciente esteve sob cuidados medicos hoje."
+    doc_fitz = fitz.open()
+    page = doc_fitz.new_page()
+    page.insert_text((50, 50), texto_curto)
+    pdf_bytes = doc_fitz.tobytes()
+    doc_fitz.close()
+
+    doc = DocumentLoader.carregar_bytes(pdf_bytes, nome_arquivo="atestado_curto.pdf")
+
+    assert doc.requer_ocr is False
+    assert "cuidados medicos" in doc.conteudo_texto
+
+
+def test_formato_invalido():
+    """Valida que formatos não suportados disparam ValueError"""
+    with pytest.raises(ValueError):
+        DocumentLoader.carregar_bytes(b"conteudo", nome_arquivo="arquivo.exe")
+
+
+def test_arquivo_inexistente():
+    """Valida que caminho inexistente dispara FileNotFoundError"""
+    with pytest.raises(FileNotFoundError):
+        DocumentLoader.carregar_arquivo("caminho/fantasma/inexistente.pdf")
+
+
+# ==============================================================================
+# TESTES DE INTEGRAÇÃO COM OS FIXTURES FÍSICOS REAIS DO WILLIAM
+# ==============================================================================
+
+def test_ingestao_fixture_william_com_senha():
+    """Valida leitura direta do arquivo físico com senha dos fixtures do William."""
+    pdf_senha = FIXTURES_DIR / "catalogo" / "Qualidade_Pdf_ComSenha" / "Qualidade_Pdf_ComSenha.pdf"
+    assert pdf_senha.exists(), "Fixture com senha deve existir em tests/fixtures/catalogo/"
+
+    with pytest.raises(DocumentoProtegidoError) as exc_info:
+        DocumentLoader.carregar_arquivo(pdf_senha)
+
+    assert exc_info.value.codigo == "PDF_PROTEGIDO"
+
+
+def test_ingestao_fixture_william_corrompido():
+    """Valida leitura direta do arquivo físico corrompido dos fixtures do William."""
+    pdf_corrompido = FIXTURES_DIR / "catalogo" / "Qualidade_Pdf_Corrompido" / "Qualidade_Pdf_Corrompido.pdf"
+    assert pdf_corrompido.exists(), "Fixture corrompido deve existir em tests/fixtures/catalogo/"
+
+    with pytest.raises(DocumentoCorrompidoError) as exc_info:
+        DocumentLoader.carregar_arquivo(pdf_corrompido)
+
+    assert exc_info.value.codigo == "PDF_CORROMPIDO"
+
+
+def test_ingestao_fixture_william_docx_nao_suportado():
+    """Valida rejeição de formato .docx usando o arquivo real dos fixtures do William."""
+    docx_file = FIXTURES_DIR / "catalogo" / "Validacao_ArquivoDocx" / "Validacao_ArquivoDocx.docx"
+    assert docx_file.exists(), "Fixture DOCX deve existir em tests/fixtures/catalogo/"
+
+    with pytest.raises(ValueError):
+        DocumentLoader.carregar_arquivo(docx_file)
+
+
+def test_ingestao_fixture_william_pdf_digital():
+    """Valida carregamento de PDF digital da matriz demo dos fixtures do William."""
+    pdf_demo = FIXTURES_DIR / "demo" / "Matriz_Receituario_Pdf" / "Matriz_Receituario_Pdf.pdf"
+    assert pdf_demo.exists(), "Fixture demo deve existir em tests/fixtures/demo/"
+
+    doc = DocumentLoader.carregar_arquivo(pdf_demo)
+    assert doc.formato == "PDF"
+    assert doc.total_paginas == 1
+    assert doc.requer_ocr is False
+    assert len(doc.conteudo_texto) > 100
+    assert "RECEITUÁRIO MÉDICO" in doc.conteudo_texto or "HOSPITAL AURORA" in doc.conteudo_texto
+
+
+def test_ingestao_fixture_william_imagem_multimodal():
+    """Valida carregamento de imagem física JPG da matriz demo dos fixtures do William."""
+    jpg_demo = FIXTURES_DIR / "demo" / "Matriz_Receituario_Imagem" / "Matriz_Receituario_Imagem.jpg"
+    assert jpg_demo.exists(), "Fixture imagem deve existir em tests/fixtures/demo/"
+
+    doc = DocumentLoader.carregar_arquivo(jpg_demo)
+    assert doc.formato == "JPG"
+    assert doc.requer_ocr is True
+    assert doc.conteudo_bytes is not None
+    assert len(doc.conteudo_bytes) > 0
+
+
+def test_ingestao_fixture_william_imagem_webp():
+    """Valida suporte a imagem no formato moderno WEBP (alinhado a Limite_Formato_Webp - A6)."""
+    webp_fixture = FIXTURES_DIR / "catalogo" / "Limite_Formato_Webp" / "Limite_Formato_Webp.webp"
+    assert webp_fixture.exists(), "Fixture WEBP deve existir em tests/fixtures/catalogo/"
+
+    doc = DocumentLoader.carregar_arquivo(webp_fixture)
+    assert doc.formato == "WEBP"
+    assert doc.requer_ocr is True
+    assert doc.conteudo_bytes is not None
+    assert doc.metadados["mime"] == "image/webp"
+    assert len(doc.conteudo_bytes) > 0
+
+
+def test_resolver_mime_type_formatos_padrao():
+    """Valida resolução de MIME types canônicos por formato padrão."""
+    doc_pdf = DocumentoIngerido(
+        documento_id="DOC-TEST-01",
+        nome_arquivo="laudo.pdf",
+        tamanho_bytes=100,
+        formato="PDF",
+        conteudo_bytes=b"%PDF-1.4",
+        conteudo_texto="Laudo",
+        total_paginas=1,
+    )
+    assert resolver_mime_type(doc_pdf) == "application/pdf"
+
+    doc_jpg = DocumentoIngerido(
+        documento_id="DOC-TEST-02",
+        nome_arquivo="foto.jpg",
+        tamanho_bytes=100,
+        formato="JPG",
+        conteudo_bytes=b"\xff\xd8\xff",
+        conteudo_texto="",
+        total_paginas=1,
+    )
+    assert resolver_mime_type(doc_jpg) == "image/jpeg"
+
+    doc_png = DocumentoIngerido(
+        documento_id="DOC-TEST-03",
+        nome_arquivo="foto.png",
+        tamanho_bytes=100,
+        formato="PNG",
+        conteudo_bytes=b"\x89PNG",
+        conteudo_texto="",
+        total_paginas=1,
+    )
+    assert resolver_mime_type(doc_png) == "image/png"
+
+    doc_webp = DocumentoIngerido(
+        documento_id="DOC-TEST-04",
+        nome_arquivo="foto.webp",
+        tamanho_bytes=100,
+        formato="WEBP",
+        conteudo_bytes=b"RIFF....WEBP",
+        conteudo_texto="",
+        total_paginas=1,
+    )
+    assert resolver_mime_type(doc_webp) == "image/webp"
+
+    doc_txt = DocumentoIngerido(
+        documento_id="DOC-TEST-05",
+        nome_arquivo="texto.txt",
+        tamanho_bytes=100,
+        formato="TXT",
+        conteudo_bytes=b"Texto clinico",
+        conteudo_texto="Texto clinico",
+        total_paginas=1,
+    )
+    assert resolver_mime_type(doc_txt) == "text/plain"
+
+
+def test_resolver_mime_type_preferencia_metadados():
+    """Valida que metadados['mime'] explícito tem precedência sobre a extensão."""
+    doc_custom = DocumentoIngerido(
+        documento_id="DOC-TEST-06",
+        nome_arquivo="custom.bin",
+        tamanho_bytes=100,
+        formato="OCTET",
+        conteudo_bytes=b"...",
+        conteudo_texto="",
+        total_paginas=1,
+        metadados={"mime": "image/tiff"},
+    )
+    assert resolver_mime_type(doc_custom) == "image/tiff"
+
+
+def test_resolver_mime_type_formato_desconhecido():
+    """Valida fallback para application/octet-stream quando formato não é mapeado."""
+    doc_desconhecido = DocumentoIngerido(
+        documento_id="DOC-TEST-07",
+        nome_arquivo="arquivo.xyz",
+        tamanho_bytes=100,
+        formato="XYZ",
+        conteudo_bytes=b"raw",
+        conteudo_texto="",
+        total_paginas=1,
+    )
+    assert resolver_mime_type(doc_desconhecido) == "application/octet-stream"
+

@@ -1,0 +1,88 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Conflito_Dose",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Conflito_Dose/Conflito_Dose.txt",
+      "pdf": "catalogo/Conflito_Dose/Conflito_Dose.pdf",
+      "jpg": "catalogo/Conflito_Dose/Conflito_Dose.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-A757DAD2",
+    "classificacao": {
+      "tipo_documento": "RECEITUARIO_MEDICO",
+      "especialidade": [
+        "Cardiologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Neusa Ferreira Lima",
+        "idade": 73
+      },
+      "medico": {
+        "nome": "Dr. Paulo Mendes Rocha",
+        "crm": {
+          "numero": "203114",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Hipertensão arterial sistêmica",
+      "cid": "I10",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Losartana potássica",
+          "dosagem": "500 mg",
+          "frequencia": null
+        }
+      ],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": [
+        {
+          "tipo": "DOSE_SUSPEITA",
+          "campos": [
+            "medicamentos[0].dosagem"
+          ],
+          "gravidade": "ALTA",
+          "descricao": "Losartana 500 mg excede a dose usual (50–100 mg)"
+        }
+      ]
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: conflitos impeditivos: DOSE_SUSPEITA.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Dose suspeita sinalizada sem alterar o valor (RF-16)",
+    "Valor original 500 mg preservado",
+    "Revisão humana obrigatória"
+  ],
+  "observacoes": "Depende da tabela de doses de referência aprovada pela equipe."
+}

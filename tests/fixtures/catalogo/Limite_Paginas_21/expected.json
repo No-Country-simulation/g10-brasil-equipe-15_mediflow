@@ -1,0 +1,21 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Limite_Paginas_21",
+  "documento_ficticio": true,
+  "tipo_de_teste": "negativo_tecnico",
+  "entrada": {
+    "requisicao": "POST /api/v1/triagens",
+    "arquivo": "Limite_Paginas_21.pdf"
+  },
+  "resposta_esperada": {
+    "http": 413,
+    "codigo_funcional": "ARQUIVO_MAIOR_QUE_LIMITE",
+    "mensagem": "PDF válido de 21 páginas: uma acima do limite de 20 páginas fixado para o MVP (A6)."
+  },
+  "assercoes": [
+    "Rejeitar pela contagem de páginas antes de qualquer inferência.",
+    "Nenhuma inferência é executada para entrada inválida",
+    "Mensagem de erro é segura, sem stack trace ou segredo"
+  ],
+  "observacoes": "O expected deste fixture é um envelope de erro, não um JSON de triagem."
+}

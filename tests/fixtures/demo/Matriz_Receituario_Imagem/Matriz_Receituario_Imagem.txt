@@ -1,0 +1,31 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RECEITUÁRIO MÉDICO
+Prescrição em pronto-socorro — sinal de urgência
+
+Fixture: Matriz_Receituario_Imagem
+Paciente: João Batista Nogueira
+Idade: 67 anos
+Documento: DOC-REC-2026-0003
+Data: 14/10/2026
+Origem: Pronto-Socorro
+
+HIPÓTESE DIAGNÓSTICA
+Dor pós-operatória aguda intensa — CID-10 R52.1.
+
+PRESCRIÇÃO
+1. Morfina 10 mg/mL — 1 mL por via intravenosa, dose única, administrar agora.
+2. Dipirona 1 g por via intravenosa se dor persistente após 30 minutos.
+
+SINAL DE URGÊNCIA
+PACIENTE EM PÓS-OPERATÓRIO IMEDIATO. ADMINISTRAÇÃO COM URGÊNCIA NAS PRÓXIMAS 2 HORAS.
+
+------------------------------------------------------------------------------
+Dra. Camila Ferreira Lopes
+CRM 198765-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_Receituario_Imagem · dados sintéticos · página 1 de 1

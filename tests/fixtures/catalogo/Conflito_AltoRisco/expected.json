@@ -1,0 +1,84 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Conflito_AltoRisco",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Conflito_AltoRisco/Conflito_AltoRisco.txt",
+      "pdf": "catalogo/Conflito_AltoRisco/Conflito_AltoRisco.pdf",
+      "jpg": "catalogo/Conflito_AltoRisco/Conflito_AltoRisco.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-071326FD",
+    "classificacao": {
+      "tipo_documento": "RECEITUARIO_MEDICO",
+      "especialidade": [
+        "Cardiologia"
+      ],
+      "nivel_prioridade": "URGENTE",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Alzira Mendes Coelho",
+        "idade": 70
+      },
+      "medico": {
+        "nome": "Dra. Helena Prado",
+        "crm": {
+          "numero": "187432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Fibrilação atrial crônica",
+      "cid": "I48.9",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Varfarina sódica",
+          "dosagem": "10 mg",
+          "frequencia": null
+        }
+      ],
+      "urgencia": "SIM"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_URGENCIA_MEDICA",
+      "destinos": [
+        "FILA_URGENCIA_MEDICA"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Urgência clínica: FILA_URGENCIA_MEDICA com alerta registrado. Sem ambiguidade, segue sem revisão humana.",
+      "notificacao": {
+        "gerada": true,
+        "canal": "SIMULADO_SLACK_PLANTAO",
+        "status": "REGISTRADA",
+        "mensagem": "ALERTA URGENTE [DOC-071326FD]: Fibrilação atrial crônica"
+      }
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Medicamento de alto risco aciona a fila urgente (RN-03)",
+    "Sem texto de urgência: a regra vem do dicionário de alto risco",
+    "Alerta simulado registrado"
+  ],
+  "observacoes": "Depende da lista de medicamentos de alto risco aprovada pela equipe."
+}

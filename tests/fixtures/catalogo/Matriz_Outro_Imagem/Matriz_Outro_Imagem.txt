@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RELATÓRIO DE ENFERMAGEM
+Registro de sinais vitais — fora da taxonomia
+
+Fixture: Matriz_Outro_Imagem
+Paciente: —
+Idade: —
+Documento: DOC-OUT-2026-0024
+Data: 18/10/2026
+Origem: Enfermaria 3B
+
+REGISTRO
+Controle de sinais vitais de 4 horas: temperatura 36,7 °C; frequência cardíaca 78 bpm; pressão arterial 122/78 mmHg; saturação de O2 97% em ar ambiente.
+
+CUIDADOS
+Paciente orientado, deambulando, aceitando dieta. Punção venosa periférica em membro superior esquerdo sem sinais flogísticos.
+
+RESPONSÁVEL
+Equipe de Enfermagem — Enfermeira responsável pela unidade.
+
+------------------------------------------------------------------------------
+—
+—
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_Outro_Imagem · dados sintéticos · página 1 de 1

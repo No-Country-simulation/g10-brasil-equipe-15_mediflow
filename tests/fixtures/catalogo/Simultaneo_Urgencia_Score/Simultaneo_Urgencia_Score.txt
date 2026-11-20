@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+LAUDO DE EXAME DE IMAGEM
+Achado crítico com score abaixo do limiar
+
+Fixture: Simultaneo_Urgencia_Score
+Paciente: Wilson Aparecido Rangel
+Idade: 64 anos
+Documento: DOC-IMG-2026-0041
+Data: 18/10/2026
+Origem: Pronto-Socorro
+
+EXAME REALIZADO
+Tomografia computadorizada de crânio sem contraste.
+
+ACHADOS
+Hematoma subdural agudo em convexidade frontoparietal esquerda, com desvio da linha média de 6 mm.
+
+CONCLUSÃO
+Hematoma subdural agudo com efeito de massa. Avaliação neurocirúrgica imediata.
+
+------------------------------------------------------------------------------
+Dra. Renata Silveira
+CRM 145892-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Simultaneo_Urgencia_Score · dados sintéticos · página 1 de 1

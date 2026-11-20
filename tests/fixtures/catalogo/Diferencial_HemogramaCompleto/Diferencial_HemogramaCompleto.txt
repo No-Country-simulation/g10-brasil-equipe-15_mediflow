@@ -1,0 +1,50 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+LAUDO DE EXAME LABORATORIAL
+Tabela de hemograma com 20 analitos
+
+Fixture: Diferencial_HemogramaCompleto
+Paciente: Otávio Luiz Cardoso
+Idade: 39 anos
+Documento: DOC-D-2026-0058
+Data: 18/10/2026
+Origem: Laboratório Central
+
+HIPÓTESE DIAGNÓSTICA
+Investigação de anemia — CID-10 D64.9.
+
+RESULTADOS
+HEMOGRAMA COMPLETO                      RESULTADO    UNIDADE     REFERENCIA
+Hemacias ............................    4,62    milhoes/mm3   4,00 - 5,40
+Hemoglobina .........................    13,8    g/dL          12,0 - 16,0
+Hematocrito .........................    41,2    %             36,0 - 46,0
+VCM .................................    89,2    fL            80,0 - 100,0
+HCM .................................    29,9    pg            27,0 - 33,0
+CHCM ................................    33,5    g/dL          32,0 - 36,0
+RDW .................................    13,1    %             11,5 - 14,5
+Leucocitos ..........................    6.800   /mm3          4.000 - 11.000
+Neutrofilos .........................    58,0    %             40,0 - 70,0
+Linfocitos ..........................    30,0    %             20,0 - 45,0
+Monocitos ...........................    8,0     %             2,0 - 10,0
+Eosinofilos .........................    3,0     %             1,0 - 6,0
+Basofilos ...........................    1,0     %             0,0 - 2,0
+Plaquetas ...........................    268.000 /mm3          150.000 - 450.000
+VPM .................................    9,8     fL            7,5 - 11,0
+Ferritina ...........................    86      ng/mL         15 - 150
+Ferro serico ........................    92      mcg/dL        60 - 170
+Transferrina ........................    268     mg/dL         200 - 360
+Saturacao de transferrina ...........    28      %             20 - 50
+Vitamina B12 ........................    412     pg/mL         200 - 900
+
+CONCLUSÃO
+Hemograma dentro dos valores de referência. Sem evidência de anemia carencial.
+
+------------------------------------------------------------------------------
+Dra. Camila Ferreira Lopes
+CRM 198765-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Diferencial_HemogramaCompleto · dados sintéticos · página 1 de 1

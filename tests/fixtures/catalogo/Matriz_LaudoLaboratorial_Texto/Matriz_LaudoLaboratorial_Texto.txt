@@ -1,0 +1,31 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+LAUDO DE EXAME LABORATORIAL
+Glicemia e hemoglobina glicada — rotina, sem CID
+
+Fixture: Matriz_LaudoLaboratorial_Texto
+Paciente: Elias Moreira Pires
+Idade: 62 anos
+Documento: DOC-LAB-2026-0014
+Data: 16/10/2026
+Origem: Ambulatório de Endocrinologia
+
+MATERIAL
+Sangue venoso, coleta em 16/10/2026.
+
+RESULTADOS
+Glicemia de jejum: 132 mg/dL (referência 70–99)
+Hemoglobina glicada: 7,4% (referência < 5,7%)
+
+CONCLUSÃO
+Controle glicêmico inadequado. Ajustar terapia conforme avaliação clínica.
+
+------------------------------------------------------------------------------
+Dra. Helena Prado
+CRM 187432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_LaudoLaboratorial_Texto · dados sintéticos · página 1 de 1

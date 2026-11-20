@@ -1,0 +1,39 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+GUIA DE SOLICITAÇÃO DE PROCEDIMENTO
+Guia no padrão TISS com códigos de procedimento
+
+Fixture: Diferencial_GuiaTiss
+Paciente: Renata Aparecida Moura
+Idade: 38 anos
+Documento: DOC-D-2026-0059
+Data: 18/10/2026
+Origem: Ambulatório de Ginecologia
+
+OPERADORA / PLANO
+Operadora Fictícia Saúde — Plano Ambulatorial Plus — Registro ANS 000000.
+
+BENEFICIÁRIO
+Renata Aparecida Moura — carteirinha 0000 0000 0000 0000 — validade 12/2027.
+
+DIAGNÓSTICO / CID
+Mioma uterino — CID-10 D25.9.
+
+PROCEDIMENTO SOLICITADO
+Histeroscopia diagnóstica com polipectomia — código TUSS 31309136.
+
+JUSTIFICATIVA CLÍNICA
+Sangramento uterino anormal refratário ao tratamento clínico, com mioma submucoso à ultrassonografia.
+
+AUTORIZAÇÃO
+Solicitação eletiva. Número de guia 000000000000000 — senha 000000.
+
+------------------------------------------------------------------------------
+Dra. Helena Prado
+CRM 187432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Diferencial_GuiaTiss · dados sintéticos · página 1 de 1

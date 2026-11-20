@@ -1,0 +1,74 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Ausencia_SomenteExames",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Ausencia_SomenteExames/Ausencia_SomenteExames.txt",
+      "pdf": "catalogo/Ausencia_SomenteExames/Ausencia_SomenteExames.pdf",
+      "jpg": "catalogo/Ausencia_SomenteExames/Ausencia_SomenteExames.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-E0A4649D",
+    "classificacao": {
+      "tipo_documento": "ATESTADO_MEDICO",
+      "especialidade": [
+        "Clínica Médica",
+        "Dermatologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Igor Nascimento Prado",
+        "idade": 24
+      },
+      "medico": {
+        "nome": "Dr. Paulo Mendes Rocha",
+        "crm": {
+          "numero": "203114",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Dermatite de contato",
+      "cid": "L23.9",
+      "exames": [],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "PRONTUARIO_ELETRONICO",
+      "destinos": [
+        "PRONTUARIO_ELETRONICO"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: ATESTADO_MEDICO encaminhado para PRONTUARIO_ELETRONICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Ausência de exames não força revisão (RF-21)",
+    "Diagnóstico presente mantém o fluxo",
+    "Status PROCESSADO"
+  ],
+  "observacoes": ""
+}

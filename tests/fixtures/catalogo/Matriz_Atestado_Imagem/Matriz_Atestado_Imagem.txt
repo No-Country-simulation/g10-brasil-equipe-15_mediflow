@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+ATESTADO MÉDICO
+Atestado com carimbo e assinatura
+
+Fixture: Matriz_Atestado_Imagem
+Paciente: Larissa Fontes Amaral
+Idade: 31 anos
+Documento: DOC-ATE-2026-0022
+Data: 18/10/2026
+Origem: Ambulatório de Clínica Médica
+
+FINALIDADE
+Atestado de comparecimento e afastamento de 1 dia.
+
+TEXTO DO ATESTADO
+Atesto que a paciente compareceu a consulta médica nesta data e necessita de afastamento de 1 (um) dia de suas atividades habituais.
+
+DIAGNÓSTICO / CID
+Infecção viral de vias aéreas superiores — CID-10 J06.9.
+
+------------------------------------------------------------------------------
+Dra. Helena Prado
+CRM 187432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_Atestado_Imagem · dados sintéticos · página 1 de 1

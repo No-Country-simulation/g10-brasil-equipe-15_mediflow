@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+LAUDO DE EXAME DE IMAGEM
+Laudo fotografado com rotação de 90 graus
+
+Fixture: Qualidade_Foto_Rotacionada
+Paciente: Cláudio Roberto Farias
+Idade: 48 anos
+Documento: DOC-Q-2026-0043
+Data: 18/10/2026
+Origem: Foto enviada por celular
+
+EXAME REALIZADO
+Ultrassonografia de abdome total.
+
+ACHADOS
+Fígado de dimensões normais. Vesícula biliar com cálculo único de 8 mm, sem sinais de colecistite. Vias biliares não dilatadas.
+
+CONCLUSÃO
+Colelitíase sem sinais inflamatórios agudos.
+
+------------------------------------------------------------------------------
+Dr. Marcos Vinícius Tavares
+CRM 176543-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Qualidade_Foto_Rotacionada · dados sintéticos · página 1 de 1

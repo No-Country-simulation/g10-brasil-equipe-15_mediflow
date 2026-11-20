@@ -1,0 +1,33 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+GUIA DE SOLICITAÇÃO DE PROCEDIMENTO
+Guia eletiva cujo texto pede atendimento preferencial, sem sinal clínico de urgência
+
+Fixture: Conflito_Gravidade_Media
+Paciente: Otávio Lemos Prado
+Idade: 45 anos
+Documento: DOC-GUI-2026-0051
+Data: 18/10/2026
+Origem: Ambulatório de Ortopedia
+
+PRIORIDADE DECLARADA
+ROTINA — atendimento eletivo.
+
+DIAGNÓSTICO / CID
+Gonartrose unilateral de joelho direito — CID-10 M17.1.
+
+PROCEDIMENTO SOLICITADO
+Ressonância magnética de joelho direito.
+
+JUSTIFICATIVA CLÍNICA
+Dor mecânica em joelho direito há 8 meses, sem sinais flogísticos, sem derrame articular e sem limitação funcional aguda. Exame solicitado para programação de conduta eletiva. O texto pede atendimento preferencial, mas não descreve nenhum sinal clínico de urgência.
+
+------------------------------------------------------------------------------
+Dr. André Luiz Barbosa
+CRM 165432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Conflito_Gravidade_Media · dados sintéticos · página 1 de 1

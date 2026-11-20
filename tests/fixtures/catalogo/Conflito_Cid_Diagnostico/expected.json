@@ -1,0 +1,86 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Conflito_Cid_Diagnostico",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Conflito_Cid_Diagnostico/Conflito_Cid_Diagnostico.txt",
+      "pdf": "catalogo/Conflito_Cid_Diagnostico/Conflito_Cid_Diagnostico.pdf",
+      "jpg": "catalogo/Conflito_Cid_Diagnostico/Conflito_Cid_Diagnostico.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-1C081A3E",
+    "classificacao": {
+      "tipo_documento": "LAUDO_EXAME_IMAGEM",
+      "especialidade": [
+        "Ortopedia",
+        "Radiologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Marcelo Tavares Lins",
+        "idade": 59
+      },
+      "medico": {
+        "nome": "Dr. André Luiz Barbosa",
+        "crm": {
+          "numero": "165432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Lombalgia mecânica crônica",
+      "cid": "I21.9",
+      "exames": [
+        "Radiografia de tórax"
+      ],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": [
+        {
+          "tipo": "CID_DIAGNOSTICO",
+          "campos": [
+            "cid",
+            "diagnostico"
+          ],
+          "gravidade": "ALTA",
+          "descricao": "CID de infarto agudo incompatível com lombalgia"
+        }
+      ]
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: conflitos impeditivos: CID_DIAGNOSTICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Conflito explícito entre CID e diagnóstico",
+    "Valores originais preservados (RF-16)",
+    "Revisão humana obrigatória por conflito impeditivo"
+  ],
+  "observacoes": "Exige o dicionário de CID-10 aprovado pela equipe para a regra de compatibilidade."
+}

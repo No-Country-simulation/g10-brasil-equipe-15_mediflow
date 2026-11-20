@@ -1,0 +1,12 @@
+{
+  "documento_id": "DOC-CLIN-2026-1011",
+  "canal_origem": "Ambulatorio_Geral",
+  "conteudo_texto": "LABORATÓRIO SÃO MARCOS - HEMOGRAMA COMPLETO. Paciente: Maria Fernanda Lima, 34 anos. Solicitante: Dr. Roberto Alencar CRM-SP 98214. Exame: Hemograma de rotina preventiva. Hemácias: 4.5 milhões/mm3 (Normal). Hemoglobina: 13.5 g/dL (Normal). Leucócitos: 6.200/mm3 (Normal). Plaquetas: 240.000/mm3 (Normal). CONCLUSÃO: Hemograma sem alterações significativas. Paciente assintomática.",
+  "resultado_esperado": {
+    "tipo_documento": "Laudo de Exame Laboratorial",
+    "especialidade": "Hematologia / Clínica Geral",
+    "nivel_prioridade": "Rotina",
+    "destino_principal": "Prontuario_Eletronico",
+    "requer_auditoria_humana": false
+  }
+}

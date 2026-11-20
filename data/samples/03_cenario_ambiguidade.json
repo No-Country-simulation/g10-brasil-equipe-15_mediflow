@@ -1,0 +1,13 @@
+{
+  "documento_id": "DOC-CLIN-2026-3391",
+  "canal_origem": "Recepcao_Hospitalar",
+  "conteudo_texto": "RECEITUÁRIO MÉDICO ILEGÍVEL / AMBÍGUO. Paciente: João da Silva [Idade borrada/ilegível]. Solicitante: Dr. Desconhecido [Carimbo borrado, CRM não identificado]. Prescrição: Morfina [Dosagem borrada: 10mg ou 100mg??] via intravenosa a cada 4 horas. Alergias: Penicilina relatada verbalmente. Alerta: Prescrição de opioide forte com dosagem indeterminada e identificação profissional incompleta.",
+  "resultado_esperado": {
+    "tipo_documento": "Receituário Médico",
+    "especialidade": "Clínica Médica / Farmácia",
+    "nivel_prioridade": "Ambiguidade/Revisão Humana",
+    "destino_principal": "Fila_Revisao_Humana",
+    "requer_auditoria_humana": true,
+    "justificativa_roteamento": "Dosagem ilegível de medicamento de alta vigilância (Morfina) e ausência de identificação válida do CRM do prescritor."
+  }
+}

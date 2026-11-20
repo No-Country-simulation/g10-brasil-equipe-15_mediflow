@@ -1,0 +1,215 @@
+# 🤝 Guia de Colaboração e Engenharia de Software — Equipe 15 MediFlow
+
+> **Hackathon ONE G10 — Oracle Next Education & Alura**  
+> **Projeto 2:** Agente Autônomo para Triagem, Extração e Roteamento de Documentos Clínicos  
+> **Manual de Referência:** `34aa946f-2883-4917-aec1-aae0df0f43d1.pdf`  
+> **Status da Aplicação:** 462 testes Pytest aprovados (1 pulado) em 21 arquivos + 306 testes Vitest aprovados em 27 arquivos  
+
+Bem-vindo ao guia oficial de contribuição do **MediFlow**! Este documento foi desenhado para orientar os 5 integrantes da equipe no fluxo de trabalho diário com GitFlow, organização de pastas, responsabilidades por módulo e padrões de qualidade inegociáveis.
+
+---
+
+## 🌳 1. Arquitetura de Branches (GitFlow Simplificado)
+
+Para evitar conflitos de código e garantir estabilidade, utilizamos o **Feature Branch Workflow**:
+
+```mermaid
+gitGraph
+    commit id: "v1.0-release"
+    branch develop
+    checkout develop
+    commit id: "init-develop"
+    branch feature/sua-frente
+    checkout feature/sua-frente
+    commit id: "feat: seu trabalho"
+    commit id: "test: testes passando"
+    checkout develop
+    merge feature/sua-frente id: "PR aprovado"
+    checkout main
+    merge develop id: "Entrega Final Hackathon"
+```
+
+| Branch | Papel no Projeto | Regra de Proteção & Acesso |
+| :--- | :--- | :--- |
+| **`main`** | Código de produção, congelado para avaliação da banca da Oracle. | **Totalmente Protegida**. Pushes diretos bloqueados. Merge somente via PR vindo de `develop`. |
+| **`develop`** | Branch padrão (*default*). Onde todas as frentes integradas convivem. | **Protegida**. Pushes diretos bloqueados. Merge somente via Pull Request aprovado por pelo menos 1 colega. |
+| **`feature/*`** | Desenvolvimento de novas funcionalidades ou módulos. | Criada a partir de `develop` e mesclada de volta via Pull Request. |
+| **`fix/*`** | Correção de bugs pontuais identificados na `develop`. | Criada a partir de `develop` e mesclada de volta via Pull Request. |
+| **`docs/*`** | Atualizações exclusivas de documentação, guias e diagramas. | Criada a partir de `develop` e mesclada de volta via Pull Request. |
+
+---
+
+## 📁 2. Mapa do Repositório: Onde Implementar Cada Coisa
+
+Antes de criar qualquer arquivo novo, consulte a árvore oficial para colocar seu código no lugar correto:
+
+```text
+g10-brasil-equipe-15_mediflow/
+├── data/
+│   └── samples/                                <- Amostras clínicas dos 3 cenários do edital (PDF/JSON)
+├── deploy/                                     <- Empacotamento Docker e deploy OCI Always Free
+│   ├── Dockerfile                              <- Imagem backend Python (FastAPI + Streamlit)
+│   ├── Dockerfile.nginx                        <- Proxy reverso Nginx para stack completa
+│   ├── docker-compose.yml                      <- Stack completa (API + Streamlit + Nginx)
+│   ├── docker-compose.api-https.yml            <- Stack leve (API FastAPI + Caddy HTTPS para 1 GB RAM + Vercel)
+│   ├── deploy_oci.sh                           <- Automação de deploy da stack completa
+│   ├── deploy_oci_api_https.sh                 <- Automação de deploy da stack leve API + HTTPS
+│   ├── caddy/Caddyfile                         <- Proxy reverso com TLS automático via Let's Encrypt
+│   └── nginx/nginx.conf                        <- Configuração Nginx da stack completa
+├── docs/                                       <- Documentação técnica e governança de QA
+│   ├── testes/                                 <- Contrato Canônico, Catálogo dos 79 Fixtures, Visual Schemas e Revisões
+│   ├── GUIA_DEPLOY_OCI.md                      <- Guia passo a passo de deploy na OCI Always Free
+│   ├── GUIA_INTEGRACAO_API.md                  <- Contrato REST e integração do Frontend React / Streamlit
+│   └── GUIA_INTEGRACAO_LLM.md                  <- Guia de consumo do Ingestion Loader para IA
+│
+├── src/                                        <- Código-fonte principal da aplicação Python
+│   ├── agents/                                 <- Agentes e Prompts de Inteligência Multimodal
+│   ├── api/                                    <- API REST FastAPI assíncrona (rotas, schemas, service, CORS)
+│   ├── app/                                    <- Bancada Streamlit de testes rápidos e auditoria médica (HiTL)
+│   │   ├── streamlit_app.py                    <- Painel web visual interativo
+│   │   ├── triage_pipeline.py                  <- Pipeline de integração Streamlit -> Gemini -> LangGraph
+│   │   ├── gemini_key.py                       <- Proteção de chave de API na interface
+│   │   ├── oci_persistence.py                  <- Persistência e mensagens públicas seguras no Streamlit
+│   │   └── quality_indicator.py                <- Indicadores visuais de qualidade e confiança
+│   ├── ingestion/                              <- Camada de Ingestão e Gateway de Segurança
+│   │   └── loader.py                           <- Carregador blindado (10MB, 20 págs, sanitização, magic bytes)
+│   ├── schemas/                                <- Modelos Canônicos Pydantic v2
+│   │   └── clinical.py                         <- Contrato oficial (TriagemMediFlow, ErroResposta, etc.)
+│   ├── services/                               <- Serviços de Integração Multimodal
+│   │   └── gemini_service.py                   <- GeminiService (REST, timeout 30s, Pydantic v2, duplo fallback)
+│   ├── storage/                                <- Conector OCI Object Storage Always Free (oci_storage.py)
+│   ├── workflow/                               <- Motor de Orquestração Determinística (LangGraph)
+│   │   ├── extraction_adapter.py               <- Adaptador de envelopes clínicos para o grafo
+│   │   ├── graph.py                            <- Grafo de estados, nós e cálculo de regras R1 a R8
+│   │   └── state.py                            <- Estrutura do GraphState compartilhado
+│   └── config.py                               <- Configurações globais e leitura do .env
+│
+├── scripts/                                    <- Utilitários de homologação e scripts de diagnóstico
+│   ├── testar_oci.py                           <- Validação real ponta a ponta no bucket OCI Always Free
+│   ├── testar_historico_oci.py                 <- Validação real de persistência e histórico no OCI
+│   └── testar_simulacao_oci.py                 <- Validação da simulação de falhas OCI (EPT §12)
+│
+├── tests/                                      <- Suíte Oficial Pytest (21 arquivos — 462 passed, 1 skipped)
+│   ├── fixtures/                               <- Base de 79 fixtures canônicos (demo, catalogo, manifest.csv)
+│   ├── test_contrato_fixtures.py               <- Ponto fixo dos 79 fixtures e regras R1 a R8
+│   ├── test_workflow.py                        <- Transições e arestas do LangGraph
+│   ├── test_ingestion.py                       <- Arquivos físicos reais, MIME e limites A6
+│   ├── test_api.py                             <- Endpoints assíncronos, status, histórico e EPT
+│   ├── test_cors.py                            <- Validação de CORS_ORIGINS
+│   ├── test_gemini_service.py                  <- GeminiService (REST, timeout 30s e fallback)
+│   ├── test_gemini_diagnostico_estruturado.py  <- Normalização de diagnóstico, CID e idade compacta
+│   ├── test_gemini_prioridades_dosagem.py      <- Prioridades, negação clínica e dosagens
+│   ├── test_gemini_workflow_adapter.py         <- Integração GeminiService -> LangGraph
+│   ├── test_demo_incertezas.py                 <- Cenários de demonstração e incertezas clínicas
+│   ├── test_oci_storage.py                     <- Persistência OCI com SDK simulado
+│   ├── test_historico_oci.py                   <- Recuperação e integridade de histórico OCI
+│   ├── test_pr13_persistencia_pendente.py      <- Reprocessamento e retentativa de persistência
+│   ├── test_streamlit_*.py                     <- Pipeline, persistência OCI e segurança de chave no Streamlit
+│   ├── test_quality_indicator.py               <- Indicadores de qualidade na interface
+│   ├── test_extraction_adapter.py              <- Adaptador de envelopes para o workflow
+│   ├── test_exemplos_extracao_workflow.py      <- Exemplos clínicos ponta a ponta no workflow
+│   ├── test_audit_items.py                     <- Auditoria técnica e sanidade
+│   └── test_schemas.py                         <- Pydantic v2 e envelopes de erro
+│
+├── frontend/                                   <- Portal Web Corporativo em React SPA (Vite + TypeScript + 306 testes Vitest)
+├── testar_gemini.py                            <- Script de validação manual da IA com Google Gemini
+├── .dockerignore                               <- Exclusões de build Docker (protege .env, .pem, .venv)
+├── ARQUITETURA.md                              <- Especificação Técnica Oficial da Arquitetura
+├── CONTRIBUTING.md                             <- Este Guia de Colaboração e GitFlow
+├── README.md                                   <- Documentação Principal da Aplicação
+├── pytest.ini                                  <- Configuração corporativa do Pytest
+└── requirements.txt                            <- Dependências oficiais do ecossistema Python
+```
+
+---
+
+## 📊 3. Matriz de Funcionalidades: Status do Projeto & Responsáveis
+
+Esta tabela mapeia o que já está homologado no projeto e o que ainda precisa ser entregue para o hackathon:
+
+| Funcionalidade Requisitada (Edital Oracle) | Diretório Responsável | Responsável na Equipe | Status Atual | Detalhes da Entrega / Próximos Passos |
+| :--- | :--- | :--- | :---: | :--- |
+| **Ingestão & Sanitização de Arquivos** | [`src/ingestion/loader.py`](src/ingestion/loader.py) | **Cristiano Oliveira** | <mark>🟢 CONCLUÍDO</mark> | 100% blindado (10MB, 20 págs, PDF, TXT, JPG, PNG, WEBP e bloqueio de DOCX com 415). 18 testes unitários. |
+| **Contrato Canônico Pydantic v2 & Fixtures** | [`src/schemas/clinical.py`](src/schemas/clinical.py) & `docs/testes/` | **William e Luciana** | <mark>🟢 CONCLUÍDO</mark> | Schemas unificados (`TriagemMediFlow`, RF-12, enums resilientes `_missing_`), 79 fixtures canônicos validados e ponto fixo. |
+| **Motor de Decisão Clínica LangGraph** | [`src/workflow/`](src/workflow/) | **Iza Paloma M. Coelho** | <mark>🟢 CONCLUÍDO</mark> | Grafo de estados, nós de processamento, regras R1 a R8 e arestas para 5 destinos e casos mistos. 73 testes. |
+| **Bancada de Auditoria Médica Streamlit** | [`src/app/streamlit_app.py`](src/app/streamlit_app.py) | **Cristiano Oliveira e Time** | <mark>🟢 CONCLUÍDO</mark> | Painel funcional em Python para testes rápidos de laboratório e auditoria HiTL (atende ao diferencial do edital). |
+| **Persistência OCI Object Storage Always Free** | [`src/storage/`](src/storage/) & [`scripts/`](scripts/) | **Iza Paloma M. Coelho** | <mark>🟢 CONCLUÍDO</mark> | Conector OCI em Python implementado (`oci_storage.py`), com teste real (`scripts/testar_oci.py`) e 8 testes com mock. |
+| **API REST FastAPI Assíncrona** | [`src/api/`](src/api/) | **Cristiano Oliveira** | <mark>🟢 CONCLUÍDO</mark> | Endpoints assíncronos `/api/v1/triagens` (HTTP 202), status, histórico e health integrados com LangGraph e OCI. 16 testes unitários e de integração. |
+| **Agente Gemini Multimodal (Extração IA)** | [`src/services/gemini_service.py`](src/services/gemini_service.py) | **Luciana Freitag** | <mark>🟢 CONCLUÍDO</mark> | Implementado com Saídas Estruturadas Pydantic v2, transporte REST, timeout de 30s, modelos `gemini-3.5-flash-lite` (padrão) e `gemini-3.8-flash` (fallback), prompts v1.1.0 e duplo fallback seguro. |
+| **Portal Web Corporativo em React SPA** | [`frontend/`](frontend/) | **Giovane Brandino** | <mark>🟢 CONCLUÍDO</mark> | Implementado em React + TypeScript + Vite + Tailwind CSS integrado à API FastAPI, com identidade visual oficial, modo demo, 306 testes Vitest e `oxlint` sem erros. |
+| **Gravação do Pitch e Demonstração Final** | Raiz / Docs | **Toda a Equipe** | <mark>⚪ PENDENTE</mark> | **A fazer:** Gravar vídeo de até 5 min demonstrando os 3 cenários clínicos do edital e gerar links de entrega. |
+
+---
+
+## 🚀 4. Ciclo de Trabalho Diário (Passo a Passo)
+
+Sempre que você for trabalhar em uma tarefa, siga religiosamente estes passos:
+
+### Passo 1: Atualizar sua branch `develop` local
+Nunca comece a codificar em uma base desatualizada:
+```bash
+git checkout develop
+git pull origin develop
+```
+
+### Passo 2: Criar uma branch de trabalho
+Crie uma branch com nome semântico indicando o que você fará:
+```bash
+# Para novas funcionalidades:
+git checkout -b feature/nome-da-sua-tarefa
+
+# Para correções de bugs:
+git checkout -b fix/descricao-do-bug
+
+# Para documentação:
+git checkout -b docs/atualizacao-especifica
+```
+
+### Passo 3: Codificar e Commitar (Conventional Commits)
+Faça alterações atômicas e utilize mensagens descritivas:
+```bash
+git add -A
+git commit -m "tipo(escopo): descrição da alteração no imperativo"
+```
+**Prefixos obrigatórios:**
+- `feat:` Nova funcionalidade (ex: `feat(agents): adiciona extracao gemini multimodal`)
+- `fix:` Correção de bug (ex: `fix(schemas): ajusta validacao de crm`)
+- `docs:` Alteração em documentações (ex: `docs(arquitetura): atualiza matriz de tarefas`)
+- `test:` Adição ou modificação de testes (ex: `test(ingestion): adiciona teste para webp`)
+- `refactor:` Refatoração interna de código sem alteração funcional
+
+### Passo 4: Executar o Quality Gate Obrigatório (Testes)
+**Regra Inegociável:** Antes de enviar seu código para o GitHub, rode a suíte completa de testes:
+```bash
+python -m pytest
+npm --prefix frontend test
+```
+> ⚠️ **Nenhum Pull Request será aceito se algum teste da suíte Pytest (462 testes) ou Vitest (306 testes) estiver falhando.**
+
+### Passo 5: Enviar as alterações para o GitHub
+```bash
+git push origin feature/nome-da-sua-tarefa
+```
+
+### Passo 6: Abrir e Revisar o Pull Request (PR)
+1. Acesse o GitHub e abra um Pull Request com destino (**base**) para a branch **`develop`** (nunca para a `main`).
+2. Descreva o que foi feito e marque os colegas responsáveis para revisão.
+3. **Pelo menos 1 integrante da equipe deve revisar e dar "Approve"** para que o merge seja autorizado.
+4. Após o merge, exclua a branch remota no botão do GitHub para manter o repositório limpo.
+
+---
+
+## 🛡️ 5. Governança do Contrato de Dados (`src/schemas/clinical.py`)
+
+O arquivo [`src/schemas/clinical.py`](src/schemas/clinical.py) é a **fonte única da verdade** do MediFlow. Ele é compartilhado entre a Ingestão, o Agente Gemini, o LangGraph, a OCI, a API FastAPI e as interfaces (Streamlit e React).
+
+- **Proibido alterar campos ou tipos unilateralmente:** Qualquer alteração no schema ou nos enums deve ser discutida previamente com a equipe e refletida em [`docs/testes/CONTRATO_DE_DADOS.md`](docs/testes/CONTRATO_DE_DADOS.md).
+- **Resiliência via `_missing_`:** Se precisar aceitar novos formatos de texto vindos de fora, utilize a normalização resiliente já implementada nos Enums, sem alterar os tokens oficiais em caixa alta.
+
+---
+
+## 🔒 6. Regras de Segurança e Boas Práticas
+
+1. **Nunca suba chaves de API ou credenciais:** Chaves como `GEMINI_API_KEY`, chaves privadas OCI (`*.pem`) ou senhas devem residir exclusivamente no seu arquivo local `.env` (que já está blindado no `.gitignore`).
+2. **Nunca use `git push --force`** nas branches compartilhadas (`develop` ou `main`).
+3. **Mantenha os PRs enxutos:** Pull Requests focados em uma única responsabilidade são aprovados e integrados com muito mais rapidez e segurança.

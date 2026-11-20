@@ -1,0 +1,87 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Limite_Formato_Png",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG",
+      "PNG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Limite_Formato_Png/Limite_Formato_Png.txt",
+      "pdf": "catalogo/Limite_Formato_Png/Limite_Formato_Png.pdf",
+      "jpg": "catalogo/Limite_Formato_Png/Limite_Formato_Png.jpg",
+      "png": "catalogo/Limite_Formato_Png/Limite_Formato_Png.png"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-765690EF",
+    "classificacao": {
+      "tipo_documento": "RECEITUARIO_MEDICO",
+      "especialidade": [
+        "Gastroenterologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Sueli Marcondes Reis",
+        "idade": 54
+      },
+      "medico": {
+        "nome": "Dra. Helena Prado",
+        "crm": {
+          "numero": "187432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Gastrite crônica",
+      "cid": "K29.5",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Omeprazol",
+          "dosagem": "20 mg",
+          "frequencia": null
+        }
+      ],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FARMACIA_HOSPITALAR",
+      "destinos": [
+        "FARMACIA_HOSPITALAR"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: RECEITUARIO_MEDICO encaminhado para FARMACIA_HOSPITALAR.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "modo_fixture": {
+    "score_forcado": {
+      "score_classificacao": 0.93,
+      "score_extracao": 0.91
+    }
+  },
+  "assercoes": [
+    "PNG está na lista de formatos aceitos (A6: PDF, JPG, PNG, WEBP, TXT)",
+    "Imagem é lida pelo caminho multimodal",
+    "Destino FARMACIA_HOSPITALAR"
+  ],
+  "observacoes": "Caso criado em 21/10/2026. A pasta tem os três arquivos padrão mais o PNG sob teste, declarado em entrada.renditions."
+}

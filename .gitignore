@@ -1,0 +1,54 @@
+# Ambientes Virtuais Python
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Caches e Compilações Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Variáveis de Ambiente e Credenciais Sensíveis (NUNCA SUBIR)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+credentials.json
+oci_api_key.pem
+config
+
+# Arquivos de IDEs e Editores
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+
+# Dados temporários de documentos clínicos e uploads
+uploads/
+temp/
+tmp/
+*.log
+
+# Fixtures pesadas (> 10MB para testes de limite de tamanho)
+tests/fixtures/catalogo/Validacao_ArquivoGrande/Validacao_ArquivoGrande.pdf
+tests/fixtures/catalogo/Limite_Tamanho_10MB/Limite_Tamanho_10MB.pdf
+tests/fixtures/catalogo/Limite_Tamanho_Acima10MB/Limite_Tamanho_Acima10MB.pdf
+tests/fixtures/catalogo/Limite_Texto_Acima10MB/Limite_Texto_Acima10MB.txt
+
+
+# Planejamento local do frontend
+plano.md

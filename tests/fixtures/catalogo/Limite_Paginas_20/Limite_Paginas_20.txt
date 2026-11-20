@@ -1,0 +1,81 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RELATÓRIO DE ALTA HOSPITALAR
+Relatório de internação com exatamente 20 páginas — no limite
+
+Fixture: Limite_Paginas_20
+Paciente: Ademir Vilanova Prado
+Idade: 68 anos
+Documento: DOC-ALT-2026-0056
+Data: 18/10/2026
+Origem: Enfermaria 4C
+
+PERÍODO DE INTERNAÇÃO
+Admissão em 02/10/2026, alta em 18/10/2026 (16 dias).
+
+DIAGNÓSTICO PRINCIPAL
+Doença pulmonar obstrutiva crônica exacerbada — CID-10 J44.1.
+
+EVOLUÇÃO — DIA 1
+Dia 1: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+EVOLUÇÃO — DIA 2
+Dia 2: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+EVOLUÇÃO — DIA 3
+Dia 3: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+EVOLUÇÃO — DIA 4
+Dia 4: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+EVOLUÇÃO — DIA 5
+Dia 5: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+EVOLUÇÃO — DIA 6
+Dia 6: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+EVOLUÇÃO — DIA 7
+Dia 7: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+EVOLUÇÃO — DIA 8
+Dia 8: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+EVOLUÇÃO — DIA 9
+Dia 9: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+EVOLUÇÃO — DIA 10
+Dia 10: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+EVOLUÇÃO — DIA 11
+Dia 11: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+EVOLUÇÃO — DIA 12
+Dia 12: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+EVOLUÇÃO — DIA 13
+Dia 13: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+EVOLUÇÃO — DIA 14
+Dia 14: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+EVOLUÇÃO — DIA 15
+Dia 15: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+EVOLUÇÃO — DIA 16
+Dia 16: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+EVOLUÇÃO — DIA 17
+Dia 17: paciente em uso de broncodilatador e corticoide, mantendo saturação acima de 92% em ar ambiente. Ausculta com sibilos esparsos. Fisioterapia respiratória realizada.
+
+MEDICAÇÕES DE ALTA
+Budesonida 200 mcg — 2 inalações por via oral a cada 12 horas, uso contínuo.
+
+------------------------------------------------------------------------------
+Dr. Paulo Mendes Rocha
+CRM 203114-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Limite_Paginas_20 · dados sintéticos · página 1 de 20

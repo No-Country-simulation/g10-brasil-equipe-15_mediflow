@@ -1,0 +1,78 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Ausencia_SomenteCid",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Ausencia_SomenteCid/Ausencia_SomenteCid.txt",
+      "pdf": "catalogo/Ausencia_SomenteCid/Ausencia_SomenteCid.pdf",
+      "jpg": "catalogo/Ausencia_SomenteCid/Ausencia_SomenteCid.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-1DF9F77C",
+    "classificacao": {
+      "tipo_documento": "LAUDO_EXAME_IMAGEM",
+      "especialidade": [
+        "Ortopedia",
+        "Radiologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Celso Ribeiro Nunes",
+        "idade": 57
+      },
+      "medico": {
+        "nome": "Dr. André Luiz Barbosa",
+        "crm": {
+          "numero": "165432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Gonartrose à direita",
+      "cid": null,
+      "exames": [
+        "Radiografia de joelho direito"
+      ],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [
+        "cid"
+      ],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "PRONTUARIO_ELETRONICO",
+      "destinos": [
+        "PRONTUARIO_ELETRONICO"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: LAUDO_EXAME_IMAGEM encaminhado para PRONTUARIO_ELETRONICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Diagnóstico presente mantém o fluxo automático",
+    "CID ausente fica null e NÃO força revisão (RF-21)",
+    "Status PROCESSADO"
+  ],
+  "observacoes": ""
+}

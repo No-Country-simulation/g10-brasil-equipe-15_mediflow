@@ -1,0 +1,33 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+GUIA DE SOLICITAÇÃO DE PROCEDIMENTO
+Guia marcada como rotina, com texto de urgência
+
+Fixture: Conflito_Prioridade
+Paciente: Rogério Pinto Machado
+Idade: 61 anos
+Documento: DOC-GUI-2026-0037
+Data: 18/10/2026
+Origem: Ambulatório de Cirurgia Vascular
+
+PRIORIDADE DECLARADA
+ROTINA — atendimento eletivo.
+
+DIAGNÓSTICO / CID
+Trombose venosa profunda de membro inferior — CID-10 I80.2.
+
+PROCEDIMENTO SOLICITADO
+Ultrassonografia Doppler venoso de membros inferiores.
+
+JUSTIFICATIVA CLÍNICA
+Paciente com edema súbito e dor em panturrilha direita. Há risco de embolia pulmonar; avaliação necessária com urgência.
+
+------------------------------------------------------------------------------
+Dra. Camila Ferreira Lopes
+CRM 198765-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Conflito_Prioridade · dados sintéticos · página 1 de 1

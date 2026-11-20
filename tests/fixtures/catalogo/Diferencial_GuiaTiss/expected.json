@@ -1,0 +1,75 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Diferencial_GuiaTiss",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Diferencial_GuiaTiss/Diferencial_GuiaTiss.txt",
+      "pdf": "catalogo/Diferencial_GuiaTiss/Diferencial_GuiaTiss.pdf",
+      "jpg": "catalogo/Diferencial_GuiaTiss/Diferencial_GuiaTiss.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-D2728483",
+    "classificacao": {
+      "tipo_documento": "GUIA_PROCEDIMENTO",
+      "especialidade": [
+        "Ginecologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Renata Aparecida Moura",
+        "idade": 38
+      },
+      "medico": {
+        "nome": "Dra. Helena Prado",
+        "crm": {
+          "numero": "187432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Mioma uterino",
+      "cid": "D25.9",
+      "exames": [
+        "Histeroscopia diagnóstica com polipectomia"
+      ],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "AUDITORIA_AUTORIZACOES",
+      "destinos": [
+        "AUDITORIA_AUTORIZACOES"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: GUIA_PROCEDIMENTO encaminhado para AUDITORIA_AUTORIZACOES.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Guia TISS é classificada como GUIA_PROCEDIMENTO",
+    "Código TUSS e número de guia preservados",
+    "Destino AUDITORIA_AUTORIZACOES"
+  ],
+  "observacoes": "Diferencial opcional. Códigos TUSS fictícios, apenas para teste de extração."
+}

@@ -1,0 +1,84 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Ausencia_Paciente_Idade",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Ausencia_Paciente_Idade/Ausencia_Paciente_Idade.txt",
+      "pdf": "catalogo/Ausencia_Paciente_Idade/Ausencia_Paciente_Idade.pdf",
+      "jpg": "catalogo/Ausencia_Paciente_Idade/Ausencia_Paciente_Idade.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-CLIN-2026-DEMO0003",
+    "classificacao": {
+      "tipo_documento": "RECEITUARIO_MEDICO",
+      "especialidade": [
+        "Clínica Médica"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 1.0
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Otávio Sampaio Reis",
+        "idade": null
+      },
+      "medico": {
+        "nome": "Dra. Camila Ferreira Lopes",
+        "crm": {
+          "numero": "198765",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Cistite aguda não complicada",
+      "cid": "N30.0",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Nitrofurantoína",
+          "dosagem": "100 mg",
+          "frequencia": "a cada 6 horas"
+        }
+      ],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.7,
+      "score_combinado": 0.7,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [
+        "exames",
+        "paciente.idade"
+      ],
+      "campos_incertos": [
+        "paciente.idade"
+      ],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: campos obrigatórios ausentes: paciente.idade.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Idade ausente força revisão (RF-21)",
+    "Nome do paciente preservado",
+    "Idade não é inferida"
+  ],
+  "observacoes": "Referência do simulador: ausência real de paciente.idade. Scores são ilustrativos; a API real calcula qualidade sem forçar score."
+}

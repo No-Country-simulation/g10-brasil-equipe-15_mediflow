@@ -1,0 +1,80 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Diferencial_HemogramaCompleto",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Diferencial_HemogramaCompleto/Diferencial_HemogramaCompleto.txt",
+      "pdf": "catalogo/Diferencial_HemogramaCompleto/Diferencial_HemogramaCompleto.pdf",
+      "jpg": "catalogo/Diferencial_HemogramaCompleto/Diferencial_HemogramaCompleto.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-72CAD1EA",
+    "classificacao": {
+      "tipo_documento": "LAUDO_EXAME_LABORATORIAL",
+      "especialidade": [
+        "Hematologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Otávio Luiz Cardoso",
+        "idade": 39
+      },
+      "medico": {
+        "nome": "Dra. Camila Ferreira Lopes",
+        "crm": {
+          "numero": "198765",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Investigação de anemia",
+      "cid": "D64.9",
+      "exames": [
+        "Hemograma completo",
+        "Ferritina",
+        "Ferro sérico",
+        "Transferrina",
+        "Saturação de transferrina",
+        "Vitamina B12"
+      ],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "PRONTUARIO_ELETRONICO",
+      "destinos": [
+        "PRONTUARIO_ELETRONICO"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: LAUDO_EXAME_LABORATORIAL encaminhado para PRONTUARIO_ELETRONICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Tabela com 20 analitos é interpretada",
+    "Valores e unidades preservados",
+    "Destino PRONTUARIO_ELETRONICO"
+  ],
+  "observacoes": "Diferencial opcional. Tabela em fonte monoespaçada para testar leitura estruturada."
+}

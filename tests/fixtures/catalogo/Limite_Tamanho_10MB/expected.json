@@ -1,0 +1,79 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Limite_Tamanho_10MB",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Limite_Tamanho_10MB/Limite_Tamanho_10MB.txt",
+      "pdf": "catalogo/Limite_Tamanho_10MB/Limite_Tamanho_10MB.pdf",
+      "jpg": "catalogo/Limite_Tamanho_10MB/Limite_Tamanho_10MB.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-0EFF6330",
+    "classificacao": {
+      "tipo_documento": "ATESTADO_MEDICO",
+      "especialidade": [
+        "Clínica Médica"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Cecília Andrade Vilela",
+        "idade": 29
+      },
+      "medico": {
+        "nome": "Dr. Marcos Vinícius Tavares",
+        "crm": {
+          "numero": "176543",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Cefaleia",
+      "cid": "R51",
+      "exames": [],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "PRONTUARIO_ELETRONICO",
+      "destinos": [
+        "PRONTUARIO_ELETRONICO"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: ATESTADO_MEDICO encaminhado para PRONTUARIO_ELETRONICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "modo_fixture": {
+    "score_forcado": {
+      "score_classificacao": 0.93,
+      "score_extracao": 0.91
+    }
+  },
+  "assercoes": [
+    "Arquivo de exatamente 10 MB é aceito: o limite é inclusivo (A6)",
+    "O tamanho não interfere na classificação nem na extração",
+    "Destino PRONTUARIO_ELETRONICO, sem revisão"
+  ],
+  "observacoes": "Caso criado em 21/10/2026. O PDF é preenchido até 10.485.760 bytes pelo gerador; por isso fica fora do git (.gitignore) e é recriado por tools/gerar_fixtures_catalogo.py."
+}

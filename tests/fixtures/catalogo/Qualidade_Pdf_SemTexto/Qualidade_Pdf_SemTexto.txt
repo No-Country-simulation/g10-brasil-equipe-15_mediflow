@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+LAUDO DE EXAME DE IMAGEM
+PDF escaneado sem camada de texto
+
+Fixture: Qualidade_Pdf_SemTexto
+Paciente: Sérgio Luiz Monteiro
+Idade: 54 anos
+Documento: DOC-Q-2026-0046
+Data: 18/10/2026
+Origem: Digitalização externa
+
+EXAME REALIZADO
+Tomografia computadorizada de tórax de baixa dose.
+
+ACHADOS
+Nódulo pulmonar sólido de 6 mm em lobo superior direito. Sem linfonodomegalias mediastinais. Ausência de derrame pleural.
+
+CONCLUSÃO
+Nódulo pulmonar de 6 mm, categoria Lung-RADS 3. Sugere-se seguimento em 6 meses.
+
+------------------------------------------------------------------------------
+Dra. Renata Silveira
+CRM 145892-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Qualidade_Pdf_SemTexto · dados sintéticos · página 1 de 1

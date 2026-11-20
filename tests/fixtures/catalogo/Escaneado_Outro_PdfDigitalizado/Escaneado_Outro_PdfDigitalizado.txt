@@ -1,0 +1,27 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+TERMO DE CONSENTIMENTO
+Termo administrativo escaneado — fora da taxonomia
+
+Fixture: Escaneado_Outro_PdfDigitalizado
+Paciente: —
+Idade: —
+Documento: DOC-E-2026-0055
+Data: 18/10/2026
+Origem: Digitalização externa
+
+DOCUMENTO
+Termo de consentimento para uso de imagem institucional, assinado por acompanhante, sem finalidade clínica.
+
+CONTEÚDO
+Autorizo o uso da minha imagem em materiais institucionais de comunicação interna da unidade de saúde.
+
+------------------------------------------------------------------------------
+—
+—
+------------------------------------------------------------------------------
+MediFlow · fixture Escaneado_Outro_PdfDigitalizado · dados sintéticos · página 1 de 1

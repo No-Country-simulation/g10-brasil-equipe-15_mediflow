@@ -1,0 +1,17 @@
+{
+  "documento_id": "DOC-CLIN-2026-8942",
+  "canal_origem": "Pronto_Socorro",
+  "conteudo_texto": "HOSPITAL SANTA LUCIA - LAUDO DE EXAME RADIOLOGICO. Paciente: Carlos Eduardo Mendes, 52 anos. Solicitante: Dra. Renata Silveira CRM-SP 145892. Exame: Tomografia de Torax com contraste. Indicacao: Suspeita de embolia pulmonar aguda, dispneia subita. Achados: Falha de enchimento em arteria pulmonar principal direita compativel com TEP agudo. CONCLUSÃO: Quadro compativel com Tromboembolismo Pulmonar Agudo. Sugere-se correlacao clinica urgente.",
+  "resultado_esperado": {
+    "tipo_documento": "Laudo de Exame de Imagem",
+    "especialidade": "Radiologia / Pneumologia",
+    "nivel_prioridade": "Urgente",
+    "cid_sugerido": "I26.9",
+    "destino_principal": "Fila_Emergencia_Medica",
+    "requer_auditoria_humana": false,
+    "notificacao_gerada": {
+      "canal": "Alerta_Plantao_Medico",
+      "mensagem": "ALERTA URGENTE: Laudo critico de TEP Agudo para paciente Carlos Eduardo Mendes no Pronto-Socorro."
+    }
+  }
+}

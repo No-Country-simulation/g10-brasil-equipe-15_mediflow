@@ -1,0 +1,490 @@
+"""Regressões de diagnóstico e idade, sem chamadas reais ao Gemini."""
+
+from copy import deepcopy
+import json
+from unittest.mock import patch
+
+import pytest
+from pydantic import ValidationError
+
+import src.services.gemini_service as modulo
+
+
+@pytest.mark.parametrize(
+    ("payload", "diagnostico", "cid"),
+    [
+        (
+            {
+                "diagnostico": {
+                    "descricao": "Descrição fictícia.",
+                    "cid_extraido": "J06.9",
+                }
+            },
+            "Descrição fictícia.",
+            "J06.9",
+        ),
+        (
+            {
+                "diagnostico_principal": {
+                    "descricao": "Descrição fictícia.",
+                }
+            },
+            "Descrição fictícia.",
+            None,
+        ),
+        (
+            {
+                "diagnostico": {
+                    "descricao": None,
+                    "cid_extraido": None,
+                }
+            },
+            None,
+            None,
+        ),
+        (
+            {
+                "diagnostico": {
+                    "descricao": "Descrição fictícia.",
+                    "cid_extraido": "J06.9",
+                },
+                "cid": "J06.9",
+            },
+            "Descrição fictícia.",
+            "J06.9",
+        ),
+    ],
+    ids=[
+        "objeto-com-cid",
+        "alias-sem-cid",
+        "nulos",
+        "cid-coincidente",
+    ],
+)
+def test_normaliza_diagnostico_sem_perder_cid(
+    payload, diagnostico, cid
+):
+    original = deepcopy(payload)
+
+    normalizado = modulo.normalizar_payload_extracao(payload)
+    dados = modulo.DadosClinicosExtraidos.model_validate(normalizado)
+
+    assert dados.diagnostico == diagnostico
+    assert dados.cid == cid
+    assert payload == original
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {
+            "diagnostico": {
+                "descricao": "Descrição fictícia.",
+                "cid_extraido": "J06.9",
+            },
+            "cid": "M54.5",
+        },
+        {
+            "diagnostico": {
+                "descricao": "Descrição fictícia.",
+                "informacao_adicional": "Não pode ser descartada.",
+            }
+        },
+        {
+            "diagnostico": {
+                "descricao": {"texto": "Formato desconhecido."},
+            }
+        },
+        {
+            "diagnostico": {
+                "descricao": "Descrição fictícia.",
+                "cid_extraido": ["J06.9"],
+            }
+        },
+        {
+            "diagnostico": {
+                "descricao": "Primeira descrição.",
+            },
+            "diagnostico_principal": "Descrição diferente.",
+        },
+    ],
+    ids=[
+        "cid-conflitante",
+        "campo-desconhecido",
+        "descricao-como-objeto",
+        "cid-como-lista",
+        "diagnosticos-conflitantes",
+    ],
+)
+def test_rejeita_estrutura_ambigua_sem_modificar_original(payload):
+    original = deepcopy(payload)
+
+    with pytest.raises(ValueError):
+        modulo.normalizar_payload_extracao(payload)
+
+    assert payload == original
+
+
+def test_preserva_payload_textual_e_sinais():
+    payload = {
+        "diagnostico": "Descrição fictícia.",
+        "cid": None,
+        "urgencia": "SIM",
+        "campos_incertos": ["paciente.idade"],
+        "conflitos": [
+            {
+                "tipo": "dados_divergentes",
+                "gravidade": "ALTA",
+                "descricao": "Conflito fictício.",
+                "campos": ["paciente.idade"],
+            }
+        ],
+    }
+
+    assert modulo.normalizar_payload_extracao(payload) == payload
+
+@pytest.mark.parametrize(
+    "idade_recebida, idade_esperada, campos_incertos_esperados",
+    [
+        ("41 anos", 41, ["medico.nome"]),
+        ("29 ou 39 anos", None, ["medico.nome", "paciente.idade"]),
+    ],
+)
+def test_servico_extrai_objeto_preservando_dados_e_sinais(
+    idade_recebida, idade_esperada, campos_incertos_esperados
+):
+    payload = {
+        "paciente": {
+            "nome": "Pessoa Fictícia",
+            "idade": idade_recebida,
+        },
+        "diagnostico": {
+            "descricao": "Descrição fictícia.",
+            "cid_extraido": "J06.9",
+        },
+        "urgencia": "NAO",
+        "score_confianca_extracao": 0.91,
+        "campos_incertos": ["medico.nome"],
+        "conflitos": [],
+    }
+
+    with patch.object(modulo, "genai") as sdk:
+        modelo = sdk.GenerativeModel.return_value
+        modelo.generate_content.return_value.text = json.dumps(payload)
+
+        servico = modulo.GeminiService(
+            api_key="chave-ficticia",
+            model_name="modelo-ficticio",
+        )
+
+        with patch.object(
+            servico,
+            "_fallback_envelope",
+            side_effect=AssertionError("Não deveria usar fallback."),
+        ):
+            envelope = servico.extrair_dados_clinicos_envelope(
+                conteudo_texto="Documento exclusivamente fictício."
+            )
+
+        dados = envelope["dados_clinicos"]
+
+        assert dados.paciente.nome == "Pessoa Fictícia"
+        assert dados.paciente.idade == idade_esperada
+        assert dados.diagnostico == "Descrição fictícia."
+        assert dados.cid == "J06.9"
+        assert envelope["urgencia"] == "NAO"
+        assert envelope["campos_incertos"] == campos_incertos_esperados
+        assert envelope["conflitos"] == []
+
+        modelo.generate_content.assert_called_once()
+
+
+def test_servico_nao_declara_extracao_valida_com_cid_conflitante():
+    payload = {
+        "diagnostico": {
+            "descricao": "Descrição fictícia.",
+            "cid_extraido": "J06.9",
+        },
+        "cid": "M54.5",
+    }
+
+    with patch.object(modulo, "genai") as sdk:
+        modelo = sdk.GenerativeModel.return_value
+        modelo.generate_content.return_value.text = json.dumps(payload)
+
+        servico = modulo.GeminiService(api_key="chave-ficticia")
+
+        envelope = servico.extrair_dados_clinicos_envelope(
+            conteudo_texto="Documento exclusivamente fictício."
+        )
+
+        dados = envelope["dados_clinicos"]
+
+        assert dados.score_confianca_extracao == 0.0
+        assert dados.diagnostico is None
+        assert dados.cid is None
+        assert envelope["urgencia"] == "INDETERMINADO"
+
+
+@pytest.mark.parametrize(
+    ("idade_recebida", "idade_esperada"),
+    [
+        ("29", 29),
+        ("29 anos", 29),
+        (" 29 ANOS ", 29),
+        ("1 ano", 1),
+        ("45a", 45),
+        ("45 a", 45),
+        ("45 a.", 45),
+        ("45a.", 45),
+        ("45 anos.", 45),
+        ("1 ano.", 1),
+    ],
+    ids=[
+        "numero-textual",
+        "idade-com-anos",
+        "espacos-e-maiusculas",
+        "ano-singular",
+        "abreviacao-compacta",
+        "abreviacao-com-espaco",
+        "abreviacao-com-ponto",
+        "abreviacao-compacta-com-ponto",
+        "anos-com-ponto",
+        "ano-singular-com-ponto",
+    ],
+)
+def test_normaliza_idade_textual_inequivoca(
+    idade_recebida, idade_esperada
+):
+    payload = {
+        "paciente": {
+            "nome": "Pessoa Fictícia",
+            "idade": idade_recebida,
+        },
+        "diagnostico": {
+            "descricao": "Descrição fictícia.",
+            "cid_extraido": "J06.9",
+        },
+    }
+    original = deepcopy(payload)
+
+    normalizado = modulo.normalizar_payload_extracao(payload)
+    dados = modulo.DadosClinicosExtraidos.model_validate(normalizado)
+
+    assert dados.paciente.idade == idade_esperada
+    assert dados.diagnostico == "Descrição fictícia."
+    assert dados.cid == "J06.9"
+    assert payload == original
+
+
+@pytest.mark.parametrize(
+    "idade",
+    [
+        "29 ou 39 anos",
+        "4 meses",
+        "-5",
+        "29.5 anos",
+        "aproximadamente 29 anos",
+        "45.",
+        "45 dias",
+        "~45a",
+    ],
+    ids=[
+        "idades-alternativas",
+        "idade-em-meses",
+        "numero-negativo",
+        "numero-decimal",
+        "idade-aproximada",
+        "numero-com-ponto-sem-unidade",
+        "idade-em-dias",
+        "abreviacao-aproximada",
+    ],
+)
+def test_sinaliza_idade_textual_invalida_sem_escolher_numero(idade):
+    payload = {
+        "paciente": {"nome": "Pessoa Fictícia", "idade": idade},
+        "campos_incertos": ["medico.nome"],
+    }
+    original = deepcopy(payload)
+
+    normalizado = modulo.normalizar_payload_extracao(payload)
+    dados = modulo.DadosClinicosExtraidos.model_validate(normalizado)
+
+    assert dados.paciente.nome == "Pessoa Fictícia"
+    assert dados.paciente.idade is None
+    assert normalizado["campos_incertos"] == ["medico.nome", "paciente.idade"]
+    assert payload == original
+
+
+@pytest.mark.parametrize(
+    "idade",
+    [29, None],
+    ids=["idade-inteira", "idade-nula"],
+)
+def test_preserva_idade_numerica_ou_ausente(idade):
+    payload = {"paciente": {"idade": idade}}
+
+    normalizado = modulo.normalizar_payload_extracao(payload)
+    dados = modulo.DadosClinicosExtraidos.model_validate(normalizado)
+
+    assert dados.paciente.idade == idade
+
+
+def test_idade_fora_da_faixa_continua_rejeitada_pelo_schema():
+    normalizado = modulo.normalizar_payload_extracao(
+        {"paciente": {"idade": "121 anos"}}
+    )
+
+    with pytest.raises(ValidationError):
+        modulo.DadosClinicosExtraidos.model_validate(normalizado)
+
+
+@pytest.mark.parametrize(
+    "payload, esperado",
+    [
+        ({"hipotese_diagnostica": " Hipótese fictícia. "}, "Hipótese fictícia."),
+        ({"hd": {"hipotese": "Hipótese fictícia."}}, "Hipótese fictícia."),
+        ({"hipotese": {"texto": "Hipótese fictícia."}}, "Hipótese fictícia."),
+        ({"diagnostico_principal": {"termo": "Hipótese fictícia."}}, "Hipótese fictícia."),
+        ({"diagnostico": {"descricao": "   "}}, None),
+        ({"diagnostico": ""}, None),
+        ({"diagnostico": "", "hd": "Hipótese fictícia."}, "Hipótese fictícia."),
+    ],
+)
+def test_normaliza_aliases_de_hipotese_e_descricoes_vazias(payload, esperado):
+    original = deepcopy(payload)
+
+    normalizado = modulo.normalizar_payload_extracao(payload)
+    dados = modulo.DadosClinicosExtraidos.model_validate(normalizado)
+
+    assert normalizado["diagnostico"] == esperado
+    assert dados.diagnostico == esperado
+    assert payload == original
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"diagnostico": "Descrição A.", "hd": "Descrição B."},
+        {"diagnostico": {"descricao": "Descrição A.", "termo": "Descrição B."}},
+    ],
+)
+def test_rejeita_hipoteses_diagnosticas_conflitantes(payload):
+    with pytest.raises(ValueError, match="Diagnósticos conflitantes"):
+        modulo.normalizar_payload_extracao(payload)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"diagnostico": "Faringite", "cid": "J02", "cid_extraido": "J06"},
+        {"diagnostico": "Faringite", "cid_extraido": "J02", "cid_sugerido": "J06"},
+        {"diagnostico_principal": "Faringite", "cid": "J02", "cid_sugerido": "J06"},
+        {"cid": "J02", "cid_extraido": "J06"},
+    ],
+    ids=[
+        "texto-cid-e-cid-extraido",
+        "texto-cid-extraido-e-cid-sugerido",
+        "alias-diagnostico-cid-e-cid-sugerido",
+        "sem-diagnostico-cids-raiz",
+    ],
+)
+def test_rejeita_cids_conflitantes_com_diagnostico_textual(payload):
+    original = deepcopy(payload)
+
+    with pytest.raises(ValueError, match="CIDs conflitantes na resposta."):
+        modulo.normalizar_payload_extracao(payload)
+
+    assert payload == original
+
+
+def test_rejeita_cid_nao_textual_com_diagnostico_textual():
+    payload = {"diagnostico": "Faringite", "cid": ["J02"]}
+    original = deepcopy(payload)
+
+    with pytest.raises(ValueError, match="CID deve ser texto ou null."):
+        modulo.normalizar_payload_extracao(payload)
+
+    assert payload == original
+
+
+@pytest.mark.parametrize(
+    ("payload", "cid_esperado"),
+    [
+        ({"diagnostico": "Faringite", "cid_extraido": "   "}, None),
+        ({"diagnostico": "Faringite", "cid": "", "cid_extraido": " J02 "}, "J02"),
+        ({"diagnostico": "Faringite", "cid": "J02", "cid_extraido": "J02"}, "J02"),
+    ],
+    ids=[
+        "cid-espacos-vira-none",
+        "cid-vazio-preserva-cid-extraido-valido",
+        "cids-textuais-identicos",
+    ],
+)
+def test_normaliza_cid_com_diagnostico_textual(payload, cid_esperado):
+    original = deepcopy(payload)
+
+    normalizado = modulo.normalizar_payload_extracao(payload)
+    dados = modulo.DadosClinicosExtraidos.model_validate(normalizado)
+
+    assert normalizado["cid"] == cid_esperado
+    assert dados.cid == cid_esperado
+    assert payload == original
+
+
+def test_servico_preserva_entidades_clinicas_com_idade_em_meses():
+    payload = {
+        "paciente": {
+            "nome": "Bebê Fictício",
+            "idade": "4 meses",
+        },
+        "medico": {
+            "nome": "Dra. Ana Fictícia",
+            "crm": {"numero": "123456", "uf": "SP"},
+        },
+        "diagnostico_principal": "Bronquiolite aguda",
+        "cid_extraido": "J21.9",
+        "medicamentos": [
+            {
+                "nome": "Solução fisiológica 0,9%",
+                "dosagem": "5 mL",
+                "frequencia": "6/6h",
+            }
+        ],
+        "urgencia": "SIM",
+        "score_confianca_extracao": 0.92,
+        "campos_incertos": [],
+        "conflitos": [],
+    }
+
+    with patch.object(modulo, "genai") as sdk:
+        modelo = sdk.GenerativeModel.return_value
+        modelo.generate_content.return_value.text = json.dumps(payload)
+
+        servico = modulo.GeminiService(
+            api_key="chave-ficticia",
+            model_name="modelo-ficticio",
+        )
+
+        with patch.object(
+            servico,
+            "_fallback_envelope",
+            side_effect=AssertionError("Não deveria usar fallback."),
+        ):
+            envelope = servico.extrair_dados_clinicos_envelope(
+                conteudo_texto="Documento exclusivamente fictício."
+            )
+
+    dados = envelope["dados_clinicos"]
+
+    assert dados.paciente.nome == "Bebê Fictício"
+    assert dados.paciente.idade is None
+    assert dados.medico.nome == "Dra. Ana Fictícia"
+    assert dados.medico.crm.numero == "123456"
+    assert dados.medico.crm.uf == "SP"
+    assert dados.diagnostico == "Bronquiolite aguda"
+    assert dados.cid == "J21.9"
+    assert len(dados.medicamentos) == 1
+    assert dados.medicamentos[0].nome == "Solução fisiológica 0,9%"
+    assert envelope["urgencia"] == "SIM"
+    assert envelope["campos_incertos"] == ["paciente.idade"]

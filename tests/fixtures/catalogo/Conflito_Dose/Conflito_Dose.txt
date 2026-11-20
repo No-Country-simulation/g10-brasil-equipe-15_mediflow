@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RECEITUÁRIO MÉDICO
+Dose dez vezes acima do usual
+
+Fixture: Conflito_Dose
+Paciente: Neusa Ferreira Lima
+Idade: 73 anos
+Documento: DOC-REC-2026-0036
+Data: 18/10/2026
+Origem: Ambulatório de Cardiologia
+
+HIPÓTESE DIAGNÓSTICA
+Hipertensão arterial sistêmica — CID-10 I10.
+
+PRESCRIÇÃO
+Losartana potássica 500 mg — 1 comprimido por via oral uma vez ao dia, por 30 dias.
+
+ORIENTAÇÕES
+Retorno em 30 dias para controle pressórico.
+
+------------------------------------------------------------------------------
+Dr. Paulo Mendes Rocha
+CRM 203114-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Conflito_Dose · dados sintéticos · página 1 de 1

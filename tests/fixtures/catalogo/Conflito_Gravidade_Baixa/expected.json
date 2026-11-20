@@ -1,0 +1,88 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Conflito_Gravidade_Baixa",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Conflito_Gravidade_Baixa/Conflito_Gravidade_Baixa.txt",
+      "pdf": "catalogo/Conflito_Gravidade_Baixa/Conflito_Gravidade_Baixa.pdf",
+      "jpg": "catalogo/Conflito_Gravidade_Baixa/Conflito_Gravidade_Baixa.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-97E7E7B2",
+    "classificacao": {
+      "tipo_documento": "ATESTADO_MEDICO",
+      "especialidade": [
+        "Clínica Médica"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Thiago Pelegrini Moraes",
+        "idade": 33
+      },
+      "medico": {
+        "nome": "Dra. Camila Ferreira Lopes",
+        "crm": {
+          "numero": "198765",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Cefaleia tensional",
+      "cid": "G44.2",
+      "exames": [],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.9,
+      "score_combinado": 0.9,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": [
+        {
+          "tipo": "DADOS_PACIENTE",
+          "campos": [
+            "paciente.nome"
+          ],
+          "gravidade": "BAIXA",
+          "descricao": "Variação de grafia do nome entre cabeçalho e corpo: Moraes x Morais, mesmo prontuário"
+        }
+      ]
+    },
+    "decisao_roteamento": {
+      "destino_principal": "PRONTUARIO_ELETRONICO",
+      "destinos": [
+        "PRONTUARIO_ELETRONICO"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: ATESTADO_MEDICO encaminhado para PRONTUARIO_ELETRONICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "modo_fixture": {
+    "score_forcado": {
+      "score_classificacao": 0.93,
+      "score_extracao": 0.9
+    }
+  },
+  "assercoes": [
+    "Conflito de gravidade BAIXA é registrado em qualidade.conflitos e não bloqueia (A1)",
+    "Score combinado 0,90 fica acima do limiar de 0,85",
+    "O conflito continua visível na resposta, para auditoria"
+  ],
+  "observacoes": "Caso criado em 21/10/2026. score_extracao = 0,90 vem da fórmula aprovada (A3): 1 − 0,1 por um conflito BAIXA. O conflito é registrado, mas não gera revisão."
+}

@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+ATESTADO MÉDICO
+Atestado com sombra e baixo contraste
+
+Fixture: Qualidade_Foto_BaixoContraste
+Paciente: Michele Andrade Pinto
+Idade: 4?_ anos — mancha sobre o campo
+Documento: DOC-Q-2026-0045
+Data: 18/10/2026
+Origem: Foto enviada por celular
+
+FINALIDADE
+Atestado de afastamento de 2 dias.
+
+TEXTO DO ATESTADO
+Atesto que a paciente necessita de afastamento de suas atividades por 2 (dois) dias, a contar de 18/10/2026.
+
+DIAGNÓSTICO / CID
+Lombalgia aguda — CID-10 M54.5.
+
+------------------------------------------------------------------------------
+Dr. André Luiz Barbosa
+CRM 165432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Qualidade_Foto_BaixoContraste · dados sintéticos · página 1 de 1

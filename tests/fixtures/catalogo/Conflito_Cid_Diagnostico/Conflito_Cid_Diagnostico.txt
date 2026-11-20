@@ -1,0 +1,33 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+LAUDO DE EXAME DE IMAGEM
+Diagnóstico e CID incompatíveis
+
+Fixture: Conflito_Cid_Diagnostico
+Paciente: Marcelo Tavares Lins
+Idade: 59 anos
+Documento: DOC-IMG-2026-0035
+Data: 18/10/2026
+Origem: Ambulatório de Cardiologia
+
+EXAME REALIZADO
+Radiografia de tórax, incidência PA.
+
+ACHADOS
+Campos pulmonares com trama vascular preservada, sem consolidações ou derrames. Área cardíaca de dimensões normais.
+
+CONCLUSÃO
+Lombalgia mecânica crônica sem alterações no exame de imagem.
+
+CID INFORMADO
+CID-10 I21.9 — infarto agudo do miocárdio.
+
+------------------------------------------------------------------------------
+Dr. André Luiz Barbosa
+CRM 165432-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Conflito_Cid_Diagnostico · dados sintéticos · página 1 de 1

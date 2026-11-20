@@ -1,0 +1,75 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Qualidade_Foto_BaixoContraste",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Qualidade_Foto_BaixoContraste/Qualidade_Foto_BaixoContraste.txt",
+      "pdf": "catalogo/Qualidade_Foto_BaixoContraste/Qualidade_Foto_BaixoContraste.pdf",
+      "jpg": "catalogo/Qualidade_Foto_BaixoContraste/Qualidade_Foto_BaixoContraste.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-1E210AC5",
+    "classificacao": {
+      "tipo_documento": "ATESTADO_MEDICO",
+      "especialidade": [
+        "Ortopedia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Michele Andrade Pinto",
+        "idade": null
+      },
+      "medico": {
+        "nome": "Dr. André Luiz Barbosa",
+        "crm": {
+          "numero": "165432",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Lombalgia aguda",
+      "cid": "M54.5",
+      "exames": [],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [
+        "paciente.idade"
+      ],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: campos incertos: paciente.idade.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Sombra sobre a linha da idade gera campo incerto",
+    "Campo incerto é sinalizado, não inventado (RF-15)",
+    "Revisão humana indicada"
+  ],
+  "observacoes": "Degradação leve: sombra no canto inferior esquerdo compromete a linha da idade."
+}

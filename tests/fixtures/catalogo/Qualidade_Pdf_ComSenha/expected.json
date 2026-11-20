@@ -1,0 +1,37 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Qualidade_Pdf_ComSenha",
+  "documento_ficticio": true,
+  "tipo_de_teste": "erro_processamento",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Qualidade_Pdf_ComSenha/Qualidade_Pdf_ComSenha.txt",
+      "pdf": "catalogo/Qualidade_Pdf_ComSenha/Qualidade_Pdf_ComSenha.pdf",
+      "jpg": "catalogo/Qualidade_Pdf_ComSenha/Qualidade_Pdf_ComSenha.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "ERRO_PROCESSAMENTO",
+    "documento_id": "DOC-A434116B",
+    "classificacao": null,
+    "dados_extraidos": null,
+    "qualidade": null,
+    "decisao_roteamento": null,
+    "armazenamento_oci": null,
+    "erro": {
+      "codigo": "PDF_PROTEGIDO",
+      "mensagem": "PDF protegido por senha (AES-256): sem a credencial não há texto a extrair."
+    }
+  },
+  "assercoes": [
+    "PDF protegido não pode ser lido",
+    "Erro controlado, sem stack trace (RF-03/§12)",
+    "Status ERRO_PROCESSAMENTO com código PDF_PROTEGIDO e sem dados extraídos"
+  ],
+  "observacoes": "Senha de teste: mediflow123. O fixture existe para testar a rejeição, não o sucesso."
+}

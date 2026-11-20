@@ -1,0 +1,81 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Ausencia_Paciente_Nome",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "demo/Ausencia_Paciente_Nome/Ausencia_Paciente_Nome.txt",
+      "pdf": "demo/Ausencia_Paciente_Nome/Ausencia_Paciente_Nome.pdf",
+      "jpg": "demo/Ausencia_Paciente_Nome/Ausencia_Paciente_Nome.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-83C13654",
+    "classificacao": {
+      "tipo_documento": "RECEITUARIO_MEDICO",
+      "especialidade": [
+        "Clínica Médica"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": null,
+        "idade": 44
+      },
+      "medico": {
+        "nome": "Dra. Camila Ferreira Lopes",
+        "crm": {
+          "numero": "198765",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Faringoamigdalite bacteriana",
+      "cid": "J03.9",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Amoxicilina",
+          "dosagem": "500 mg",
+          "frequencia": null
+        }
+      ],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [
+        "paciente.nome"
+      ],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: campos obrigatórios ausentes: paciente.nome.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Ausência de nome do paciente força revisão",
+    "Demais campos permanecem preenchidos e não são inventados",
+    "Status EM_REVISAO e destino FILA_REVISAO_HUMANA"
+  ],
+  "observacoes": ""
+}

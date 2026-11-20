@@ -1,0 +1,12 @@
+POST /api/v1/triagens HTTP/1.1
+Host: localhost:8000
+Content-Type: multipart/form-data; boundary=----MediFlowBoundary
+
+------MediFlowBoundary
+Content-Disposition: form-data; name="canal_origem"
+
+Pronto_Socorro
+------MediFlowBoundary--
+
+# Nenhum arquivo e nenhum documento_texto foram enviados.
+# Esperado: 422 CAMPOS_INVALIDOS antes de qualquer chamada ao modelo.

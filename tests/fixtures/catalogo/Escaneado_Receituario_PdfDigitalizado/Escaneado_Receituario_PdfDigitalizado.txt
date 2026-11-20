@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+RECEITUÁRIO MÉDICO
+Receita impressa escaneada em PDF
+
+Fixture: Escaneado_Receituario_PdfDigitalizado
+Paciente: Marli Aparecida Fonseca
+Idade: 50 anos
+Documento: DOC-E-2026-0050
+Data: 18/10/2026
+Origem: Digitalização externa
+
+HIPÓTESE DIAGNÓSTICA
+Hipertensão arterial sistêmica — CID-10 I10.
+
+PRESCRIÇÃO
+Anlodipino 5 mg — 1 comprimido por via oral uma vez ao dia, por 30 dias.
+
+ORIENTAÇÕES
+Retorno em 30 dias para controle pressórico.
+
+------------------------------------------------------------------------------
+Dr. Marcos Vinícius Tavares
+CRM 176543-SP
+------------------------------------------------------------------------------
+MediFlow · fixture Escaneado_Receituario_PdfDigitalizado · dados sintéticos · página 1 de 1

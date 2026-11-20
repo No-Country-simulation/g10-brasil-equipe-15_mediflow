@@ -1,0 +1,85 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Limite_Paginas_20",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Limite_Paginas_20/Limite_Paginas_20.txt",
+      "pdf": "catalogo/Limite_Paginas_20/Limite_Paginas_20.pdf",
+      "jpg": "catalogo/Limite_Paginas_20/Limite_Paginas_20.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "PROCESSADO",
+    "documento_id": "DOC-EB1B5C19",
+    "classificacao": {
+      "tipo_documento": "RELATORIO_ALTA_INTERNACAO",
+      "especialidade": [
+        "Pneumologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Ademir Vilanova Prado",
+        "idade": 68
+      },
+      "medico": {
+        "nome": "Dr. Paulo Mendes Rocha",
+        "crm": {
+          "numero": "203114",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Doença pulmonar obstrutiva crônica exacerbada",
+      "cid": "J44.1",
+      "exames": [],
+      "medicamentos": [
+        {
+          "nome": "Budesonida",
+          "dosagem": "200 mcg",
+          "frequencia": null
+        }
+      ],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "PRONTUARIO_ELETRONICO",
+      "destinos": [
+        "PRONTUARIO_ELETRONICO"
+      ],
+      "requer_auditoria_humana": false,
+      "justificativa_roteamento": "Classificação de rotina: RELATORIO_ALTA_INTERNACAO encaminhado para PRONTUARIO_ELETRONICO.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "modo_fixture": {
+    "score_forcado": {
+      "score_classificacao": 0.93,
+      "score_extracao": 0.91
+    }
+  },
+  "assercoes": [
+    "Documento de exatamente 20 páginas é aceito: o limite é inclusivo (A6)",
+    "Conteúdo clínico das 20 páginas é considerado na extração",
+    "Destino PRONTUARIO_ELETRONICO, sem revisão"
+  ],
+  "observacoes": "Caso criado em 21/10/2026, par do Limite_Paginas_21. Juntos, os dois provam que o corte está em 20 páginas."
+}

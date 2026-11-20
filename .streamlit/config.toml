@@ -1,0 +1,3 @@
+[server]
+# Limite máximo de upload alinhado à Regra de Segurança A6 do MediFlow (10MB)
+maxUploadSize = 10

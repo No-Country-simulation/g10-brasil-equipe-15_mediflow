@@ -1,0 +1,78 @@
+{
+  "schema": "mediflow.fixture/2",
+  "fixture_id": "Ausencia_Medico_Nome",
+  "documento_ficticio": true,
+  "tipo_de_teste": "funcional",
+  "entrada": {
+    "formatos_disponiveis": [
+      "TXT",
+      "PDF",
+      "JPG"
+    ],
+    "renditions": {
+      "txt": "catalogo/Ausencia_Medico_Nome/Ausencia_Medico_Nome.txt",
+      "pdf": "catalogo/Ausencia_Medico_Nome/Ausencia_Medico_Nome.pdf",
+      "jpg": "catalogo/Ausencia_Medico_Nome/Ausencia_Medico_Nome.jpg"
+    }
+  },
+  "resposta_esperada": {
+    "status": "EM_REVISAO",
+    "documento_id": "DOC-DC0DD748",
+    "classificacao": {
+      "tipo_documento": "LAUDO_EXAME_LABORATORIAL",
+      "especialidade": [
+        "Endocrinologia"
+      ],
+      "nivel_prioridade": "ROTINA",
+      "score_classificacao": 0.93
+    },
+    "dados_extraidos": {
+      "paciente": {
+        "nome": "Simone Aparecida Rocha",
+        "idade": 47
+      },
+      "medico": {
+        "nome": null,
+        "crm": {
+          "numero": "154321",
+          "uf": "SP"
+        }
+      },
+      "diagnostico": "Hipotireoidismo primário",
+      "cid": "E03.9",
+      "exames": [
+        "TSH",
+        "T4 livre"
+      ],
+      "medicamentos": [],
+      "urgencia": "NAO"
+    },
+    "qualidade": {
+      "score_extracao": 0.91,
+      "score_combinado": 0.91,
+      "limiar_aplicado": 0.85,
+      "campos_ausentes": [
+        "medico.nome"
+      ],
+      "campos_incertos": [],
+      "conflitos": []
+    },
+    "decisao_roteamento": {
+      "destino_principal": "FILA_REVISAO_HUMANA",
+      "destinos": [
+        "FILA_REVISAO_HUMANA"
+      ],
+      "requer_auditoria_humana": true,
+      "justificativa_roteamento": "Revisão humana obrigatória: campos obrigatórios ausentes: medico.nome.",
+      "notificacao": null
+    },
+    "armazenamento_oci": null,
+    "erro": null
+  },
+  "assercoes": [
+    "Nome do médico ausente força revisão",
+    "CRM preservado e normalizado em número/UF",
+    "Nome não é inventado"
+  ],
+  "observacoes": ""
+}

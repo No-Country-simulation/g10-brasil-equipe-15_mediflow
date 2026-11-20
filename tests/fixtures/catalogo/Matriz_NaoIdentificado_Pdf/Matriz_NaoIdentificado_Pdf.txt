@@ -1,0 +1,27 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+REGISTRO CLÍNICO
+Documento escaneado ilegível
+
+Fixture: Matriz_NaoIdentificado_Pdf
+Paciente: —
+Idade: —
+Documento: DOC-NID-2026-0025
+Data: 18/10/2026
+Origem: Digitalização externa
+
+CONTEÚDO
+PDF recebido a partir de digitalização de baixa resolução, com manchas e trechos cortados. Não há texto legível suficiente para identificar o tipo documental ou os dados clínicos.
+
+QUALIDADE
+Resolução abaixo de 100 dpi, inclinação acentuada e ruído de digitalização. Recomenda-se reenvio do original.
+
+------------------------------------------------------------------------------
+—
+CRM —
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_NaoIdentificado_Pdf · dados sintéticos · página 1 de 1

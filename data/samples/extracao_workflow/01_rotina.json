@@ -1,0 +1,36 @@
+{
+  "documento_id": "DOC-CD398264",
+  "classificacao": {
+    "tipo_documento": "LAUDO_EXAME_IMAGEM",
+    "especialidade": [
+      "Radiologia",
+      "Gastroenterologia"
+    ],
+    "nivel_prioridade": "ROTINA",
+    "score_classificacao": 0.93
+  },
+  "dados_extraidos": {
+    "paciente": {
+      "nome": "Patrícia Nogueira Alves",
+      "idade": 38
+    },
+    "medico": {
+      "nome": "Dr. André Luiz Barbosa",
+      "crm": {
+        "numero": "165432",
+        "uf": "SP"
+      }
+    },
+    "diagnostico": "Exame ultrassonográfico dentro da normalidade",
+    "cid": null,
+    "exames": [
+      "Ultrassonografia de abdome total"
+    ],
+    "medicamentos": [],
+    "urgencia": "NAO"
+  },
+  "qualidade": {
+    "campos_incertos": [],
+    "conflitos": []
+  }
+}

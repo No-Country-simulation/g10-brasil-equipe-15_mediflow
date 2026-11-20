@@ -1,0 +1,30 @@
+HOSPITAL AURORA — UNIDADE DE DEMONSTRAÇÃO
+Rede Fictícia de Saúde · CNPJ 00.000.000/0001-00 · Cidade Fictícia/SP
+==============================================================================
+DOCUMENTO FICTÍCIO — USO EXCLUSIVO EM TESTES — SEM VALIDADE CLÍNICA
+==============================================================================
+
+DECLARAÇÃO DE COMPARECIMENTO
+Declaração emitida a acompanhante — fora da taxonomia
+
+Fixture: Matriz_Outro_Pdf
+Paciente: —
+Idade: —
+Documento: DOC-OUT-2026-0023
+Data: 18/10/2026
+Origem: Recepção Ambulatorial
+
+DECLARAÇÃO
+Declaramos, para os devidos fins, que a acompanhante Sra. Denise Prado Figueiredo compareceu a esta unidade no dia 18/10/2026, acompanhando paciente em consulta ambulatorial.
+
+FINALIDADE
+Comprovação de comparecimento para fins trabalhistas do acompanhante.
+
+OBSERVAÇÃO
+Documento administrativo, sem informações clínicas do paciente.
+
+------------------------------------------------------------------------------
+—
+—
+------------------------------------------------------------------------------
+MediFlow · fixture Matriz_Outro_Pdf · dados sintéticos · página 1 de 1
