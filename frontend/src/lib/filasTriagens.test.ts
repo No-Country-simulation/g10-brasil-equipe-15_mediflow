@@ -109,7 +109,7 @@ describe('meus documentos', () => {
 describe('células', () => {
   it('score com aviso de limiar só quando está abaixo', () => {
     expect(scoreDaLinha(rotina)).toEqual({ valor: '0,91', abaixo: null })
-    expect(scoreDaLinha(ambiguo)).toEqual({ valor: '0,65', abaixo: 'abaixo de 0,85' })
+    expect(scoreDaLinha(ambiguo)).toEqual({ valor: '0,70', abaixo: 'abaixo de 0,85' })
     expect(scoreDaLinha(andamento)).toBeNull()
   })
 

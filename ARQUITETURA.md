@@ -251,6 +251,8 @@ graph TD
 5. **Regra R5 (Fórmula Canônica do Score Combinado):**  
    `score_combinado = min(score_classificacao, score_extracao)`  
    As penalidades determinísticas de qualidade (conflitos ALTA: `-0.30`, MEDIA: `-0.20`, BAIXA: `-0.10`, vitais ausentes: `-0.20` e incertezas: `-0.10`) são abatidas no cálculo prévio do `score_extracao` (com piso em `0.0`). Se `score_combinado < 0.85`, a revisão humana é acionada.
+
+   Esse `qualidade.score_extracao` parte de `1.0` e não é o mesmo campo que `dados_extraidos.score_confianca_extracao`, declarado pelo extrator ou preenchido pelo padrão do schema. O grafo não usa essa autodeclaração como base do desconto. Campo obrigatório ausente também exige revisão independentemente do score. Os valores não são garantia de fidelidade clínica.
 6. **Regra R6 (Trava de Segurança dos 5 Campos Vitais - RF-21):**  
    Campos vitais obrigatórios: `paciente.nome`, `paciente.idade`, `medico.nome`, `medico.crm`, `diagnostico` (ou analitos laboratoriais). A ausência de qualquer um deles retém o documento compulsoriamente em `EM_REVISAO`.
 7. **Regra R7 (Documentos Não Classificados ou Fora de Escopo):**  

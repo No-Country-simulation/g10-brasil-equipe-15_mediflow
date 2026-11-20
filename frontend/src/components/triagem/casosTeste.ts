@@ -9,7 +9,7 @@ export type CasoTeste = {
   descricao: string
   /** Destino que a triagem deve devolver, lido do cenário da demo. */
   esperado: string
-  /** PDF em public/samples (cópia do fixture). */
+  /** Documento em public/samples (cópia do fixture). */
   arquivo: string
   /** Se informado, o caso é carregado na aba Texto com o conteúdo deste arquivo (Figma 01b). */
   texto?: string
@@ -50,9 +50,9 @@ export const CASOS_TESTE: readonly CasoTeste[] = [
     id: 'ambiguo',
     titulo: 'Caso ambíguo',
     tag: 'REVISÃO',
-    descricao: 'Lombalgia com score 0,84, logo abaixo do limiar de 0,85.',
+    descricao: 'Imagem de receita com idade do paciente não informada; exige revisão humana.',
     esperado: esperadoDe('ambiguo'),
-    arquivo: 'ambiguo/Borda_Score_084.pdf',
+    arquivo: 'ambiguo/Ausencia_Paciente_Idade.jpg',
   },
 ]
 
@@ -73,5 +73,9 @@ export async function carregarCaso(caso: CasoTeste): Promise<ConteudoDoCaso> {
   const resposta = await baixar(caso.arquivo, caso.titulo)
   const blob = await resposta.blob()
   const nome = caso.arquivo.split('/').pop() ?? caso.arquivo
-  return { tipo: 'arquivo', arquivo: new File([blob], nome, { type: 'application/pdf' }) }
+  const extensao = nome.split('.').pop()?.toLowerCase()
+  const tipo = extensao === 'jpg' || extensao === 'jpeg' ? 'image/jpeg'
+    : extensao === 'png' ? 'image/png'
+    : extensao === 'webp' ? 'image/webp' : 'application/pdf'
+  return { tipo: 'arquivo', arquivo: new File([blob], nome, { type: tipo }) }
 }

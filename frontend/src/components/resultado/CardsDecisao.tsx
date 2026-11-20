@@ -54,6 +54,10 @@ export function CardConfianca({ triagem }: { triagem: TriagemMediFlow }) {
     <Card titulo="Confiança" gap="gap-4.5">
       <BarraScore rotulo="Classificação" valor={c.classificacao} />
       <BarraScore rotulo="Extração" valor={c.extracao} />
+      <p className="m-0 text-caption text-text-secondary">
+        Extração: qualidade calculada pelas regras de campos e conflitos.
+        A confiança declarada pelo extrator, disponível no JSON, é uma medida separada.
+      </p>
       <div className="flex flex-col gap-1.5">
         <BarraScore rotulo="Combinado" valor={c.combinado} destaque abaixo={c.abaixoDoLimiar} limiar={c.limiar} />
         <p className={cx('m-0 text-caption font-medium', c.abaixoDoLimiar ? 'text-status-warning-fg' : 'text-status-info-fg')}>

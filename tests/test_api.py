@@ -331,6 +331,34 @@ def test_ct064_falha_na_notificacao_nao_apaga_triagem(client):
     assert triagem["dados_extraidos"]["diagnostico"] is not None
     # Notificação fica com status REGISTRADA/simulado sem quebrar o payload
     assert triagem["decisao_roteamento"]["notificacao"]["status"] == "REGISTRADA"
+    mensagem = triagem["decisao_roteamento"]["notificacao"]["mensagem"]
+    assert "SIMULADO" in mensagem
+    assert triagem["dados_extraidos"]["paciente"]["nome"] in mensagem
+    assert triagem["dados_extraidos"]["diagnostico"] in mensagem
+    assert "CRM solicitante:" in mensagem
+
+
+@pytest.mark.parametrize("formato", ["json", "multipart"])
+def test_canal_origem_preservado_no_resultado_e_historico(client, formato):
+    texto = (
+        "Receituário Médico\nPaciente: Maria da Silva, 45 anos.\n"
+        "Dr. Carlos CRM 12345/SP\nDiagnóstico: Faringite.\nAmoxicilina 500 mg."
+    )
+    canal = "Pronto-socorro"
+    if formato == "json":
+        resposta = client.post("/api/v1/triagens", json={
+            "documento_texto": texto, "canal_origem": canal,
+            "metadados": {"canal_origem": "metadado não deve sobrescrever o canal"},
+        })
+    else:
+        resposta = client.post("/api/v1/triagens", data={"canal_origem": canal},
+            files={"file": ("receita.txt", texto.encode(), "text/plain")})
+    assert resposta.status_code == 202
+    documento_id = resposta.json()["documento_id"]
+    resultado = client.get(f"/api/v1/triagens/{documento_id}").json()
+    assert resultado["canal_origem"] == canal
+    historico = client.get(f"/api/v1/triagens/{documento_id}/historico").json()
+    assert canal in historico[0]["motivo"]
 
 
 def test_ct075_isolamento_de_documentos_e_autorizacao_segura(client):

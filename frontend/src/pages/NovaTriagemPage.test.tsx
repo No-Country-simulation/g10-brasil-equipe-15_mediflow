@@ -270,7 +270,7 @@ describe('NovaTriagemPage', () => {
     await waitFor(() => expect(screen.getByLabelText('Conteúdo do documento')).toHaveValue('texto do TEP'))
 
     await user.click(screen.getByRole('button', { name: /Caso ambíguo/ }))
-    await waitFor(() => expect(screen.getByText('Borda_Score_084.pdf')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Ausencia_Paciente_Idade.jpg')).toBeInTheDocument())
 
     await user.click(screen.getByRole('button', { name: 'Texto' }))
     expect(screen.getByLabelText('Conteúdo do documento')).toHaveValue('')

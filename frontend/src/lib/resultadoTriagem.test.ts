@@ -52,9 +52,9 @@ describe('bannersDe', () => {
     const revisao = banners[0]
     if (revisao.tipo !== 'revisao') throw new Error('esperava revisão')
     expect(revisao.itens).toEqual([
-      'Médico solicitante não consta no documento',
-      'CRM não consta no documento',
-      'Score combinado 0,65 abaixo do limiar 0,85',
+      'Idade não consta no documento',
+      'Idade incerto ou ilegível',
+      'Score combinado 0,70 abaixo do limiar 0,85',
     ])
     expect(revisao.nota).toMatch(/fila é lógica/)
   })

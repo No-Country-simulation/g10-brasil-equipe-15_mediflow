@@ -8,6 +8,7 @@ import os
 import json
 import logging
 import re
+import unicodedata
 from typing import Dict, Any, Optional, List
 
 try:
@@ -24,8 +25,8 @@ logger = logging.getLogger("mediflow.gemini_service")
 # =============================================================================
 
 VERSAO_PROMPT_CLASSIFICACAO = "1.0.0"
-VERSAO_PROMPT_EXTRACAO = "1.0.0"
-VERSAO_PROMPT = "1.0.0"
+VERSAO_PROMPT_EXTRACAO = "1.1.0"
+VERSAO_PROMPT = "1.1.0"
 
 SYSTEM_INSTRUCTION_CLASSIFICACAO = """
 Você é o componente classificador de documentos do MediFlow.
@@ -76,7 +77,7 @@ REGRAS CRÍTICAS DE EXTRAÇÃO:
    - Exemplos fictícios:
      "Não há evidência de TEP." → 'NAO'
      "Não há evidência de TEP, mas há hemorragia." → 'SIM'
-   - 'campos_incertos': Retorne uma lista de strings com os nomes dos campos rasurados ou duvidosos (ex: ["dosagem_amoxicilina"]). Retorne [] se não houver.
+   - 'campos_incertos': Use caminhos do contrato para os campos rasurados ou duvidosos: "paciente.idade", "medico.crm" e "medicamentos[0].dosagem" (índice do medicamento na lista). Não crie identificadores como "dosagem_nome_do_medicamento". Retorne [] se não houver.
    - 'conflitos': Retorne uma lista de OBJETOS no formato:
      [{"tipo": "dosagem_incompativel", "gravidade": "ALTA", "descricao": "Dose excede limite diário", "campos": ["dosagem"]}]
      Retorne [] se não houver conflitos.
@@ -93,6 +94,8 @@ REGRAS CRÍTICAS DE EXTRAÇÃO:
    - 'medicamentos' deve conter somente os medicamentos explicitamente prescritos no documento.
    - Cada medicamento deve ter 'nome', 'dosagem' e 'frequencia'.
    - Extraia todos os medicamentos prescritos, sem acrescentar itens e sem duplicar a mesma prescrição.
+   - Transcreva o nome exatamente como está legível no documento; confira as letras antes de responder. Não substitua por outro nome, sinônimo, correção ortográfica ou nome parecido.
+   - Se houver dúvida na transcrição do nome, não substitua por um nome presumido; registre o caminho "medicamentos[i].nome" em 'campos_incertos', substituindo i pelo índice real, e preserve somente os caracteres legíveis.
    - Uma lista numerada de recomendações não significa que todos os seus itens sejam medicamentos.
    - Orientações gerais como "hidratação oral", "beber água", "repouso" e "repouso por 24 horas" não são medicamentos e não devem entrar em 'medicamentos'.
    - Exemplo: em "Dipirona sódica 500 mg a cada 8 horas; hidratação oral e repouso por 24 horas", extraia somente a dipirona na lista de medicamentos.
@@ -119,11 +122,12 @@ REGRAS CRÍTICAS DE EXTRAÇÃO:
    - Achados e resultados não devem substituir o nome do exame.
    - Preserve a conclusão ou o achado principal em 'diagnostico_principal', sem inventar informações.
    - Parâmetros laboratoriais detalhados pertencem a 'exames_laboratoriais', quando presentes.
+   - Para cada resultado laboratorial explícito, retorne um objeto em 'exames_laboratoriais' com 'analito', 'valor_medido' (texto), 'unidade', 'referencia_impressa' e 'alterado'. Preserve vírgulas e unidades impressas; use null quando um dado opcional não constar. Não infira alteração somente pela comparação numérica.
    - Se não houver exame identificado, retorne 'exames': [].
 
 9. ESTRUTURA DA RESPOSTA:
    - Inclua sempre 'paciente', 'medico', 'diagnostico_principal',
-     'cid_extraido', 'medicamentos', 'exames', 'urgencia',
+     'cid_extraido', 'medicamentos', 'exames', 'exames_laboratoriais', 'urgencia',
      'campos_incertos' e 'conflitos'.
    - Use esta estrutura para o médico:
      "medico": {
@@ -179,7 +183,43 @@ def normalizar_idade_extracao(payload: Dict[str, Any]) -> Dict[str, Any]:
     return normalizado
 
 
-def normalizar_payload_extracao(payload: Any) -> Dict[str, Any]:
+def normalizar_incertezas_medicamentos(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Converte aliases de dose somente quando identificam um medicamento único."""
+    normalizado = dict(payload)
+    campos = payload.get("campos_incertos")
+    medicamentos = payload.get("medicamentos")
+    if not isinstance(campos, list) or not isinstance(medicamentos, list):
+        return normalizado
+
+    def identificador(texto):
+        texto = unicodedata.normalize("NFKD", texto)
+        texto = "".join(c for c in texto if not unicodedata.combining(c))
+        return re.sub(r"[^a-z0-9]+", "_", texto.lower()).strip("_")
+
+    indices = {}
+    for indice, medicamento in enumerate(medicamentos):
+        if isinstance(medicamento, dict) and isinstance(medicamento.get("nome"), str):
+            nome = identificador(medicamento["nome"])
+            if nome:
+                indices.setdefault(nome, []).append(indice)
+
+    saida = []
+    for campo in campos:
+        if isinstance(campo, str):
+            alias = identificador(campo)
+            for prefixo in ("dosagem_", "dose_"):
+                if alias.startswith(prefixo):
+                    candidatos = indices.get(alias[len(prefixo):], [])
+                    if len(candidatos) == 1:
+                        campo = f"medicamentos[{candidatos[0]}].dosagem"
+                    break
+        if campo not in saida:
+            saida.append(campo)
+    normalizado["campos_incertos"] = saida
+    return normalizado
+
+
+def normalizar_payload_extracao(payload: Any, *, texto_original: str = "") -> Dict[str, Any]:
     """Normaliza idade e diagnóstico mantendo os dados representados.
 
     Estruturas desconhecidas ou valores conflitantes são rejeitados.
@@ -263,6 +303,29 @@ def normalizar_payload_extracao(payload: Any) -> Dict[str, Any]:
     elif encontrou_cid:
         normalizado["cid"] = None
 
+    normalizado = normalizar_incertezas_medicamentos(normalizado)
+    # Com fonte textual disponível, não aceite uma conclusão inferida de comparação
+    # numérica como se fosse um marcador de alteração impresso no laboratório.
+    if texto_original.strip() and isinstance(normalizado.get("exames_laboratoriais"), list):
+        def sem_acentos(texto):
+            return "".join(c for c in unicodedata.normalize("NFKD", texto.lower())
+                           if not unicodedata.combining(c))
+
+        linhas = [sem_acentos(linha) for linha in texto_original.splitlines()]
+        exames = []
+        for item in normalizado["exames_laboratoriais"]:
+            if isinstance(item, dict) and item.get("alterado") is not None:
+                item = dict(item)
+                analito = sem_acentos(str(item.get("analito", ""))).strip()
+                evidencia = any(
+                    analito and re.search(r"\b" + re.escape(analito) + r"\b", linha)
+                    and re.search(r"\*|[↑↓]|\b(?:alto|alta|baixo|baixa|alterado|alterada|normal)\b", linha)
+                    for linha in linhas
+                )
+                if not evidencia:
+                    item["alterado"] = None
+            exames.append(item)
+        normalizado["exames_laboratoriais"] = exames
     return normalizado
 
 
@@ -383,7 +446,7 @@ class GeminiService:
                 # Normaliza idade textual inequívoca e diagnóstico estruturado.
                 # Preserva descrição e CID; formatos ambíguos geram falha.
                 payload_raw = normalizar_payload_extracao(
-                    json.loads(response.text)
+                    json.loads(response.text), texto_original=conteudo_texto
                 )
 
                 dados_clinicos = DadosClinicosExtraidos.model_validate(payload_raw)

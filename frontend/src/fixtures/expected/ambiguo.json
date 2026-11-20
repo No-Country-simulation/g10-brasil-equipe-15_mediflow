@@ -1,6 +1,6 @@
 {
   "schema": "mediflow.fixture/2",
-  "fixture_id": "Borda_Score_084",
+  "fixture_id": "Ausencia_Paciente_Idade",
   "documento_ficticio": true,
   "tipo_de_teste": "funcional",
   "entrada": {
@@ -10,52 +10,57 @@
       "JPG"
     ],
     "renditions": {
-      "txt": "demo/Borda_Score_084/Borda_Score_084.txt",
-      "pdf": "demo/Borda_Score_084/Borda_Score_084.pdf",
-      "jpg": "demo/Borda_Score_084/Borda_Score_084.jpg"
+      "txt": "catalogo/Ausencia_Paciente_Idade/Ausencia_Paciente_Idade.txt",
+      "pdf": "catalogo/Ausencia_Paciente_Idade/Ausencia_Paciente_Idade.pdf",
+      "jpg": "catalogo/Ausencia_Paciente_Idade/Ausencia_Paciente_Idade.jpg"
     }
   },
   "resposta_esperada": {
     "status": "EM_REVISAO",
-    "documento_id": "DOC-932B35B3",
+    "documento_id": "DOC-CLIN-2026-DEMO0003",
     "classificacao": {
       "tipo_documento": "RECEITUARIO_MEDICO",
       "especialidade": [
         "Clínica Médica"
       ],
       "nivel_prioridade": "ROTINA",
-      "score_classificacao": 0.92
+      "score_classificacao": 1.0
     },
     "dados_extraidos": {
       "paciente": {
-        "nome": "Fernanda Lima Rocha",
-        "idade": 37
+        "nome": "Otávio Sampaio Reis",
+        "idade": null
       },
       "medico": {
-        "nome": "Dr. André Luiz Barbosa",
+        "nome": "Dra. Camila Ferreira Lopes",
         "crm": {
-          "numero": "165432",
+          "numero": "198765",
           "uf": "SP"
         }
       },
-      "diagnostico": "Lombalgia aguda",
-      "cid": "M54.5",
+      "diagnostico": "Cistite aguda não complicada",
+      "cid": "N30.0",
       "exames": [],
       "medicamentos": [
         {
-          "nome": "Ibuprofeno",
-          "dosagem": "400 mg",
-          "frequencia": null
+          "nome": "Nitrofurantoína",
+          "dosagem": "100 mg",
+          "frequencia": "a cada 6 horas"
         }
       ],
       "urgencia": "NAO"
     },
     "qualidade": {
-      "score_extracao": 0.84,
-      "score_combinado": 0.84,
+      "score_extracao": 0.7,
+      "score_combinado": 0.7,
       "limiar_aplicado": 0.85,
-      "campos_ausentes": [],
-      "campos_incertos": [],
+      "campos_ausentes": [
+        "exames",
+        "paciente.idade"
+      ],
+      "campos_incertos": [
+        "paciente.idade"
+      ],
       "conflitos": []
     },
     "decisao_roteamento": {
@@ -64,22 +69,16 @@
         "FILA_REVISAO_HUMANA"
       ],
       "requer_auditoria_humana": true,
-      "justificativa_roteamento": "Revisão humana obrigatória: score combinado 0.84 < limiar 0.85.",
+      "justificativa_roteamento": "Revisão humana obrigatória: campos obrigatórios ausentes: paciente.idade.",
       "notificacao": null
     },
     "armazenamento_oci": null,
     "erro": null
   },
-  "modo_fixture": {
-    "score_forcado": {
-      "score_classificacao": 0.92,
-      "score_extracao": 0.84
-    }
-  },
   "assercoes": [
-    "Score combinado 0,84 < 0,85 força revisão",
-    "A classificação e a extração em si estão corretas",
-    "Exige FIXTURE_MODE para forçar os scores"
+    "Idade ausente força revisão (RF-21)",
+    "Nome do paciente preservado",
+    "Idade não é inferida"
   ],
-  "observacoes": "O documento é uma receita de rotina legível. O desfecho de revisão vem exclusivamente do score forçado, não do conteúdo."
+  "observacoes": "Referência do simulador: ausência real de paciente.idade. Scores são ilustrativos; a API real calcula qualidade sem forçar score."
 }
