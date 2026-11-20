@@ -3,7 +3,7 @@
 > **Hackathon ONE G10 — Oracle Next Education & Alura**  
 > **Projeto 2:** Agente Autônomo para Triagem, Extração e Roteamento de Documentos Clínicos  
 > **Manual de Referência:** `34aa946f-2883-4917-aec1-aae0df0f43d1.pdf`  
-> **Status da Aplicação:** 245 testes automatizados via Pytest (100% verde)  
+> **Status da Aplicação:** 462 testes Pytest aprovados (1 pulado) em 21 arquivos + 306 testes Vitest aprovados em 27 arquivos  
 
 Bem-vindo ao guia oficial de contribuição do **MediFlow**! Este documento foi desenhado para orientar os 5 integrantes da equipe no fluxo de trabalho diário com GitFlow, organização de pastas, responsabilidades por módulo e padrões de qualidade inegociáveis.
 
@@ -47,43 +47,73 @@ Antes de criar qualquer arquivo novo, consulte a árvore oficial para colocar se
 g10-brasil-equipe-15_mediflow/
 ├── data/
 │   └── samples/                                <- Amostras clínicas dos 3 cenários do edital (PDF/JSON)
+├── deploy/                                     <- Empacotamento Docker e deploy OCI Always Free
+│   ├── Dockerfile                              <- Imagem backend Python (FastAPI + Streamlit)
+│   ├── Dockerfile.nginx                        <- Proxy reverso Nginx para stack completa
+│   ├── docker-compose.yml                      <- Stack completa (API + Streamlit + Nginx)
+│   ├── docker-compose.api-https.yml            <- Stack leve (API FastAPI + Caddy HTTPS para 1 GB RAM + Vercel)
+│   ├── deploy_oci.sh                           <- Automação de deploy da stack completa
+│   ├── deploy_oci_api_https.sh                 <- Automação de deploy da stack leve API + HTTPS
+│   ├── caddy/Caddyfile                         <- Proxy reverso com TLS automático via Let's Encrypt
+│   └── nginx/nginx.conf                        <- Configuração Nginx da stack completa
 ├── docs/                                       <- Documentação técnica e governança de QA
-│   ├── testes/                                 <- Contrato Canônico, Catálogo dos 79 Fixtures e Auditorias
+│   ├── testes/                                 <- Contrato Canônico, Catálogo dos 79 Fixtures, Visual Schemas e Revisões
+│   ├── GUIA_DEPLOY_OCI.md                      <- Guia passo a passo de deploy na OCI Always Free
+│   ├── GUIA_INTEGRACAO_API.md                  <- Contrato REST e integração do Frontend React / Streamlit
 │   └── GUIA_INTEGRACAO_LLM.md                  <- Guia de consumo do Ingestion Loader para IA
 │
 ├── src/                                        <- Código-fonte principal da aplicação Python
 │   ├── agents/                                 <- Agentes e Prompts de Inteligência Multimodal
-│   ├── api/                                    <- API REST FastAPI assíncrona (rotas, schemas, service)
+│   ├── api/                                    <- API REST FastAPI assíncrona (rotas, schemas, service, CORS)
 │   ├── app/                                    <- Bancada Streamlit de testes rápidos e auditoria médica (HiTL)
-│   │   └── streamlit_app.py                    <- Painel web visual interativo
+│   │   ├── streamlit_app.py                    <- Painel web visual interativo
+│   │   ├── triage_pipeline.py                  <- Pipeline de integração Streamlit -> Gemini -> LangGraph
+│   │   ├── gemini_key.py                       <- Proteção de chave de API na interface
+│   │   ├── oci_persistence.py                  <- Persistência e mensagens públicas seguras no Streamlit
+│   │   └── quality_indicator.py                <- Indicadores visuais de qualidade e confiança
 │   ├── ingestion/                              <- Camada de Ingestão e Gateway de Segurança
 │   │   └── loader.py                           <- Carregador blindado (10MB, 20 págs, sanitização, magic bytes)
 │   ├── schemas/                                <- Modelos Canônicos Pydantic v2
 │   │   └── clinical.py                         <- Contrato oficial (TriagemMediFlow, ErroResposta, etc.)
 │   ├── services/                               <- Serviços de Integração Multimodal
-│   │   └── gemini_service.py                   <- GeminiService (REST, timeout 15s, Pydantic v2, duplo fallback)
+│   │   └── gemini_service.py                   <- GeminiService (REST, timeout 30s, Pydantic v2, duplo fallback)
 │   ├── storage/                                <- Conector OCI Object Storage Always Free (oci_storage.py)
 │   ├── workflow/                               <- Motor de Orquestração Determinística (LangGraph)
+│   │   ├── extraction_adapter.py               <- Adaptador de envelopes clínicos para o grafo
 │   │   ├── graph.py                            <- Grafo de estados, nós e cálculo de regras R1 a R8
 │   │   └── state.py                            <- Estrutura do GraphState compartilhado
 │   └── config.py                               <- Configurações globais e leitura do .env
 │
 ├── scripts/                                    <- Utilitários de homologação e scripts de diagnóstico
-│   └── testar_oci.py                           <- Validação real ponta a ponta no bucket OCI Always Free
+│   ├── testar_oci.py                           <- Validação real ponta a ponta no bucket OCI Always Free
+│   ├── testar_historico_oci.py                 <- Validação real de persistência e histórico no OCI
+│   └── testar_simulacao_oci.py                 <- Validação da simulação de falhas OCI (EPT §12)
 │
-├── tests/                                      <- Suíte Oficial Pytest com 217 testes automatizados
+├── tests/                                      <- Suíte Oficial Pytest (21 arquivos — 462 passed, 1 skipped)
 │   ├── fixtures/                               <- Base de 79 fixtures canônicos (demo, catalogo, manifest.csv)
-│   ├── test_contrato_fixtures.py               <- 79 testes: ponto fixo dos fixtures e regras R1 a R8
-│   ├── test_workflow.py                        <- 73 testes: transições e arestas do LangGraph
-│   ├── test_ingestion.py                       <- 18 testes: arquivos físicos reais e limites
-│   ├── test_api.py                             <- 16 testes: endpoints assíncronos e validações EPT
-│   ├── test_gemini_service.py                  <- 9 testes unitários do GeminiService (REST, timeout 15s e fallback)
-│   ├── test_audit_items.py                     <- 8 testes dedicados de auditoria técnica e sanidade
-│   ├── test_oci_storage.py                     <- 8 testes: persistência OCI com SDK simulado (mock)
-│   └── test_schemas.py                         <- 7 testes: Pydantic v2 e envelopes de erro
+│   ├── test_contrato_fixtures.py               <- Ponto fixo dos 79 fixtures e regras R1 a R8
+│   ├── test_workflow.py                        <- Transições e arestas do LangGraph
+│   ├── test_ingestion.py                       <- Arquivos físicos reais, MIME e limites A6
+│   ├── test_api.py                             <- Endpoints assíncronos, status, histórico e EPT
+│   ├── test_cors.py                            <- Validação de CORS_ORIGINS
+│   ├── test_gemini_service.py                  <- GeminiService (REST, timeout 30s e fallback)
+│   ├── test_gemini_diagnostico_estruturado.py  <- Normalização de diagnóstico, CID e idade compacta
+│   ├── test_gemini_prioridades_dosagem.py      <- Prioridades, negação clínica e dosagens
+│   ├── test_gemini_workflow_adapter.py         <- Integração GeminiService -> LangGraph
+│   ├── test_demo_incertezas.py                 <- Cenários de demonstração e incertezas clínicas
+│   ├── test_oci_storage.py                     <- Persistência OCI com SDK simulado
+│   ├── test_historico_oci.py                   <- Recuperação e integridade de histórico OCI
+│   ├── test_pr13_persistencia_pendente.py      <- Reprocessamento e retentativa de persistência
+│   ├── test_streamlit_*.py                     <- Pipeline, persistência OCI e segurança de chave no Streamlit
+│   ├── test_quality_indicator.py               <- Indicadores de qualidade na interface
+│   ├── test_extraction_adapter.py              <- Adaptador de envelopes para o workflow
+│   ├── test_exemplos_extracao_workflow.py      <- Exemplos clínicos ponta a ponta no workflow
+│   ├── test_audit_items.py                     <- Auditoria técnica e sanidade
+│   └── test_schemas.py                         <- Pydantic v2 e envelopes de erro
 │
+├── frontend/                                   <- Portal Web Corporativo em React SPA (Vite + TypeScript + 306 testes Vitest)
 ├── testar_gemini.py                            <- Script de validação manual da IA com Google Gemini
-├── frontend/                                   <- Portal Web Corporativo em React SPA (Vite + TypeScript)
+├── .dockerignore                               <- Exclusões de build Docker (protege .env, .pem, .venv)
 ├── ARQUITETURA.md                              <- Especificação Técnica Oficial da Arquitetura
 ├── CONTRIBUTING.md                             <- Este Guia de Colaboração e GitFlow
 ├── README.md                                   <- Documentação Principal da Aplicação
@@ -105,8 +135,8 @@ Esta tabela mapeia o que já está homologado no projeto e o que ainda precisa s
 | **Bancada de Auditoria Médica Streamlit** | [`src/app/streamlit_app.py`](src/app/streamlit_app.py) | **Cristiano Oliveira e Time** | <mark>🟢 CONCLUÍDO</mark> | Painel funcional em Python para testes rápidos de laboratório e auditoria HiTL (atende ao diferencial do edital). |
 | **Persistência OCI Object Storage Always Free** | [`src/storage/`](src/storage/) & [`scripts/`](scripts/) | **Iza Paloma M. Coelho** | <mark>🟢 CONCLUÍDO</mark> | Conector OCI em Python implementado (`oci_storage.py`), com teste real (`scripts/testar_oci.py`) e 8 testes com mock. |
 | **API REST FastAPI Assíncrona** | [`src/api/`](src/api/) | **Cristiano Oliveira** | <mark>🟢 CONCLUÍDO</mark> | Endpoints assíncronos `/api/v1/triagens` (HTTP 202), status, histórico e health integrados com LangGraph e OCI. 16 testes unitários e de integração. |
-| **Agente Gemini Multimodal (Extração IA)** | [`src/services/gemini_service.py`](src/services/gemini_service.py) | **Luciana Freitag** | <mark>🟢 CONCLUÍDO</mark> | Implementado com Saídas Estruturadas Pydantic v2, transporte REST, timeout de 15s, modelos `gemini-3.8-flash` e `3.5-flash-lite`, duplo fallback seguro e 9 testes unitários. |
-| **Portal Web Corporativo em React SPA** | `frontend/` | **Giovane Brandino** | <mark>⚪ PENDENTE</mark> | **A fazer:** Criar projeto Vite + React + TypeScript + Tailwind consumindo os endpoints da API FastAPI. |
+| **Agente Gemini Multimodal (Extração IA)** | [`src/services/gemini_service.py`](src/services/gemini_service.py) | **Luciana Freitag** | <mark>🟢 CONCLUÍDO</mark> | Implementado com Saídas Estruturadas Pydantic v2, transporte REST, timeout de 30s, modelos `gemini-3.5-flash-lite` (padrão) e `gemini-3.8-flash` (fallback), prompts v1.1.0 e duplo fallback seguro. |
+| **Portal Web Corporativo em React SPA** | [`frontend/`](frontend/) | **Giovane Brandino** | <mark>🟢 CONCLUÍDO</mark> | Implementado em React + TypeScript + Vite + Tailwind CSS integrado à API FastAPI, com identidade visual oficial, modo demo, 306 testes Vitest e `oxlint` sem erros. |
 | **Gravação do Pitch e Demonstração Final** | Raiz / Docs | **Toda a Equipe** | <mark>⚪ PENDENTE</mark> | **A fazer:** Gravar vídeo de até 5 min demonstrando os 3 cenários clínicos do edital e gerar links de entrega. |
 
 ---
@@ -152,8 +182,9 @@ git commit -m "tipo(escopo): descrição da alteração no imperativo"
 **Regra Inegociável:** Antes de enviar seu código para o GitHub, rode a suíte completa de testes:
 ```bash
 python -m pytest
+npm --prefix frontend test
 ```
-> ⚠️ **Nenhum Pull Request será aceito se algum dos 208 testes estiver falhando.**
+> ⚠️ **Nenhum Pull Request será aceito se algum teste da suíte Pytest (462 testes) ou Vitest (306 testes) estiver falhando.**
 
 ### Passo 5: Enviar as alterações para o GitHub
 ```bash

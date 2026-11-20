@@ -25,6 +25,7 @@ classDiagram
         +DecisaoRoteamento decisao_roteamento
         +ArmazenamentoOCI armazenamento_oci
         +ErroProcessamento erro
+        +string versao_esquema
         +aplicar_regras() TriagemMediFlow
     }
 
@@ -114,6 +115,7 @@ classDiagram
         +string bucket
         +string caminho_objeto
         +string status_backup
+        +bool modo_simulacao
     }
 
     class ErroProcessamento {
@@ -156,19 +158,19 @@ Todos os enums utilizam **tokens em caixa alta sem acentos nem espaços**, com n
 ```mermaid
 graph LR
     subgraph ENUMS["Tokens Canônicos Controlados (Enums)"]
-        TD["<b>TipoDocumento</b><br/>• RECEITUARIO_MEDICO<br/>• LAUDO_EXAME_LABORATORIAL<br/>• LAUDO_EXAME_IMAGEM<br/>• GUIA_PROCEDIMENTO<br/>• RELATORIO_ALTA_INTERNACAO<br/>• ATESTADO_MEDICO<br/>• OUTRO<br/>• NAO_IDENTIFICADO"]
+        TD["TipoDocumento<br/>• RECEITUARIO_MEDICO<br/>• LAUDO_EXAME_LABORATORIAL<br/>• LAUDO_EXAME_IMAGEM<br/>• GUIA_PROCEDIMENTO<br/>• RELATORIO_ALTA_INTERNACAO<br/>• ATESTADO_MEDICO<br/>• OUTRO<br/>• NAO_IDENTIFICADO"]
         
-        NP["<b>NivelPrioridade</b><br/>• URGENTE<br/>• ROTINA<br/>• NAO_IDENTIFICADA"]
+        NP["NivelPrioridade<br/>• URGENTE<br/>• ROTINA<br/>• NAO_IDENTIFICADA"]
         
-        ST["<b>StatusTriagem</b><br/>• RECEBIDO<br/>• PROCESSANDO<br/>• PROCESSADO<br/>• EM_REVISAO<br/>• ERRO_PROCESSAMENTO<br/>• ERRO_PERSISTENCIA"]
+        ST["StatusTriagem<br/>• RECEBIDO<br/>• PROCESSANDO<br/>• PROCESSADO<br/>• EM_REVISAO<br/>• ERRO_PROCESSAMENTO<br/>• ERRO_PERSISTENCIA"]
         
-        DS["<b>Destino</b><br/>• FILA_URGENCIA_MEDICA<br/>• FARMACIA_HOSPITALAR<br/>• AUDITORIA_AUTORIZACOES<br/>• PRONTUARIO_ELETRONICO<br/>• FILA_REVISAO_HUMANA"]
+        DS["Destino<br/>• FILA_URGENCIA_MEDICA<br/>• FARMACIA_HOSPITALAR<br/>• AUDITORIA_AUTORIZACOES<br/>• PRONTUARIO_ELETRONICO<br/>• FILA_REVISAO_HUMANA"]
         
-        UG["<b>Urgencia</b><br/>• SIM<br/>• NAO<br/>• INDETERMINADO"]
+        UG["Urgencia<br/>• SIM<br/>• NAO<br/>• INDETERMINADO"]
         
-        GV["<b>Gravidade</b><br/>• ALTA<br/>• MEDIA<br/>• BAIXA"]
+        GV["Gravidade<br/>• ALTA<br/>• MEDIA<br/>• BAIXA"]
         
-        CE["<b>CodigoErro</b><br/>• FORMATO_NAO_SUPORTADO<br/>• CAMPOS_INVALIDOS<br/>• REQUISICAO_INVALIDA<br/>• ARQUIVO_MAIOR_QUE_LIMITE<br/>• MIME_INVALIDO<br/>• PDF_PROTEGIDO<br/>• PDF_CORROMPIDO<br/>• ERRO_PERSISTENCIA"]
+        CE["CodigoErro<br/>• FORMATO_NAO_SUPORTADO<br/>• CAMPOS_INVALIDOS<br/>• REQUISICAO_INVALIDA<br/>• ARQUIVO_MAIOR_QUE_LIMITE<br/>• MIME_INVALIDO<br/>• PDF_PROTEGIDO<br/>• PDF_CORROMPIDO<br/>• ERRO_PERSISTENCIA<br/>• FALHA_WORKFLOW"]
     end
 
     subgraph SCHEMAS["Modelos Pydantic v2"]
@@ -202,7 +204,7 @@ stateDiagram-v2
     
     state PROCESSANDO {
         [*] --> SanitizacaoMime: Limite 10.00MB e 20 páginas
-        SanitizacaoMime --> ExtracaoMultimodal: Gemini 1.5 + Schemas Canônicos
+        SanitizacaoMime --> ExtracaoMultimodal: Gemini 3.5 Flash-Lite / 3.8 Flash + Schemas Canônicos
         ExtracaoMultimodal --> AvaliacaoRegras: Validador Pydantic v2 + LangGraph
         AvaliacaoRegras --> [*]
     }
@@ -211,7 +213,7 @@ stateDiagram-v2
     PROCESSANDO --> EM_REVISAO: Score < 0.85 ou Incerteza / Ausência de Vital
     PROCESSANDO --> ERRO_PROCESSAMENTO: Falha na Leitura (PDF Corrompido / Protegido)
     
-    PROCESSADO --> PersistenciaOCI: Salva em /processados (/rotina ou /urgentes)
+    PROCESSADO --> PersistenciaOCI: Salva em /processados ou /processados/urgentes
     EM_REVISAO --> PersistenciaOCI: Salva em /auditoria_humana
     ERRO_PROCESSAMENTO --> [*]: Retorna ErroResposta / ErroProcessamento
 
@@ -239,7 +241,7 @@ O modelo [`TriagemMediFlow`](../../src/schemas/clinical.py) implementa um valida
 
 ```mermaid
 flowchart TD
-    START(["📄 Entrada Bruta:<br/>Classificacao + DadosExtraidos"]) --> CALC["1. Calcula Score Combinado:<br/><b>score_combinado = min(score_class, score_ext)</b><br/>Limiar canônico: <b>0.85</b>"]
+    START(["📄 Entrada Bruta:<br/>Classificacao + DadosExtraidos"]) --> CALC["1. Calcula Score Combinado:<br/>score_combinado = min(score_class, score_ext)<br/>Limiar canônico: 0.85"]
 
     CALC --> VITAL{"2. Campos Vitais Presentes?<br/>• paciente.nome<br/>• paciente.idade<br/>• medico.nome<br/>• medico.crm<br/>• diagnostico ou exames"}
 
@@ -252,14 +254,14 @@ flowchart TD
     %% Caminho de Ambiguidade
     SET_AMB --> AMB_URG{"Urgência Presente?"}
     
-    AMB_URG -- 🟢 SIM --> R2["<b>Regra R2 / R4: Urgência com Ambiguidade</b><br/>• Destinos: [FILA_URGENCIA_MEDICA, FILA_REVISAO_HUMANA]<br/>• Status: <b>EM_REVISAO</b><br/>• Notificação de Emergência Gerada"]
+    AMB_URG -- 🟢 SIM --> R2["Regra R2 / R4: Urgência com Ambiguidade<br/>• Destinos: [FILA_URGENCIA_MEDICA, FILA_REVISAO_HUMANA]<br/>• Status: EM_REVISAO<br/>• Notificação de Emergência Gerada"]
     
-    AMB_URG -- ❌ NÃO --> R3["<b>Regra R3: Rotina com Ambiguidade</b><br/>• Destinos: [FILA_REVISAO_HUMANA]<br/>• Status: <b>EM_REVISAO</b><br/>• Requer auditoria humana = True"]
+    AMB_URG -- ❌ NÃO --> R3["Regra R3: Rotina com Ambiguidade<br/>• Destinos: [FILA_REVISAO_HUMANA]<br/>• Status: EM_REVISAO<br/>• Requer auditoria humana = True"]
 
     %% Caminho Seguro
-    URG_CHECK -- 🟢 SIM --> R1["<b>Regra R1: Urgência Sem Ambiguidade</b><br/>• Destino: [FILA_URGENCIA_MEDICA]<br/>• Status: <b>PROCESSADO</b><br/>• Notificação de Emergência Imediata<br/>• Requer auditoria = False"]
+    URG_CHECK -- 🟢 SIM --> R1["Regra R1: Urgência Sem Ambiguidade<br/>• Destino: [FILA_URGENCIA_MEDICA]<br/>• Status: PROCESSADO<br/>• Notificação de Emergência Imediata<br/>• Requer auditoria = False"]
 
-    URG_CHECK -- ❌ NÃO --> R4["<b>Regra R4: Rotina Normal por Tipo</b><br/>• RECEITUARIO_MEDICO -> FARMACIA_HOSPITALAR<br/>• GUIA_PROCEDIMENTO -> AUDITORIA_AUTORIZACOES<br/>• LAUDOS / ATESTADO -> PRONTUARIO_ELETRONICO<br/>• Status: <b>PROCESSADO</b>"]
+    URG_CHECK -- ❌ NÃO --> R4["Regra R4: Rotina Normal por Tipo<br/>• RECEITUARIO_MEDICO -> FARMACIA_HOSPITALAR<br/>• GUIA_PROCEDIMENTO -> AUDITORIA_AUTORIZACOES<br/>• LAUDOS / ATESTADO -> PRONTUARIO_ELETRONICO<br/>• Status: PROCESSADO"]
 
     style R1 fill:#F8D7DA,stroke:#721C24,stroke-width:2px
     style R2 fill:#FFF3CD,stroke:#856404,stroke-width:2px
@@ -284,16 +286,16 @@ flowchart LR
     end
 
     subgraph FILAS["As 5 Filas Hospitalares Canônicas"]
-        F1["🚨 FILA_URGENCIA_MEDICA<br/><i>Achados críticos / TEP / Emergência</i>"]
-        F2["💊 FARMACIA_HOSPITALAR<br/><i>Receituários médicos de rotina</i>"]
-        F3["📋 AUDITORIA_AUTORIZACOES<br/><i>Guias TISS/TUSS de procedimentos</i>"]
-        F4["📁 PRONTUARIO_ELETRONICO<br/><i>Laudos (Imagem/Lab), Altas e Atestados</i>"]
-        F5["🧑‍⚕️ FILA_REVISAO_HUMANA<br/><i>Ambiguidade, rasura, score < 0.85</i>"]
+        F1["🚨 FILA_URGENCIA_MEDICA<br/>Achados críticos / TEP / Emergência"]
+        F2["💊 FARMACIA_HOSPITALAR<br/>Receituários médicos de rotina"]
+        F3["📋 AUDITORIA_AUTORIZACOES<br/>Guias TISS/TUSS de procedimentos"]
+        F4["📁 PRONTUARIO_ELETRONICO<br/>Laudos (Imagem/Lab), Altas e Atestados"]
+        F5["🧑‍⚕️ FILA_REVISAO_HUMANA<br/>Ambiguidade, rasura, score < 0.85"]
     end
 
     subgraph OCI["Nuvem Oracle (Always Free)"]
         BUCKET_URG[("processados/urgentes/")]
-        BUCKET_ROT[("processados/rotina/")]
+        BUCKET_ROT[("processados/")]
         BUCKET_AUD[("auditoria_humana/")]
     end
 
@@ -328,21 +330,21 @@ O diagrama a seguir ilustra a blindagem e o fluxo de extração estruturada do [
 
 ```mermaid
 flowchart TD
-    DocIn["📄 Documento Clínico (Texto / Imagem / PDF)"] --> Shield["🛡️ Prompt Shielding: Delimitador <documento_clinico><br/><i>Tratamento estrito como dado passivo</i>"]
+    DocIn["📄 Documento Clínico (Texto / Imagem / PDF)"] --> Shield["🛡️ Prompt Shielding: Delimitador documento_clinico<br/>Tratamento estrito como dado passivo"]
     
     subgraph LLM_RETRY["Camada 1: Redundância de Modelos Modernos da Google"]
-        Shield --> Try1["1ª Tentativa: gemini-3.8-flash<br/><i>(Timeout: 15s | temperature=0.0)</i>"]
-        Try1 -- "Sucesso" --> ParsePydantic["✅ Validação Estruturada Pydantic v2<br/>(_ClassificacaoDocumentoSchema / _DadosClinicosExtraidosSchema)"]
-        Try1 -- "Timeout / Erro 404 / 429" --> Try2["2ª Tentativa: gemini-3.5-flash-lite<br/><i>(Fallback de Modelo Econômico e Leve)</i>"]
+        Shield --> Try1["1ª Tentativa: gemini-3.5-flash-lite<br/>(Timeout: 30s | temperature=0.0)"]
+        Try1 -- "Sucesso" --> ParsePydantic["✅ Validação Estruturada Pydantic v2<br/>(ClassificacaoDocumento / DadosClinicosExtraidos)"]
+        Try1 -- "Timeout / Erro 404 / 429" --> Try2["2ª Tentativa: gemini-3.8-flash<br/>(Fallback de Modelo Alternativo)"]
         Try2 -- "Sucesso" --> ParsePydantic
     end
 
     subgraph CLINICAL_FAILSAFE["Camada 2: Fallback Clínico de Segurança (Seção 12 E.F.)"]
-        Try2 -- "Falha Total / Sem Conexão / Chave Inválida" --> FailSafe["⚠️ _fallback_classificacao() / _fallback_extracao()<br/><i>tipo_documento = NAO_IDENTIFICADO<br/>score_confianca = 0.0</i>"]
+        Try2 -- "Falha Total / Sem Conexão / Chave Inválida" --> FailSafe["⚠️ _fallback_classificacao() / _fallback_envelope()<br/>tipo_documento = NAO_IDENTIFICADO<br/>score_confianca = 0.0"]
     end
 
     ParsePydantic --> StateGraph["⚖️ Grafo LangGraph (Roteamento Determinístico)"]
-    FailSafe --> RetencaoCompulsoria["🧑‍⚕️ Destino Compulsório: FILA_REVISAO_HUMANA<br/><i>Status: EM_REVISAO (Nenhum paciente é prejudicado)</i>"]
+    FailSafe --> RetencaoCompulsoria["🧑‍⚕️ Destino Compulsório: FILA_REVISAO_HUMANA<br/>Status: EM_REVISAO (Nenhum paciente é prejudicado)"]
 
     style DocIn fill:#E1F5FE,stroke:#0288D1,stroke-width:2px
     style Shield fill:#EDE7F6,stroke:#512DA8,stroke-width:2px
@@ -368,9 +370,9 @@ flowchart TD
 | **`Conflito`** | [`clinical.py`](../../src/schemas/clinical.py) | Inconsistências clínicas detectadas (ex: `DOSE_SUSPEITA`, `CRM_INCOMPATIVEL`, `DOCUMENTO_MUTILADO`). | `Gravidade` (`ALTA`, `MEDIA`, `BAIXA`) |
 | **`DecisaoRoteamento`** | [`clinical.py`](../../src/schemas/clinical.py) | Resultado do motor clínico: destino principal, lista de filas, flag de auditoria humana, justificativa em linguagem natural e alerta. | `Destino`, `Notificacao` |
 | **`ArmazenamentoOCI`** | [`clinical.py`](../../src/schemas/clinical.py) | Metadados de persistência em nuvem Oracle (Always Free): bucket, caminho do objeto e status do backup. | — |
-| **`GeminiService`** | [`gemini_service.py`](../../src/services/gemini_service.py) | **Serviço de IA Multimodal:** Orquestra classificação documental e extração com transporte REST, timeout de 15s e duplo fallback seguro. | `_ClassificacaoDocumentoSchema`, `_DadosClinicosExtraidosSchema` |
+| **`GeminiService`** | [`gemini_service.py`](../../src/services/gemini_service.py) | **Serviço de IA Multimodal:** Orquestra classificação documental e extração com transporte REST, timeout de 30s, prompts v1.1.0 e duplo fallback seguro. | `ClassificacaoDocumento`, `DadosClinicosExtraidos` |
 | **`ErroProcessamento`** | [`clinical.py`](../../src/schemas/clinical.py) | Erros ocorridos durante a leitura de documentos aceitos no pipeline. | `CodigoErro` |
-| **`ErroResposta`** | [`clinical.py`](../../src/schemas/clinical.py) | Rejeição HTTP imediata na camada de ingestão (`400`, `413`, `415`). | `CodigoErro` |
+| **`ErroResposta`** | [`clinical.py`](../../src/schemas/clinical.py) | Rejeição HTTP imediata na camada de ingestão (`400`, `413`, `415`, `422`). | `CodigoErro` |
 
 ---
 
@@ -379,5 +381,5 @@ flowchart TD
 1. **Proteção Extra (`extra="ignore"`):** Todos os modelos aceitam payloads com campos adicionais sem quebrar a desserialização, garantindo interoperabilidade entre agentes e versões da API.
 2. **Propriedades de Conveniência:** Suporte transparente a nomes legados (`medico_solicitante`, `diagnostico_principal`, `cid_extraido`, `cid_sugerido`, `score_confianca_classificacao`).
 3. **Ponto Fixo e Idempotência:** Uma instância de `TriagemMediFlow` revalidada (`TriagemMediFlow.model_validate(obj.model_dump())`) preserva rigorosamente o mesmo estado, sem oscilação de score ou destinos.
-4. **Cobertura Integral de Testes:** 100% dos modelos são validados contra os **79 fixtures canônicos** e auditados pelos **245 testes automatizados (100% verde)** em [`tests/test_contrato_fixtures.py`](../../tests/test_contrato_fixtures.py), [`tests/test_schemas.py`](../../tests/test_schemas.py), [`tests/test_workflow.py`](../../tests/test_workflow.py), [`tests/test_ingestion.py`](../../tests/test_ingestion.py), [`tests/test_api.py`](../../tests/test_api.py), [`tests/test_gemini_service.py`](../../tests/test_gemini_service.py), [`tests/test_audit_items.py`](../../tests/test_audit_items.py) e [`tests/test_oci_storage.py`](../../tests/test_oci_storage.py).
+4. **Cobertura Integral de Testes:** 100% dos modelos são validados contra os **79 fixtures canônicos** e auditados pela suíte de **462 testes Pytest aprovados (1 pulado)** em **21 arquivos** em [`tests/`](../../tests/), além de **306 testes Vitest** em [`frontend/`](../../frontend/).
 

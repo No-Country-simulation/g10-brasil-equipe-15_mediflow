@@ -70,7 +70,7 @@ flowchart TD
 
     subgraph STORAGE["☁️ Camada 4: Oracle Cloud (OCI Always Free)"]
         OCI_IN[("Bucket OCI: /recebidos<br/>(Mídia original do upload)")]
-        OCI_PROC[("Bucket OCI: /processados<br/>(/urgentes e /rotina)")]
+        OCI_PROC[("Bucket OCI: /processados<br/>(/processados e /processados/urgentes)")]
         OCI_AUDIT[("Bucket OCI: /auditoria_humana<br/>(Documentos retidos)")]
     end
 
@@ -126,10 +126,10 @@ O React envia documentos e consulta resultados pela API FastAPI. A bancada Strea
     - **Protocolo de Rede Resiliente:** Configurado com `genai.configure(transport="rest")` para evitar problemas de socket/gRPC no ambiente Windows.
     - **Timeout Restrito (30s):** Limita as requisições com `request_options={"timeout": 30.0}` para garantir previsibilidade sem travar o pipeline.
     - **Saídas Estruturadas Nativas (Pydantic v2):** Utiliza `response_mime_type: "application/json"` validado com `ClassificacaoDocumento` e `DadosClinicosExtraidos`, garantindo validação rigorosa sem alucinação de formato.
-    - **Defesa Contra Prompt Injection:** Todo conteúdo documental é envolvido nas tags `<documento_clinico>` e interpretado estritamente como dado passivo.
+    - **Prompts Versionados:** `VERSAO_PROMPT_CLASSIFICACAO = "1.0.0"` e `VERSAO_PROMPT_EXTRACAO = "1.1.0"`, com isolamento de segurança contra prompt injection (`<documento_clinico>`) e regras explícitas de negação clínica, idade e exames laboratoriais.
     - **Duplo Fallback de Alta Disponibilidade:**
       1. *Fallback de Modelos:* Tenta primeiro `gemini-3.5-flash-lite` e, em caso de falha, tenta `gemini-3.8-flash`.
-      2. *Fallback Clínico (Fail-Safe Seção 12 da E.F. v1.0):* Se houver falha total ou ausência de chave de API, gera `ClassificacaoDocumento(tipo_documento=NAO_IDENTIFICADO, score=0.0)`, desviando o documento para `FILA_REVISAO_HUMANA` sem quebrar a API.
+      2. *Fallback Clínico (Fail-Safe Seção 12 da E.F. v1.2):* Se houver falha total ou ausência de chave de API, gera `ClassificacaoDocumento(tipo_documento=NAO_IDENTIFICADO, score=0.0)`, desviando o documento para `FILA_REVISAO_HUMANA` sem quebrar a API.
   - **Contrato Canônico Pydantic v2 ([`src/schemas/clinical.py`](src/schemas/clinical.py)):** Modelo de dados unificado com validação estrita de tokens, enums resilientes via `_missing_` e suporte a submodelos dedicados (`Paciente`, `Medico`, `Crm`, `ItemExameLaboratorial`, `ConflitoQualidade`).
 
 ### 3.3 Camada 3: Motor de Decisão LangGraph (`src/workflow/`)
@@ -163,7 +163,12 @@ A camada de apresentação do MediFlow adota a **Estratégia Dual**, garantindo 
     - `GET /api/v1/triagens/{id}`: Retorna o modelo canônico completo [`TriagemMediFlow`](src/schemas/clinical.py) enriquecido com o roteamento do LangGraph e metadados OCI.
     - `GET /api/v1/triagens/{id}/status`: Retorna o status (`RECEBIDO`, `PROCESSANDO`, `PROCESSADO`, `EM_REVISAO`, `ERRO_PROCESSAMENTO` ou `ERRO_PERSISTENCIA`), os destinos, a indicação de revisão humana e o campo `concluido` para controlar o polling.
     - `GET /api/v1/triagens/{id}/historico`: Linha do tempo auditável de eventos emitidos durante o ciclo de vida do documento (ingestão, extração, roteamento LangGraph e OCI).
-    - `GET /api/v1/health`: Endpoint de sanidade e liveness probe para orquestradores de contêiner e monitoramento hospitalar.
+    - `POST /api/v1/triagens/{id}/reprocessar-persistencia`: Reexecuta a persistência no OCI Object Storage para triagens que ficaram em `ERRO_PERSISTENCIA`, sem perder os dados clínicos já extraídos.
+    - `GET /api/v1/health` (e `GET /health`): Endpoint de sanidade e liveness probe para orquestradores de contêiner e monitoramento hospitalar.
+  - **CORS e Topologias de Deploy (`deploy/`):**
+    - Controle de origens via `CORS_ORIGINS` (em `src/config.py` e `src/api/main.py`), permitindo consumo seguro pelo frontend React hospedado em outro domínio (ex.: Vercel) sem abrir wildcard inseguro.
+    - **Stack completa (`deploy/docker-compose.yml` + `deploy/deploy_oci.sh`):** API FastAPI + Streamlit + Nginx (indicado para VMs com 2 GB+ de RAM).
+    - **Stack leve API + HTTPS (`deploy/docker-compose.api-https.yml` + `deploy/caddy/Caddyfile` + `deploy/deploy_oci_api_https.sh`):** API FastAPI (`--workers 1`) atrás do Caddy com TLS automático via Let's Encrypt (`API_DOMAIN`), desenhada para OCI Always Free `VM.Standard.E2.1.Micro` (1 GB RAM + swap) integrada ao portal React na Vercel. Ver [Guia de Deploy OCI](docs/GUIA_DEPLOY_OCI.md).
   - **Blindagem Contra Falhas e Segurança:**
     - Erros de validação HTTP 400, 413, 415 e 422 mapeados para envelopes controlados [`ErroResposta`](src/schemas/clinical.py).
     - Exception handlers globais protegem contra vazamento de stack traces e dados sensíveis (CT-080 da EPT).
@@ -196,7 +201,7 @@ stateDiagram-v2
     PROCESSANDO --> EM_REVISAO: Score < 0.85 ou Incerteza / Ausência de Vital
     PROCESSANDO --> ERRO_PROCESSAMENTO: Falha de Leitura / PDF Corrompido / Senha
     
-    PROCESSADO --> PersistenciaOCI: Salva em /processados (/rotina ou /urgentes)
+    PROCESSADO --> PersistenciaOCI: Salva em /processados ou /processados/urgentes
     EM_REVISAO --> PersistenciaOCI: Salva em /auditoria_humana
     ERRO_PROCESSAMENTO --> [*]: Retorna ErroResposta / ErroProcessamento
 
@@ -379,10 +384,11 @@ Os testes automatizados cobrem contratos, ingestão, extração, roteamento, API
 
 ### Execuções de referência
 
-- Revisão integrada do PR #26: **220 testes aprovados e 1 pulado**, na combinação local do commit `5ad3865` com a `develop` no `54eac2b`. Foram executadas as suítes de persistência Streamlit, indicadores de qualidade, pipeline Streamlit, API, histórico OCI, workflow e ingestão.
-- Frontend React: **298 testes aprovados em 25 arquivos**, no commit `18b234b8`, com 2 workers.
+- Backend Python (`develop` `a716d0c`): **462 testes aprovados e 1 pulado** em **21 arquivos** (`python -m pytest`).
+- Frontend React (`develop` `a716d0c`): **306 testes aprovados em 27 arquivos** (`npm test`), `oxlint` com 0 warnings e 0 erros (107 arquivos) e build de produção (`tsc -b && vite build`) aprovado.
+- Persistência OCI real (`develop` `a716d0c`): `python -m scripts.testar_historico_oci --executar-real` aprovado com **3/3 cenários verificados byte a byte** no bucket `mediflow-documentos`.
 
-Essas execuções correspondem às versões e aos conjuntos de testes indicados. Os resultados da versão publicada devem ser registrados com o SHA da entrega.
+Essas execuções correspondem ao commit `a716d0c` na branch `develop`. Os resultados da versão publicada em `main` devem ser registrados com o SHA da entrega.
 
 Os testes com respostas simuladas verificam contratos e regras. As chamadas com Gemini real e as operações no bucket real possuem evidências próprias de execução.
 
@@ -437,24 +443,41 @@ g10-brasil-equipe-15_mediflow/
 │       ├── 01_laudo_rotina.pdf                 <- PDF digital de rotina
 │       ├── 02_cenario_urgencia.json            <- TEP Agudo I26.9 (Urgência com alerta)
 │       ├── 02_laudo_urgencia_tep.pdf           <- PDF digital de urgência
-│       └── 03_cenario_ambiguidade.json         <- Receita com dose anômala (Revisão humana)
+│       ├── 03_cenario_ambiguidade.json         <- Receita com dose anômala (Revisão humana)
+│       └── 03_receituario_ambiguo.pdf          <- PDF de receituário ambíguo
+│
+├── deploy/                                     <- Empacotamento Docker e deploy OCI Always Free
+│   ├── Dockerfile                              <- Imagem backend Python (FastAPI + Streamlit)
+│   ├── Dockerfile.nginx                        <- Proxy reverso Nginx (stack completa)
+│   ├── docker-compose.yml                      <- Stack completa (API + Streamlit + Nginx)
+│   ├── docker-compose.api-https.yml            <- Stack leve (API FastAPI + Caddy HTTPS para 1 GB RAM + Vercel)
+│   ├── deploy_oci.sh                           <- Automação de deploy da stack completa
+│   ├── deploy_oci_api_https.sh                 <- Automação de deploy da stack leve API + HTTPS
+│   ├── caddy/Caddyfile                         <- Reverse proxy com TLS automático via Let's Encrypt
+│   └── nginx/nginx.conf                        <- Configuração Nginx da stack completa
 │
 ├── docs/                                       <- Documentação técnica e governança de QA
 │   ├── testes/                                 <- Central de Engenharia de Qualidade
 │   │   ├── CONTRATO_DE_DADOS.md                <- Contrato canônico unificado (fonte da verdade)
 │   │   ├── CATALOGO_DE_DOCUMENTOS_DE_TESTE.md  <- Catálogo completo dos 79 fixtures
 │   │   ├── AUDITORIA_2026-10-20.md             <- Histórico de resolução de pendências
+│   │   ├── REVISAO_DEMO_2026-11-20.md          <- Registro de revisão dos cenários de demonstração
 │   │   ├── VISUAL_SCHEMAS.md                   <- Guia visual com diagramas Mermaid autoritativos
 │   │   ├── Mapa_de_Documentos_de_Teste_MediFlow.pdf <- Matriz visual de rastreabilidade (PDF)
 │   │   └── README.md                           <- Guia de navegação de testes e QA
+│   ├── GUIA_DEPLOY_OCI.md                      <- Guia passo a passo de deploy na OCI Always Free
+│   ├── GUIA_INTEGRACAO_API.md                  <- Contrato REST e integração do Frontend React / Streamlit
 │   └── GUIA_INTEGRACAO_LLM.md                  <- Guia de consumo do Ingestion Loader para IA
 │
 ├── src/                                        <- Código-fonte da aplicação (Python Backend & IA)
 │   ├── agents/                                 <- Estrutura de agentes do sistema
-│   ├── api/                                    <- API REST FastAPI Assíncrona (/api/v1/triagens)
+│   ├── api/                                    <- API REST FastAPI Assíncrona (/api/v1/triagens, CORS)
 │   ├── app/                                    <- Interfaces Python (Streamlit HiTL)
 │   │   ├── streamlit_app.py                    <- Painel web de auditoria médica e testes rápidos
-│   │   └── triage_pipeline.py                  <- Pipeline que conecta GeminiService ao grafo
+│   │   ├── triage_pipeline.py                  <- Pipeline que conecta GeminiService ao grafo
+│   │   ├── gemini_key.py                       <- Proteção de chave de API na interface
+│   │   ├── oci_persistence.py                  <- Persistência e mensagens públicas seguras no Streamlit
+│   │   └── quality_indicator.py                <- Indicadores visuais de qualidade e confiança
 │   ├── ingestion/                              <- Camada de Ingestão e Gateway de Segurança
 │   │   └── loader.py                           <- Carregador blindado (10MB, 20 págs, MIME, magic bytes)
 │   ├── schemas/                                <- Modelos de Dados Pydantic v2
@@ -469,35 +492,44 @@ g10-brasil-equipe-15_mediflow/
 │   └── config.py                               <- Configurações globais e variáveis de ambiente
 │
 ├── scripts/                                    <- Utilitários de homologação e scripts de diagnóstico
+│   ├── testar_historico_oci.py                 <- Validação real de persistência e histórico no bucket OCI
 │   ├── testar_simulacao_oci.py                 <- Validação da simulação de falhas OCI do catálogo EPT v1.0 (§12)
 │   └── testar_oci.py                           <- Validação real ponta a ponta no bucket OCI Always Free
 │
-├── tests/                                      <- Testes automatizados com Pytest
+├── tests/                                      <- Testes automatizados com Pytest (21 arquivos — 462 passed, 1 skipped)
 │   ├── test_workflow.py                        <- Transições e arestas do LangGraph
 │   ├── test_contrato_fixtures.py               <- Contratos das fixtures e regras R1 a R8
-│   ├── test_api.py                            <- Endpoints REST FastAPI e EPT
-│   ├── test_extraction_adapter.py             <- Adaptação de envelopes clínicos
-│   ├── test_ingestion.py                      <- Formatos, limites e rejeições de arquivos
-│   ├── test_gemini_service.py                 <- GeminiService, transporte REST, timeout e fallback
-│   ├── test_gemini_workflow_adapter.py        <- Integração entre GeminiService e workflow
-│   ├── test_audit_items.py                    <- Auditoria técnica e sanidade
-│   ├── test_oci_storage.py                    <- Persistência OCI com SDK simulado
-│   ├── test_schemas.py                        <- Pydantic v2 e envelopes de erro
-│   ├── test_streamlit_pipeline.py             <- Pipeline Streamlit e preservação de sinais
+│   ├── test_api.py                             <- Endpoints REST FastAPI e EPT
+│   ├── test_cors.py                            <- Validação de CORS_ORIGINS
+│   ├── test_extraction_adapter.py              <- Adaptação de envelopes clínicos
+│   ├── test_ingestion.py                       <- Formatos, limites e rejeições de arquivos
+│   ├── test_gemini_service.py                  <- GeminiService, transporte REST, timeout e fallback
+│   ├── test_gemini_diagnostico_estruturado.py  <- Normalização de diagnóstico, CID e idade compacta
 │   ├── test_gemini_prioridades_dosagem.py      <- Prioridades e dosagens na extração
+│   ├── test_gemini_workflow_adapter.py         <- Integração entre GeminiService e workflow
+│   ├── test_demo_incertezas.py                 <- Cenários de demonstração e incertezas clínicas
+│   ├── test_audit_items.py                     <- Auditoria técnica e sanidade
+│   ├── test_oci_storage.py                     <- Persistência OCI com SDK simulado
+│   ├── test_historico_oci.py                   <- Recuperação e integridade de histórico OCI
+│   ├── test_pr13_persistencia_pendente.py      <- Persistência pendente e retentativa OCI
+│   ├── test_schemas.py                         <- Pydantic v2 e envelopes de erro
+│   ├── test_quality_indicator.py               <- Indicadores de qualidade na interface
+│   ├── test_streamlit_pipeline.py              <- Pipeline Streamlit e preservação de sinais
+│   ├── test_streamlit_oci_persistence.py       <- Persistência OCI e mensagens seguras no Streamlit
+│   ├── test_streamlit_api_key_security.py      <- Segurança da chave de API no Streamlit
 │   ├── test_exemplos_extracao_workflow.py      <- Exemplos de extração no workflow
-│   ├── test_pr13_persistencia_pendente.py     <- Persistência pendente e retentativa OCI
 │   └── fixtures/                               <- Base de 79 fixtures canônicos
 │       ├── demo/                               <- 12 casos essenciais para o pitch (TXT, PDF, JPG, JSON)
 │       ├── catalogo/                           <- 67 casos avançados (qualidade, borda, limites)
 │       └── manifest.csv                        <- Rastreabilidade formal em formato de máquina
 │
 ├── testar_gemini.py                            <- Script de validação manual da IA com Google Gemini
+├── .dockerignore                               <- Exclusões de build Docker (.env, .pem, .venv)
 ├── ARQUITETURA.md                              <- Especificação Técnica Oficial da Arquitetura
 ├── README.md                                   <- Documentação Principal do Repositório
 ├── pytest.ini                                  <- Configuração corporativa do Pytest
 ├── requirements.txt                            <- Dependências oficiais do ecossistema Python
-└── .env.example                                <- Modelo de chaves (Gemini API e OCI Always Free)
+└── .env.example                                <- Modelo de chaves (Gemini API, OCI, CORS_ORIGINS, API_DOMAIN)
 ```
 
 ---
