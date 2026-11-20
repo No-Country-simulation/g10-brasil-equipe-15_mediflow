@@ -32,14 +32,15 @@ describe('normalizarTriagem — cenários da demo (formato anterior)', () => {
     expect(t.decisao_roteamento?.notificacao?.mensagem).toContain('DOC-2026-002')
   })
 
-  it('ambiguidade: score abaixo do limiar fica em revisão humana', () => {
+  it('ambiguidade: idade ausente fica somente em revisão humana', () => {
     const t = CENARIOS_DEMO.ambiguo
     expect(t.status).toBe('EM_REVISAO')
     expect(t.qualidade?.score_combinado).toBeLessThan(t.qualidade?.limiar_aplicado ?? 0)
-    expect(t.qualidade?.campos_ausentes).toEqual(['medico.nome', 'medico.crm'])
+    expect(t.qualidade?.campos_ausentes).toContain('paciente.idade')
+    expect(t.dados_extraidos?.paciente.idade).toBeNull()
     expect(t.decisao_roteamento?.requer_auditoria_humana).toBe(true)
     expect(t.decisao_roteamento?.destino_principal).toBe('FILA_REVISAO_HUMANA')
-    expect(t.decisao_roteamento?.destinos).toEqual(['FILA_REVISAO_HUMANA', 'FARMACIA_HOSPITALAR'])
+    expect(t.decisao_roteamento?.destinos).toEqual(['FILA_REVISAO_HUMANA'])
   })
 
   it('preenche os campos obrigatórios do tipo que o formato anterior não tem', () => {
@@ -63,7 +64,8 @@ describe('normalizarTriagem — contrato atual (expected.json)', () => {
   it('rotina e ambiguidade batem com o manifesto', () => {
     expect(RESPOSTAS_ESPERADAS.rotina.decisao_roteamento?.destinos).toEqual(['PRONTUARIO_ELETRONICO'])
     expect(RESPOSTAS_ESPERADAS.ambiguo.status).toBe('EM_REVISAO')
-    expect(RESPOSTAS_ESPERADAS.ambiguo.qualidade?.score_combinado).toBe(0.84)
+    expect(RESPOSTAS_ESPERADAS.ambiguo.qualidade?.campos_ausentes).toContain('paciente.idade')
+    expect(RESPOSTAS_ESPERADAS.ambiguo.decisao_roteamento?.destinos).toEqual(['FILA_REVISAO_HUMANA'])
   })
 
   it('é idempotente: normalizar duas vezes dá o mesmo resultado', () => {

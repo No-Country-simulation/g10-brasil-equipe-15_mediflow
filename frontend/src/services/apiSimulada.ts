@@ -66,7 +66,7 @@ export function limparSimulacao() {
 /** Escolhe o cenário pelo conteúdo enviado, que é o que os casos de teste da tela carregam. */
 export function escolherCenario(nome: string, texto: string): IdCenario {
   const base = `${nome} ${texto}`.toLowerCase()
-  if (base.includes('borda_score') || base.includes('lombalgia')) return 'ambiguo'
+  if (base.includes('ausencia_paciente_idade') || base.includes('borda_score') || base.includes('lombalgia')) return 'ambiguo'
   if (base.includes('laudodeimagem_pdf') || base.includes('tromboembolismo')) return 'urgente'
   return 'rotina'
 }

@@ -114,13 +114,17 @@ O diagrama representa o fluxo da API consumida pelo React. A bancada Streamlit e
 
 ## 🧪 Cenários de Demonstração
 
-Testamos a robustez do **MediFlow** através dos 3 cenários clínicos obrigatórios do edital:
+Os três cenários exercitam rotina, urgência e revisão humana. O modo simulado usa respostas de referência; a API real extrai os dados e calcula a qualidade a cada execução.
 
-| Cenário | Tipo de Documento | Score Extraído | Destino Atribuído | Status Resultante |
-| :--- | :--- | :---: | :--- | :---: |
-| **1. Rotina** | RX de Tórax Normal | `0.94` (High) | `PRONTUARIO_ELETRONICO` | <mark>🟢 PROCESSADO</mark> |
-| **2. Urgência** | Angiotomografia (TEP Agudo - CID I26.9) | `0.98` (High) | `FILA_URGENCIA_MEDICA` | <mark>🚨 PROCESSADO — prioridade URGENTE, com alerta simulado</mark> |
-| **3. Ambíguo** | Receita Manuscrita Rasurada | `0.65` (Low) | `FILA_REVISAO_HUMANA` | <mark>🟡 EM_REVISAO</mark> |
+| Cenário | Documento do card | Critério | Destino esperado |
+| :--- | :--- | :--- | :--- |
+| **1. Rotina** | `Matriz_LaudoDeImagem_Texto.pdf` | Documento completo, sem urgência e sem impedimentos | `PROCESSADO` / `PRONTUARIO_ELETRONICO` |
+| **2. Urgência** | Texto de `Matriz_LaudoDeImagem_Pdf.txt` | TEP afirmado; CID ausente não deve ser inventado | `PROCESSADO` / `FILA_URGENCIA_MEDICA`, com alerta simulado |
+| **3. Revisão** | `Ausencia_Paciente_Idade.jpg` | Idade realmente ausente; deve permanecer nula | `EM_REVISAO` / somente `FILA_REVISAO_HUMANA` |
+
+Não existe score fixo garantido para um documento. Na rodada real de referência do SHA `4bd46f0`, a imagem sem idade terminou em revisão nas cinco execuções, com score combinado `0,70`, sem alterar o limiar `0,85`. A rodada também registrou uma divergência de transcrição do medicamento; estabilidade de roteamento não significa fidelidade integral da extração. A evidência da versão final deve identificar seu SHA e suas próprias execuções.
+
+`Borda_Score_084` continua no catálogo para testes controlados de limite; não é o exemplo de revisão da demonstração com Gemini real.
 
 ---
 
@@ -160,18 +164,27 @@ Testamos a robustez do **MediFlow** através dos 3 cenários clínicos obrigató
     "nivel_prioridade": "ROTINA"
   },
   "qualidade": {
-    "score_combinado": 0.94,
+    "score_combinado": 1.0,
     "limiar_aplicado": 0.85
   },
   "decisao_roteamento": {
     "destino_principal": "PRONTUARIO_ELETRONICO",
     "destinos": ["PRONTUARIO_ELETRONICO"],
-    "requer_auditoria_humana": false
+    "requer_auditoria_humana": false,
+    "notificacao": null
+  },
+  "armazenamento_oci": {
+    "bucket": "mediflow-documentos",
+    "caminho_objeto": "processados/DOC-CLIN-2026-8F31A92B/resultado.json",
+    "status_backup": "sucesso",
+    "modo_simulacao": false
   }
 }
 ```
 
 A resposta completa segue o contrato `TriagemMediFlow`. O campo `status` informa o resultado funcional, inclusive estados de erro retornados com HTTP `200`. Consulte o [Guia de Integração da API](docs/GUIA_INTEGRACAO_API.md) para o contrato completo.
+
+**Scores diferentes no JSON:** `dados_extraidos.score_confianca_extracao` é a confiança declarada pelo extrator (ou o padrão do schema quando omitida). `qualidade.score_extracao` é a qualidade determinística calculada a partir de `1,0`, descontando ausências obrigatórias, incertezas e conflitos. O roteamento usa `qualidade.score_combinado = min(score_classificacao, qualidade.score_extracao)` e os demais gatilhos de revisão. Por isso, a confiança declarada `0,90` pode coexistir com qualidade `1,00`; nenhuma delas certifica correção clínica.
 
 </details>
 

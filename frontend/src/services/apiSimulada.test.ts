@@ -34,6 +34,7 @@ describe('API simulada (modo demo)', () => {
       ['Matriz_LaudoDeImagem_Texto.pdf', '', 'rotina'],
       ['Matriz_LaudoDeImagem_Pdf.pdf', '', 'urgente'],
       ['Borda_Score_084.pdf', '', 'ambiguo'],
+      ['Ausencia_Paciente_Idade.jpg', '', 'ambiguo'],
       ['', 'Tromboembolismo pulmonar agudo', 'urgente'],
       ['', 'Lombalgia aguda, score baixo', 'ambiguo'],
       ['', 'Qualquer outro texto', 'rotina'],

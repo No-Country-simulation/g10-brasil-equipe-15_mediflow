@@ -142,18 +142,20 @@ export function CardMedicamentos({ triagem }: { triagem: TriagemMediFlow }) {
               {medicamentos.map((m, indice) => {
                 const sinais = conflitosDoMedicamento(conflitos, indice)
                 const doseSuspeita = sinais.some((s) => s.campos.some((c) => /dose|dosagem/.test(c)))
+                const doseIncerta = triagem.qualidade?.campos_incertos.includes(`medicamentos[${indice}].dosagem`) ?? false
                 return (
                   <tr key={`${m.nome}-${indice}`} className="border-t border-border-subtle">
                     <td className={cx(celula, 'font-semibold text-text')}>{m.nome}</td>
                     <td className={cx(celula, 'font-semibold text-text', doseSuspeita && 'bg-status-warning-bg')}>
-                      {m.dosagem ?? <span className="font-normal text-text-secondary">não consta</span>}
+                      {m.dosagem ?? <span className="font-normal text-text-secondary">{doseIncerta ? 'incerta ou ilegível' : 'não consta'}</span>}
                     </td>
                     <td className={cx(celula, 'text-text-body')}>
                       {m.frequencia ?? <span className="text-text-secondary">não consta</span>}
                     </td>
                     <td className={celula}>
                       <div className="flex flex-wrap gap-x-1 gap-y-1">
-                        {sinais.length === 0 ? (
+                        {doseIncerta && <Tag tom="chip">Dose incerta ou ilegível</Tag>}
+                        {sinais.length === 0 && !doseIncerta ? (
                           <span className="text-text-secondary">—</span>
                         ) : (
                           sinais.map((s) => (
@@ -231,7 +233,7 @@ export function CardExames({ triagem }: { triagem: TriagemMediFlow }) {
           </Badge>
           {notas.length === 0 ? (
             <p className="m-0 border-l-2 border-border-input pl-2.5 text-sm leading-normal text-text-body">
-              Nenhum achado crítico identificado.
+              Campo de achados críticos não informado.
             </p>
           ) : (
             notas.map((n) => (

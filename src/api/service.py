@@ -204,6 +204,7 @@ class TriagemService:
             self._documentos_originais[doc_id] = doc
             self._status_em_andamento[doc_id] = StatusTriagem.RECEBIDO
             self._metadados[doc_id] = dict(metadados) if (metadados and isinstance(metadados, dict)) else {}
+            self._metadados[doc_id]["canal_origem"] = canal_origem
 
             self.registrar_evento(
                 documento_id=doc_id,
@@ -235,13 +236,14 @@ class TriagemService:
             self._documentos_originais[doc_id] = doc
             self._status_em_andamento[doc_id] = StatusTriagem.RECEBIDO
             self._metadados[doc_id] = dict(metadados) if (metadados and isinstance(metadados, dict)) else {}
+            self._metadados[doc_id]["canal_origem"] = canal_origem
 
             self.registrar_evento(
                 documento_id=doc_id,
                 tipo_evento="RECEBIDO",
                 status_novo=StatusTriagem.RECEBIDO,
                 ator="API_INGESTAO",
-                motivo=f"Arquivo {nome_arquivo} recebido com sucesso",
+                motivo=f"Arquivo {nome_arquivo} recebido via canal {canal_origem}",
             )
             return doc_id
 
@@ -292,6 +294,7 @@ class TriagemService:
         doc = self._documentos_originais.get(documento_id)
         if not doc:
             raise ValueError(f"Documento {documento_id} não encontrado na fila.")
+        canal_origem = self._metadados.get(documento_id, {}).get("canal_origem")
 
         self._status_em_andamento[documento_id] = StatusTriagem.PROCESSANDO
         self.registrar_evento(
@@ -368,6 +371,7 @@ class TriagemService:
             triagem = TriagemMediFlow(
                 status=StatusTriagem.ERRO_PROCESSAMENTO,
                 documento_id=documento_id,
+                canal_origem=canal_origem,
                 armazenamento_oci=ArmazenamentoOCI(
                     bucket=bucket_nome,
                     status_backup="pendente",
@@ -484,9 +488,22 @@ class TriagemService:
 
         notificacao = None
         if decisao_wf and decisao_wf.alerta_simulado:
+            dados_alerta = entrada_workflow.dados_extraidos
+            paciente_alerta = dados_alerta.paciente.nome or "Paciente não informado"
+            diagnostico_alerta = dados_alerta.diagnostico or "Diagnóstico não informado"
+            crm_alerta = dados_alerta.medico.crm
+            numero_crm = getattr(crm_alerta, "numero", None)
+            uf_crm = getattr(crm_alerta, "uf", None)
+            registro_crm = (
+                f"{numero_crm}/{uf_crm}" if numero_crm and uf_crm else "não informado"
+            )
             notificacao = {
                 "canal": "SIMULADO_SLACK_PLANTAO",
-                "mensagem": f"ALERTA URGENTE: {justificativa}",
+                "mensagem": (
+                    f"ALERTA URGENTE (SIMULADO): Paciente: {paciente_alerta}; "
+                    f"diagnóstico: {diagnostico_alerta}; CRM solicitante: {registro_crm}. "
+                    f"{justificativa}"
+                ),
                 "status": "REGISTRADA"
             }
 
@@ -554,6 +571,7 @@ class TriagemService:
                 triagem_temp = TriagemMediFlow(
                     status=status_final,
                     documento_id=documento_id,
+                    canal_origem=canal_origem,
                     classificacao=classificacao_obj,
                     dados_extraidos=dados_extraidos_obj,
                     qualidade=Qualidade(
@@ -615,6 +633,7 @@ class TriagemService:
         triagem = TriagemMediFlow(
             status=status_efetivo,
             documento_id=documento_id,
+            canal_origem=canal_origem,
             classificacao=classificacao_obj,
             dados_extraidos=dados_extraidos_obj,
             qualidade=Qualidade(
