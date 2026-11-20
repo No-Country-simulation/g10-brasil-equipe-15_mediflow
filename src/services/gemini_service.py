@@ -219,7 +219,7 @@ def normalizar_incertezas_medicamentos(payload: Dict[str, Any]) -> Dict[str, Any
     return normalizado
 
 
-def normalizar_payload_extracao(payload: Any) -> Dict[str, Any]:
+def normalizar_payload_extracao(payload: Any, *, texto_original: str = "") -> Dict[str, Any]:
     """Normaliza idade e diagnóstico mantendo os dados representados.
 
     Estruturas desconhecidas ou valores conflitantes são rejeitados.
@@ -303,7 +303,30 @@ def normalizar_payload_extracao(payload: Any) -> Dict[str, Any]:
     elif encontrou_cid:
         normalizado["cid"] = None
 
-    return normalizar_incertezas_medicamentos(normalizado)
+    normalizado = normalizar_incertezas_medicamentos(normalizado)
+    # Com fonte textual disponível, não aceite uma conclusão inferida de comparação
+    # numérica como se fosse um marcador de alteração impresso no laboratório.
+    if texto_original.strip() and isinstance(normalizado.get("exames_laboratoriais"), list):
+        def sem_acentos(texto):
+            return "".join(c for c in unicodedata.normalize("NFKD", texto.lower())
+                           if not unicodedata.combining(c))
+
+        linhas = [sem_acentos(linha) for linha in texto_original.splitlines()]
+        exames = []
+        for item in normalizado["exames_laboratoriais"]:
+            if isinstance(item, dict) and item.get("alterado") is not None:
+                item = dict(item)
+                analito = sem_acentos(str(item.get("analito", ""))).strip()
+                evidencia = any(
+                    analito and re.search(r"\b" + re.escape(analito) + r"\b", linha)
+                    and re.search(r"\*|[↑↓]|\b(?:alto|alta|baixo|baixa|alterado|alterada|normal)\b", linha)
+                    for linha in linhas
+                )
+                if not evidencia:
+                    item["alterado"] = None
+            exames.append(item)
+        normalizado["exames_laboratoriais"] = exames
+    return normalizado
 
 
 class GeminiService:
@@ -423,7 +446,7 @@ class GeminiService:
                 # Normaliza idade textual inequívoca e diagnóstico estruturado.
                 # Preserva descrição e CID; formatos ambíguos geram falha.
                 payload_raw = normalizar_payload_extracao(
-                    json.loads(response.text)
+                    json.loads(response.text), texto_original=conteudo_texto
                 )
 
                 dados_clinicos = DadosClinicosExtraidos.model_validate(payload_raw)

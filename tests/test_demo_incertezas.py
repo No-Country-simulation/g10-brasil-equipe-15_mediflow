@@ -27,3 +27,17 @@ def test_alias_ambiguo_ou_desconhecido_nao_e_atribuido_a_uma_dose():
         "campos_incertos": ["dosagem_dipirona", "dose_outro", "medicamentos[1].dosagem"],
     }
     assert normalizar_payload_extracao(payload)["campos_incertos"] == payload["campos_incertos"]
+
+
+@pytest.mark.parametrize("marcador,esperado", [("", None), (" BAIXO", True), (" *", True)])
+def test_alteracao_laboratorial_exige_marcacao_na_fonte_textual(marcador, esperado):
+    payload = {"exames_laboratoriais": [{
+        "analito": "Hemoglobina", "valor_medido": "10,2", "alterado": True,
+    }]}
+    original = deepcopy(payload)
+    saida = normalizar_payload_extracao(
+        payload, texto_original=f"Hemoglobina: 10,2 g/dL (referência 12,0–16,0){marcador}"
+    )
+    assert saida["exames_laboratoriais"][0]["alterado"] is esperado
+    assert saida["exames_laboratoriais"][0]["valor_medido"] == "10,2"
+    assert payload == original
