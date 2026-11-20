@@ -58,11 +58,20 @@ if ! command -v docker &> /dev/null; then
     sudo apt-get update
     sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-    # Permite executar docker sem sudo para o usuário atual
+    # Permite executar docker sem sudo para o usuário atual (efeito completo em novo login)
+    sudo systemctl enable --now docker || true
     sudo usermod -aG docker "$USER"
     echo -e "${VERDE}[OK] Docker instalado com sucesso.${NC}"
 else
     echo -e "${VERDE}[OK] Docker já está instalado. $(docker --version)${NC}"
+fi
+
+# 3.1 Define comando Docker operacional na sessão atual (evita erro de permissão na 1ª instalação)
+if docker info >/dev/null 2>&1; then
+    DOCKER_CMD=(docker)
+else
+    echo -e "${AMARELO}[INFO] Grupo 'docker' ainda não ativo nesta sessão; usando 'sudo -E docker' neste deploy.${NC}"
+    DOCKER_CMD=(sudo -E docker)
 fi
 
 # 4. Liberação das portas no Firewall local da VM (Iptables / UFW)
@@ -88,17 +97,58 @@ fi
 
 # 5. Execução do Docker Compose
 echo -e "${AMARELO}[INFO] Construindo imagens (React SPA + FastAPI + Streamlit) e iniciando os contêineres...${NC}"
-docker compose -f deploy/docker-compose.yml down --remove-orphans || true
-docker compose -f deploy/docker-compose.yml up -d --build
+"${DOCKER_CMD[@]}" compose -f deploy/docker-compose.yml down --remove-orphans || true
+"${DOCKER_CMD[@]}" compose -f deploy/docker-compose.yml up -d --build
 
-# 6. Verificação de Saúde
-echo -e "${AMARELO}[INFO] Aguardando inicialização dos serviços (15 segundos)...${NC}"
-sleep 15
+# 6. Verificação real de saúde dos serviços via Nginx (porta 80)
+echo -e "${AMARELO}[INFO] Verificando saúde real dos serviços (até 60 segundos)...${NC}"
+SAUDE_API=false
+SAUDE_REACT=false
+SAUDE_STREAMLIT=false
+
+for tentativa in $(seq 1 30); do
+    if curl -fsS --max-time 5 http://127.0.0.1/api/v1/health >/dev/null 2>&1; then
+        SAUDE_API=true
+    else
+        SAUDE_API=false
+    fi
+
+    if curl -fsS --max-time 5 http://127.0.0.1/ >/dev/null 2>&1; then
+        SAUDE_REACT=true
+    else
+        SAUDE_REACT=false
+    fi
+
+    if curl -fsS --max-time 5 http://127.0.0.1/streamlit/_stcore/health >/dev/null 2>&1; then
+        SAUDE_STREAMLIT=true
+    else
+        SAUDE_STREAMLIT=false
+    fi
+
+    if [ "${SAUDE_API}" = true ] && [ "${SAUDE_REACT}" = true ] && [ "${SAUDE_STREAMLIT}" = true ]; then
+        echo -e "${VERDE}[OK] Todos os serviços responderam com saúde (tentativa ${tentativa}/30).${NC}"
+        break
+    fi
+
+    sleep 2
+done
+
+if [ "${SAUDE_API}" != true ] || [ "${SAUDE_REACT}" != true ] || [ "${SAUDE_STREAMLIT}" != true ]; then
+    echo -e "${VERMELHO}[ERRO] Falha na verificação de saúde pós-deploy após 60 segundos:${NC}"
+    echo -e "  - API (/api/v1/health):          ${SAUDE_API}"
+    echo -e "  - Portal React (/):              ${SAUDE_REACT}"
+    echo -e "  - Streamlit (/streamlit/health): ${SAUDE_STREAMLIT}"
+    echo -e "\n${AMARELO}Status dos contêineres:${NC}"
+    "${DOCKER_CMD[@]}" compose -f deploy/docker-compose.yml ps || true
+    echo -e "\n${AMARELO}Últimos logs:${NC}"
+    "${DOCKER_CMD[@]}" compose -f deploy/docker-compose.yml logs --tail=40 || true
+    exit 1
+fi
 
 IP_PUBLICO=$(curl -s -m 5 ifconfig.me || curl -s -m 5 icanhazip.com || echo "<IP_PUBLICO_DA_VM>")
 
 echo -e "\n${VERDE}==================================================================${NC}"
-echo -e "${VERDE}  🎉 MediFlow implantado com sucesso na Oracle Cloud (OCI)!       ${NC}"
+echo -e "${VERDE}  🎉 MediFlow implantado e validado na Oracle Cloud (OCI)!        ${NC}"
 echo -e "${VERDE}==================================================================${NC}"
 echo -e "Acesse os serviços pelo navegador:"
 echo -e "  🌐 ${VERDE}Portal Web (React SPA):${NC}    http://${IP_PUBLICO}/"
@@ -106,6 +156,6 @@ echo -e "  📖 ${VERDE}Documentação Swagger API:${NC}  http://${IP_PUBLICO}/d
 echo -e "  🩺 ${VERDE}Health Check REST:${NC}         http://${IP_PUBLICO}/api/v1/health"
 echo -e "  🧪 ${VERDE}Bancada Streamlit (HiTL):${NC}  http://${IP_PUBLICO}/streamlit/"
 echo -e "\nComandos úteis para monitoramento:"
-echo -e "  docker compose -f deploy/docker-compose.yml ps"
-echo -e "  docker compose -f deploy/docker-compose.yml logs -f"
+echo -e "  ${DOCKER_CMD[*]} compose -f deploy/docker-compose.yml ps"
+echo -e "  ${DOCKER_CMD[*]} compose -f deploy/docker-compose.yml logs -f"
 echo -e "==================================================================\n"
