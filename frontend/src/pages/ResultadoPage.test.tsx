@@ -288,7 +288,7 @@ describe('ResultadoPage', () => {
     expect(within(card('Conflitos')).getByText('Gravidade alta')).toBeInTheDocument()
   })
 
-  it('03e erro de persistência: só cabeçalho, alerta e histórico; "Tentar salvar de novo" recarrega', async () => {
+  it('03e erro de persistência: alerta, cartões clínicos e histórico; "Tentar salvar de novo" recarrega', async () => {
     triagem = {
       ...triagem,
       status: 'ERRO_PERSISTENCIA',
@@ -298,7 +298,9 @@ describe('ResultadoPage', () => {
 
     expect(screen.getByText('ERRO_PERSISTENCIA')).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('Triagem não confirmada · falha ao salvar o resultado')
-    expect(screen.queryByRole('heading', { name: 'Classificação' })).not.toBeInTheDocument()
+    // O documento foi analisado: os dados continuam na tela, não só no JSON.
+    expect(screen.getByRole('heading', { name: 'Classificação' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Medicamentos' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Histórico' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Tentar salvar de novo' }))
@@ -327,6 +329,7 @@ describe('ResultadoPage', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent('Triagem não concluída · falha no processamento')
     expect(screen.queryByRole('button', { name: 'Tentar salvar de novo' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Classificação' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Reenviar documento' }))
     expect(screen.getByText('Tela Nova triagem')).toBeInTheDocument()

@@ -149,7 +149,7 @@ export function ResultadoPage() {
 
       {mostrarJson && <PainelJson id={idPainel} dados={bruto} />}
 
-      {alerta ? (
+      {alerta && (
         <AlertaErro
           alerta={alerta}
           reprocessando={reprocessamento.fase === 'enviando'}
@@ -157,7 +157,10 @@ export function ResultadoPage() {
           onReprocessar={reprocessar}
           onReenviar={() => navigate('/nova-triagem')}
         />
-      ) : (
+      )}
+
+      {/* Em ERRO_PERSISTENCIA o documento já foi analisado: os cartões continuam visíveis abaixo do alerta. */}
+      {triagem.status !== 'ERRO_PROCESSAMENTO' && (
         <>
           {bannersDe(triagem).map((banner) => (
             <BannerResultado key={banner.tipo} banner={banner} />
